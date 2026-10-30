@@ -38,6 +38,9 @@ export function normalizeConfig(raw = {}) {
     refuseThreshold: typeof raw.refuseThreshold === 'number' ? raw.refuseThreshold : 0.25,
 
     transcriptLimit: raw.transcriptLimit || 2400,
+
+    // M2：成长率（分层 g 在 core 里，这里先给全局；M2.3 再分层）
+    growth: typeof raw.growth === 'number' ? raw.growth : 1,
   }
   return c
 }

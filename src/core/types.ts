@@ -99,6 +99,11 @@ export type CreatureEvent =
   | { t: 'absence'; id: string; ts: number; wakingHours: number }
   | { t: 'contact'; id: string; ts: number; relief: number }   // relief ∈ [0,1]：重逢释放多少想念
   | { t: 'repair'; id: string; ts: number; amount: number }    // 修复违诺，减少愧疚
+  // —— M2：记忆层（LLM 巩固产物，必须落盘，不参与情绪重放） ——
+  | { t: 'semantic'; id: string; ts: number; claim: string; evidence: string[]; confidence: number; status: 'active' | 'retired' }
+  | { t: 'procedure'; id: string; ts: number; trigger: string; action: string; evidence: string[]; confidence: number; status: 'active' | 'retired' }
+  // —— M2：身份（接受名字是事件，meta.name 是权威） ——
+  | { t: 'identity'; id: string; ts: number; name: string }
 
 /** 四条不变量随目录走：模型、时区、schema、气质。 */
 export interface CreatureMeta {

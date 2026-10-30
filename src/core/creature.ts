@@ -58,6 +58,7 @@ export class Creature {
     else if (e.t === 'absence') applyAbsence(aff, e.wakingHours)
     else if (e.t === 'contact') applyContact(aff, e.relief)
     else if (e.t === 'repair') applyRepair(aff, e.amount)
+    // semantic / procedure / identity 是记忆事件，不参与情绪重放（no-op）
   }
 
   bias(): Bias {
@@ -81,5 +82,36 @@ export class Creature {
 
   recordRepair(amount: number, ts?: number): void {
     this.store.appendEvent({ t: 'repair', id: uid(), ts: ts ?? Date.now(), amount })
+  }
+
+  recordSemantic(claim: string, evidence: string[], confidence: number, ts?: number): void {
+    this.store.appendEvent({ t: 'semantic', id: uid(), ts: ts ?? Date.now(), claim, evidence, confidence, status: 'active' })
+  }
+
+  recordProcedure(trigger: string, action: string, evidence: string[], confidence: number, ts?: number): void {
+    this.store.appendEvent({ t: 'procedure', id: uid(), ts: ts ?? Date.now(), trigger, action, evidence, confidence, status: 'active' })
+  }
+
+  /** 接受名字：既是事件（可回溯），也更新 meta（权威读取处）。 */
+  recordIdentity(name: string, ts?: number): void {
+    this.store.appendEvent({ t: 'identity', id: uid(), ts: ts ?? Date.now(), name })
+    this.store.updateMetaName(name)
+    this.meta.name = name
+  }
+
+  /** 注入用记忆摘要：名字 + 最近几条活跃语义 + 教训。 */
+  memorySummary(): { name: string | null; semantics: string[]; procedures: string[] } {
+    const defaultPrefix = 'fish-'
+    const name = this.meta.name && !this.meta.name.startsWith(defaultPrefix) ? this.meta.name : null
+    const events = this.store.readEvents()
+    const semantics = events
+      .filter((e): e is Extract<CreatureEvent, { t: 'semantic' }> => e.t === 'semantic' && e.status === 'active')
+      .slice(-2)
+      .map(e => e.claim)
+    const procedures = events
+      .filter((e): e is Extract<CreatureEvent, { t: 'procedure' }> => e.t === 'procedure' && e.status === 'active')
+      .slice(-1)
+      .map(e => `${e.trigger} → ${e.action}`)
+    return { name, semantics, procedures }
   }
 }

@@ -36,6 +36,13 @@ export class Store {
     return JSON.parse(fs.readFileSync(this.metaPath, 'utf8'))
   }
 
+  /** 接受名字时更新 meta（权威读取处）；事件本身已在日志里可回溯。 */
+  updateMetaName(name: string): void {
+    const meta = this.readMeta()
+    meta.name = name
+    fs.writeFileSync(this.metaPath, JSON.stringify(meta, null, 2) + '\n')
+  }
+
   appendEvent(ev: CreatureEvent): void {
     fs.appendFileSync(this.logPath, JSON.stringify(ev) + '\n')
   }

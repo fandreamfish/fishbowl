@@ -1,12 +1,14 @@
 /** 插件单元测试：评价器、注入摘要、约束决策、会话↔个体绑定。 */
 import fs from 'node:fs'
 import path from 'node:path'
+import { parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
 import { refuseReason, verifyDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
+import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { VOICE_RULES } from '../lib/voice.js'
 
@@ -75,6 +77,35 @@ check('0.001 级漂移被吸收', stateKey(baseBias, { ...baseAff, valence: -0.0
 check('0.1 级变化触发新指纹', stateKey(baseBias, { ...baseAff, valence: -0.63 }) !== stateKey(baseBias, baseAff))
 check('旋钮 0.1 级变化触发新指纹', stateKey({ ...baseBias, verbosity: 0.2 }, baseAff) !== stateKey(baseBias, baseAff))
 check('愧疚出现触发新指纹', stateKey(baseBias, { ...baseAff, guilt: 0.6 }) !== stateKey(baseBias, baseAff))
+
+console.log('== M2：巩固与身份 ==')
+check('g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, g: 1 }))
+check('g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, g: 1 }))
+check('g=2：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, g: 2 }))
+check('高显著度单轮触发', shouldConsolidate({ episodesSince: 1, salienceSince: 0.7, g: 1 }))
+const pc = parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1","2"],"confidence":0.8}],"procedures":[{"trigger":"他说不行","action":"先问清楚","evidence":["3"],"confidence":0.7}]}')
+check('巩固解析：语义与教训', pc.semantics.length === 1 && pc.procedures.length === 1 && pc.semantics[0].claim === '他喜欢猫')
+check('巩固解析：垃圾输入得空数组', parseConsolidation('垃圾').semantics.length === 0)
+check('巩固解析：语义上限 3', parseConsolidation('{"semantics":[{"claim":"a"},{"claim":"b"},{"claim":"c"},{"claim":"d"}]}').semantics.length === 3)
+check('身份正则预筛', IDENTITY_RE.test('我给你起个名字叫大肥鱼') && !IDENTITY_RE.test('今天天气不错'))
+check('身份解析', parseIdentity('{"named":true,"name":"大肥鱼"}') === '大肥鱼')
+check('身份解析：未命名 → null', parseIdentity('{"named":false}') === null)
+
+const named = createBinding(cfg).creatureFor('session-m2-named')
+named.recordIdentity('大肥鱼')
+check('起名：meta 更新 + 事件落盘', named.meta.name === '大肥鱼'
+  && named.store.readEvents().some((e: any) => e.t === 'identity'))
+named.recordSemantic('他喜欢猫', ['1', '2'], 0.8, 0)
+named.recordProcedure('他说不行', '先问清楚', ['3'], 0.7, 0)
+const ms = named.memorySummary()
+check('记忆摘要：名字 + 语义 + 教训', ms.name === '大肥鱼'
+  && ms.semantics.includes('他喜欢猫') && ms.procedures.includes('他说不行 → 先问清楚'))
+const namedSummary = summaryText(baseBias, baseAff, ms)
+check('注入含名字与记忆', namedSummary.includes('大肥鱼')
+  && namedSummary.includes('记得的事') && namedSummary.includes('教训'))
+check('未起名个体不含名字行', !summaryText(baseBias, baseAff, { name: null, semantics: [], procedures: [] }).includes('名字:'))
+check('记忆变化触发新指纹', stateKey(baseBias, baseAff, { name: '大肥鱼', semantics: ['x'], procedures: [] })
+  !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [] }))
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

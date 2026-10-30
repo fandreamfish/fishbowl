@@ -10,13 +10,15 @@ function q(x, lo, hi, loLabel, hiLabel) {
   return '中'
 }
 
-/** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect */
-export function summaryText(bias, affect) {
+/** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect @param {{name?: string|null, semantics?: string[], procedures?: string[]}} [memory] */
+export function summaryText(bias, affect, memory) {
+  const mem = memory ?? { name: null, semantics: [], procedures: [] }
   const guilt = affect.guilt > 0.05
     ? ` / 未平复的愧疚 ${f(affect.guilt)}（有件事还没过去）`
     : ''
-  return [
-    '[fishbowl 状态]',
+  const parts = ['[fishbowl 状态]']
+  if (mem.name) parts.push(`名字: ${mem.name}`)
+  parts.push(
     `情绪: 效价 ${f(affect.valence)} / 唤醒 ${f(affect.arousal)}${guilt}`,
     `倾向: 话量${f(bias.verbosity)}(${q(bias.verbosity, 0.4, 0.6, '少说', '多说')})`
       + ` · 拒绝${f(bias.thresholdRefuse)}(${q(bias.thresholdRefuse, 0.4, 0.6, '容易说不', '愿意配合')})`
@@ -24,9 +26,14 @@ export function summaryText(bias, affect) {
       + ` · 风险${f(bias.riskAppetite)}(${q(bias.riskAppetite, 0.4, 0.6, '保守', '敢试')})`
       + ` · 披露${f(bias.disclosure)}(${q(bias.disclosure, 0.4, 0.6, '保留', '愿意说')})`
       + ` · 耐心${f(bias.patience)}(${q(bias.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
+  )
+  if (mem.semantics?.length) parts.push(`记得的事: ${mem.semantics.join('；')}`)
+  if (mem.procedures?.length) parts.push(`教训: ${mem.procedures.join('；')}`)
+  parts.push(
     '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
       + '被问到你是什么样的人时，不要拿这些数字编造性格——你还没有长期经历，照实说还不确定。',
-  ].join('\n')
+  )
+  return parts.join('\n')
 }
 
 /**
@@ -48,11 +55,12 @@ export function injectMessage(text) {
  * 直接比较文本没用——衰减让数值每轮漂移 0.001，文本永远不同。
  * 量化到 0.1 之后，微小漂移被吸收，真正的事件（如情绪砸到 -0.6）才会触发注入。
  */
-export function stateKey(bias, affect) {
+export function stateKey(bias, affect, memory) {
   const knobs = [bias.verbosity, bias.thresholdRefuse, bias.thresholdVerify,
     bias.riskAppetite, bias.disclosure, bias.patience]
     .map(v => Math.round(v * 10)).join(',')
   const affectPart = [Math.round(affect.valence * 10), Math.round(affect.arousal * 10)].join(',')
   const guiltPart = affect.guilt > 0.05 ? 'g' : ''
-  return `${knobs}|${affectPart}|${guiltPart}`
+  const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}`
+  return `${knobs}|${affectPart}|${guiltPart}|${memPart}`
 }

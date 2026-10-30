@@ -4,10 +4,13 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { toBias } from '../../../src/core/engine.ts'
+import { CONSOLIDATION_SYSTEM_PROMPT, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { salienceOf, toBias } from '../../../src/core/engine.ts'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
+import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
+import { callLLM } from './llm.js'
 import { VOICE_RULES } from './voice.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
@@ -15,6 +18,7 @@ export function createCollector(ctx, binding, cfg) {
   const appraise = createAppraiser(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
   const lastKey = new Map() // sessionId -> stateKey（肉眼可见的变化才注入）
+  const consolidating = new Map() // sessionId -> { episodesSince, salienceSince }
   const tracePath = path.join(binding.dir, 'trace.ndjson')
   const disposers = []
 
@@ -36,6 +40,40 @@ export function createCollector(ctx, binding, cfg) {
     bufferFor(sessionId).items.push({ role, text })
   }
 
+  /** 巩固：把最近的转录压成语义与教训，落盘为事件。 */
+  async function consolidate(sessionId, creature) {
+    try {
+      const events = creature.store.readEvents()
+      const episodes = events.filter((e) => e.t === 'episode').slice(-8)
+      if (episodes.length < 3) return
+      const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
+      const raw = await callLLM(cfg, CONSOLIDATION_SYSTEM_PROMPT, lines, { maxTokens: 600 })
+      const parsed = parseConsolidation(raw)
+      const ts = Date.now()
+      for (const s of parsed.semantics) creature.recordSemantic(s.claim, s.evidence, s.confidence, ts)
+      for (const p of parsed.procedures) creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
+      if (parsed.semantics.length || parsed.procedures.length) {
+        trace({ ts, sessionId, event: 'consolidated', semantics: parsed.semantics, procedures: parsed.procedures })
+      }
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `consolidate failed: ${String(err && err.message || err)}` })
+    }
+  }
+
+  /** 身份：用户起名 → identity 事件 + meta.name。 */
+  async function detectIdentity(sessionId, creature, transcript) {
+    try {
+      const raw = await callLLM(cfg, IDENTITY_SYSTEM_PROMPT, transcript.slice(-800), { maxTokens: 60 })
+      const name = parseIdentity(raw)
+      if (name && name !== creature.meta.name) {
+        creature.recordIdentity(name)
+        trace({ ts: Date.now(), sessionId, event: 'named', name })
+      }
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `identity failed: ${String(err && err.message || err)}` })
+    }
+  }
+
   async function finishTurn(session) {
     try {
       const buf = buffers.get(session.id)
@@ -52,6 +90,7 @@ export function createCollector(ctx, binding, cfg) {
       creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
+      const memory = creature.memorySummary()
 
       trace({
         ts, sessionId: session.id, creatureId: creature.meta.creatureId,
@@ -60,8 +99,23 @@ export function createCollector(ctx, binding, cfg) {
         bias,
       })
 
+      // —— M2：巩固与身份（异步，失败不影响主流程） ——
+      const cnt = consolidating.get(session.id) ?? { episodesSince: 0, salienceSince: 0 }
+      cnt.episodesSince += 1
+      cnt.salienceSince += salienceOf(a)
+      consolidating.set(session.id, cnt)
+      if (cfg.appraiser.kind === 'deepseek') {
+        if (shouldConsolidate({ episodesSince: cnt.episodesSince, salienceSince: cnt.salienceSince, g: cfg.growth })) {
+          consolidating.set(session.id, { episodesSince: 0, salienceSince: 0 })
+          void consolidate(session.id, creature)
+        }
+        if (IDENTITY_RE.test(transcript)) {
+          void detectIdentity(session.id, creature, transcript)
+        }
+      }
+
       if (!cfg.control && cfg.injectBias) {
-        const key = stateKey(bias, affect)
+        const key = stateKey(bias, affect, memory)
         // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
         // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
         if (key !== lastKey.get(session.id)) {
@@ -69,7 +123,7 @@ export function createCollector(ctx, binding, cfg) {
           const agent = findAgent(ctx, session.id)
           if (agent) {
             try {
-              await agent.inject(injectMessage(summaryText(bias, affect)))
+              await agent.inject(injectMessage(summaryText(bias, affect, memory)))
             } catch (err) {
               trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
             }
@@ -120,7 +174,8 @@ export function createCollector(ctx, binding, cfg) {
       const creature = binding.creatureFor(sid)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const text = summaryText(bias, affect)
+      const memory = creature.memorySummary()
+      const text = summaryText(bias, affect, memory)
       Promise.resolve()
         .then(() => agent.inject(injectMessage(text)))
         .catch(() => { /* agent 可能在注入前被销毁 */ })
