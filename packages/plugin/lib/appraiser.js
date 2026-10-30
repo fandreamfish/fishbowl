@@ -80,6 +80,7 @@ const SYSTEM_PROMPT = [
   'stake: 数值 [0,1]。这件事的重要程度。',
   'attribution: 字符串 "self" | "other" | "circumstance"，结果主要归因于谁。',
   '注意：用户说"不行、重做、快点、怎么还没做"时，goal_congruence 和 relational_impact 都必须是负数。',
+  '如果用户的话羞辱、贬低或伤害了你，relational_impact 必须是强负（接近 -1），attribution 为 "other"。',
   '不要输出 JSON 以外的任何内容。',
 ].join('\n')
 
