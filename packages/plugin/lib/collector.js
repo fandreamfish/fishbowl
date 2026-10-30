@@ -6,13 +6,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { toBias } from '../../../src/core/engine.ts'
 import { createAppraiser } from './appraiser.js'
-import { injectMessage, summaryText } from './injector.js'
+import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
+import { injectMessage, stateKey, summaryText } from './injector.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg) {
   const appraise = createAppraiser(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
-  const lastText = new Map() // sessionId -> 上次注入的摘要文本（不变就不重复注入）
+  const lastKey = new Map() // sessionId -> stateKey（肉眼可见的变化才注入）
   const tracePath = path.join(binding.dir, 'trace.ndjson')
   const disposers = []
 
@@ -29,74 +30,94 @@ export function createCollector(ctx, binding, cfg) {
     return buf
   }
 
+  function pushItem(sessionId, role, text) {
+    if (!text || text.trim() === '') return
+    bufferFor(sessionId).items.push({ role, text })
+  }
+
   async function finishTurn(session) {
-    const buf = buffers.get(session.id)
-    if (!buf || buf.items.length === 0) return
-    const transcript = buf.items
-      .slice(-Math.ceil(cfg.transcriptLimit / 60))
-      .map(i => `${i.role}: ${i.text}`)
-      .join('\n')
-      .slice(-cfg.transcriptLimit)
+    try {
+      const buf = buffers.get(session.id)
+      if (!buf || buf.items.length === 0) return
+      const transcript = buf.items
+        .slice(-Math.ceil(cfg.transcriptLimit / 60))
+        .map(i => `${i.role}: ${i.text}`)
+        .join('\n')
+        .slice(-cfg.transcriptLimit)
 
-    const creature = binding.creatureFor(session.id)
-    const a = await appraise(transcript)
-    const ts = Date.now()
-    creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
-    const affect = creature.fold().affect
-    const bias = toBias(affect, creature.temperament)
+      const creature = binding.creatureFor(session.id)
+      const a = await appraise(transcript)
+      const ts = Date.now()
+      creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
+      const affect = creature.fold().affect
+      const bias = toBias(affect, creature.temperament)
 
-    trace({
-      ts, sessionId: session.id, creatureId: creature.meta.creatureId,
-      appraisal: a,
-      affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
-      bias,
-    })
+      trace({
+        ts, sessionId: session.id, creatureId: creature.meta.creatureId,
+        appraisal: a,
+        affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
+        bias,
+      })
 
-    if (!cfg.control && cfg.injectBias) {
-      const agent = findAgent(ctx, session.id)
-      const text = summaryText(bias, affect)
-      // 状态没变就不重复注入：每轮插同样的摘要只是噪音
-      if (agent && lastText.get(session.id) !== text) {
-        lastText.set(session.id, text)
-        try {
-          await agent.inject(injectMessage(text))
-        } catch (err) {
-          trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
+      if (!cfg.control && cfg.injectBias) {
+        const key = stateKey(bias, affect)
+        // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
+        // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
+        if (key !== lastKey.get(session.id)) {
+          lastKey.set(session.id, key)
+          const agent = findAgent(ctx, session.id)
+          if (agent) {
+            try {
+              await agent.inject(injectMessage(summaryText(bias, affect)))
+            } catch (err) {
+              trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
+            }
+          }
         }
       }
+      buffers.delete(session.id)
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId: session.id, warn: `collect failed: ${String(err && err.message || err)}` })
     }
-    buffers.delete(session.id)
   }
 
   const offEvent = ctx.on('session/event', (session, event) => {
-    if (!session || !event || typeof event.type !== 'string') return
-    if (!binding.manages(session.id)) return
-    const t = event.type
-    if (t === 'user/message') bufferFor(session.id).items.push({ role: 'user', text: textOf(event) })
-    else if (t === 'assistant/message') bufferFor(session.id).items.push({ role: 'assistant', text: textOf(event) })
-    else if (t === 'tool/result') {
-      const name = toolNameOf(event)
-      const err = event?.data?.isError || event?.data?.error
-      bufferFor(session.id).items.push({ role: 'tool', text: `${name || 'tool'}${err ? '（出错）' : ''}` })
-    } else if (t === 'turn/end') {
-      finishTurn(session)
-    }
+    try {
+      if (!session || !event || typeof event.type !== 'string') return
+      if (!binding.manages(session.id)) return
+      const t = event.type
+      if (t === 'user/message') {
+        if (isFishbowlInjection(event)) return // 自己注入的状态块不算对话内容
+        pushItem(session.id, 'user', textOf(event))
+      } else if (t === 'assistant/message') {
+        pushItem(session.id, 'assistant', textOf(event))
+      } else if (t === 'tool/result') {
+        const name = toolNameOf(event)
+        const err = event?.data?.message?.isError || event?.data?.isError || event?.data?.error
+        const text = messageText(event?.data?.message ?? event?.data)
+        pushItem(session.id, 'tool', [name, err ? '（出错）' : '', text ? text.slice(0, 200) : ''].filter(Boolean).join(' '))
+      } else if (t === 'turn/end') {
+        finishTurn(session)
+      }
+    } catch { /* 宿主事件处理绝不外抛 */ }
   })
   if (offEvent) disposers.push(offEvent)
 
   // agent 建立时注入一次基线状态：让第一轮就知道自己的倾向在哪儿
   const offCreated = ctx.on('agent/created', (payload) => {
-    const agent = payload?.agent ?? payload
-    const sid = agent?.session?.id ?? agent?.id
-    if (!sid || !binding.manages(sid)) return
-    if (cfg.control || !cfg.injectBias) return
-    const creature = binding.creatureFor(sid)
-    const affect = creature.fold().affect
-    const bias = toBias(affect, creature.temperament)
-    const text = summaryText(bias, affect)
-    Promise.resolve()
-      .then(() => agent.inject(injectMessage(text)))
-      .catch(() => { /* agent 可能在注入前被销毁 */ })
+    try {
+      const agent = payload?.agent ?? payload
+      const sid = agent?.session?.id ?? agent?.id
+      if (!sid || !binding.manages(sid)) return
+      if (cfg.control || !cfg.injectBias) return
+      const creature = binding.creatureFor(sid)
+      const affect = creature.fold().affect
+      const bias = toBias(affect, creature.temperament)
+      const text = summaryText(bias, affect)
+      Promise.resolve()
+        .then(() => agent.inject(injectMessage(text)))
+        .catch(() => { /* agent 可能在注入前被销毁 */ })
+    } catch { /* 同上，绝不外抛 */ }
   })
   if (offCreated) disposers.push(offCreated)
 
@@ -121,20 +142,4 @@ function findAgent(ctx, sessionId) {
     }
   } catch { /* 同上 */ }
   return null
-}
-
-/** 事件形状防御性提取。TODO: cordis_inspect_query 复核后收紧。 */
-function textOf(event) {
-  const d = event?.data
-  if (!d) return ''
-  if (typeof d.text === 'string') return d.text
-  if (typeof d.content === 'string') return d.content
-  if (Array.isArray(d.content)) {
-    return d.content.map(b => (typeof b === 'string' ? b : b?.text || '')).join(' ')
-  }
-  return ''
-}
-
-function toolNameOf(event) {
-  return event?.data?.toolName || event?.data?.name || event?.data?.tool || ''
 }

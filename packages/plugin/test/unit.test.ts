@@ -6,7 +6,8 @@ import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
 import { refuseReason, verifyDecision } from '../lib/constraints.js'
-import { injectMessage, summaryText } from '../lib/injector.js'
+import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
+import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -46,6 +47,27 @@ check('id 是合法 UUID 且每次不同',
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(m1.id ?? '') && m1.id !== m2.id)
 check('content 是 text 块', m1.content?.[0]?.type === 'text' && m1.content?.[0]?.text === 'hello')
 check('source 标记 fishbowl', m1.source?.kind === 'fishbowl')
+
+console.log('== 事件提取（真机字段形状回归） ==')
+const userEv = { type: 'user/message', data: { role: 'user', id: 'x', content: [{ type: 'text', text: '你好' }], source: { kind: 'user' } } }
+const asstEv = { type: 'assistant/message', data: { message: { role: 'assistant', content: [{ type: 'text', text: '好的' }] } } }
+const toolEv = { type: 'tool/result', data: { message: { role: 'tool', content: [{ type: 'text', text: 'ok' }] }, toolName: 'bash' } }
+check('user/message：data 即消息', textOf(userEv) === '你好')
+check('assistant/message：文本在 data.message（真机 bug 修复点）', textOf(asstEv) === '好的')
+check('tool/result：文本在 data.message', textOf(toolEv) === 'ok')
+check('tool 名字优先 data.toolName', toolNameOf(toolEv) === 'bash')
+check('tool 名字回退 content 块', toolNameOf({ type: 'tool/result', data: { message: { content: [{ toolName: 'pwsh' }] } } }) === 'pwsh')
+check('messageText 忽略空块', messageText({ content: [{ type: 'text', text: '' }, { type: 'text', text: 'hi' }] }) === 'hi')
+check('自己注入的状态块被识别', isFishbowlInjection({ type: 'user/message', data: { source: { kind: 'fishbowl' } } }) === true)
+check('普通用户消息不算注入', isFishbowlInjection(userEv) === false)
+
+console.log('== 状态指纹（防每轮重复注入） ==')
+const baseBias = { verbosity: 0.5, thresholdRefuse: 0.5, thresholdVerify: 0.5, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
+const baseAff = { valence: -0.03, arousal: 0.67, guilt: 0, longing: 0, mood: 0, named: {} }
+check('0.001 级漂移被吸收', stateKey(baseBias, { ...baseAff, valence: -0.029 }) === stateKey(baseBias, baseAff))
+check('0.1 级变化触发新指纹', stateKey(baseBias, { ...baseAff, valence: -0.63 }) !== stateKey(baseBias, baseAff))
+check('旋钮 0.1 级变化触发新指纹', stateKey({ ...baseBias, verbosity: 0.2 }, baseAff) !== stateKey(baseBias, baseAff))
+check('愧疚出现触发新指纹', stateKey(baseBias, { ...baseAff, guilt: 0.6 }) !== stateKey(baseBias, baseAff))
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

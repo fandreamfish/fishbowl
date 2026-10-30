@@ -23,6 +23,21 @@ export function createBinding(cfg) {
   }
 
   const cache = new Map()
+  const biasCache = new Map() // creatureId -> { ts, bias }
+
+  /**
+   * 带 TTL 的 bias。工具约束在**每次工具调用**时都会读它，
+   * 绝不能每次都同步 fold 整个日志（宿主主线程会被卡住）。
+   */
+  function biasFor(sessionId, maxAgeMs = 5000) {
+    const c = creatureFor(sessionId)
+    const hit = biasCache.get(c.meta.creatureId)
+    const now = Date.now()
+    if (hit && now - hit.ts < maxAgeMs) return hit.bias
+    const bias = c.bias()
+    biasCache.set(c.meta.creatureId, { ts: now, bias })
+    return bias
+  }
 
   function save() {
     fs.writeFileSync(bindingsPath, JSON.stringify(bindings, null, 2))
@@ -75,5 +90,5 @@ export function createBinding(cfg) {
     return cfg.sessionFilter.includes(sessionId)
   }
 
-  return { dir: cfg.stateDir, bindings, creatureFor, manages }
+  return { dir: cfg.stateDir, bindings, creatureFor, biasFor, manages }
 }

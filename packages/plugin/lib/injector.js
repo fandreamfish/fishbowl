@@ -42,3 +42,17 @@ export function injectMessage(text) {
     source: { kind: 'fishbowl' },
   }
 }
+
+/**
+ * 状态粗粒度指纹：只在"肉眼可见的变化"时才注入。
+ * 直接比较文本没用——衰减让数值每轮漂移 0.001，文本永远不同。
+ * 量化到 0.1 之后，微小漂移被吸收，真正的事件（如情绪砸到 -0.6）才会触发注入。
+ */
+export function stateKey(bias, affect) {
+  const knobs = [bias.verbosity, bias.thresholdRefuse, bias.thresholdVerify,
+    bias.riskAppetite, bias.disclosure, bias.patience]
+    .map(v => Math.round(v * 10)).join(',')
+  const affectPart = [Math.round(affect.valence * 10), Math.round(affect.arousal * 10)].join(',')
+  const guiltPart = affect.guilt > 0.05 ? 'g' : ''
+  return `${knobs}|${affectPart}|${guiltPart}`
+}
