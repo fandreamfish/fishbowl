@@ -59,7 +59,7 @@ dsh plugin --profile desktop add <本仓库>/packages/plugin
 ## 联调前必须复核（cordis_inspect_query）
 
 - `session/event` 监听签名 `(session, event)` 与 `turn/end` 等事件类型名
-- `agent.inject()` 的 content 形状（当前按 `{content, source}` 写）
+- `agent.inject()` 的 content 形状（必须带 `role: 'user'` 与唯一 `id`，否则会话日志里的 `user/message` 缺字段，API 请求会 422 失败）
 - `ctx.agents.get(id)` / `list()` 的键（当前按 `session.id` 尝试，失败再扫描）
 - `tools/pre-execute` 返回 `{ kind: 'ask' }` 的确切字段
 - `ctx.tools.guard()` 回调入参与返回值语义

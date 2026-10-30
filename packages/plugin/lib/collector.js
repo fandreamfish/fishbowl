@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { toBias } from '../../../src/core/engine.ts'
 import { createAppraiser } from './appraiser.js'
-import { summaryText } from './injector.js'
+import { injectMessage, summaryText } from './injector.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg) {
@@ -55,10 +55,7 @@ export function createCollector(ctx, binding, cfg) {
       const agent = findAgent(ctx, session.id)
       if (agent) {
         try {
-          await agent.inject({
-            content: [{ type: 'text', text: summaryText(bias, affect) }],
-            source: { kind: 'fishbowl' },
-          })
+          await agent.inject(injectMessage(summaryText(bias, affect)))
         } catch (err) {
           trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
         }
@@ -94,7 +91,7 @@ export function createCollector(ctx, binding, cfg) {
     const bias = toBias(affect, creature.temperament)
     const text = summaryText(bias, affect)
     Promise.resolve()
-      .then(() => agent.inject({ content: [{ type: 'text', text }], source: { kind: 'fishbowl' } }))
+      .then(() => agent.inject(injectMessage(text)))
       .catch(() => { /* agent 可能在注入前被销毁 */ })
   })
   if (offCreated) disposers.push(offCreated)

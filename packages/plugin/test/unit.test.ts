@@ -6,7 +6,7 @@ import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
 import { refuseReason, verifyDecision } from '../lib/constraints.js'
-import { summaryText } from '../lib/injector.js'
+import { injectMessage, summaryText } from '../lib/injector.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -36,6 +36,15 @@ check('包含六个旋钮数值', ['0.14', '0.23', '0.78', '0.83', '0.30', '0.17
 check('愧疚以事实形式出现', summary.includes('未平复的愧疚'))
 check('不含情绪台词', !summary.includes('难过') && !summary.includes('生气'))
 check('明示"影响怎么做"', summary.includes('怎么做，而不是怎么说'))
+
+console.log('== 注入消息形状（事故回归测试） ==')
+const m1 = injectMessage('hello')
+const m2 = injectMessage('hello')
+check('role 必须是 user', m1.role === 'user')
+check('id 是合法 UUID 且每次不同',
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(m1.id ?? '') && m1.id !== m2.id)
+check('content 是 text 块', m1.content?.[0]?.type === 'text' && m1.content?.[0]?.text === 'hello')
+check('source 标记 fishbowl', m1.source?.kind === 'fishbowl')
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

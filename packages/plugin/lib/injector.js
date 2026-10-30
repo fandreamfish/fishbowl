@@ -1,4 +1,5 @@
 /** 状态摘要：注入的是事实（数值 + 方向），不是情绪台词。 */
+import { randomUUID } from 'node:crypto'
 
 const f = (n) => Number(n).toFixed(2)
 
@@ -25,4 +26,18 @@ export function summaryText(bias, affect) {
       + ` · 耐心${f(bias.patience)}(${q(bias.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
     '让它们影响你怎么做，而不是怎么说。',
   ].join('\n')
+}
+
+/**
+ * 注入消息的完整形状。
+ * 事故教训：inject 的消息会被原样写进会话日志成为 user/message 表面事件，
+ * 缺 role / id 会永久卡死该会话的 API 请求（422）。任何调用方都不要手拼。
+ */
+export function injectMessage(text) {
+  return {
+    role: 'user',
+    id: randomUUID(),
+    content: [{ type: 'text', text }],
+    source: { kind: 'fishbowl' },
+  }
 }

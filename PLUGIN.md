@@ -242,7 +242,10 @@ export const Config = Schema.object({    // Schemastery，用户可在 patch 层
    但我们为了可搬迁更想要 `$DSH_HOME/fishbowl/creatures/` 明文目录——核实两者成本后定
 3. 评价用的 LLM 调用：走宿主的 llm service 还是插件直接调 API（密钥怎么取）？
    初版倾向直接调，与宿主解耦，但会绕开宿主的计量与重试
-4. `agent.inject()` 的 content 格式（与 followup 相同的 ContentBlock[]？）
+4. ~~`agent.inject()` 的 content 格式~~ → **已实证**：必须是完整的 `user/message` 形状
+   `{ role: 'user', id: <uuid>, content: [{type:'text',text}], source: {...} }`；
+   缺 `role`/`id` 会把坏消息写进会话日志，该会话所有 API 请求 422 卡死（2026-10-30 事故，已修复并加回归测试）。
+   另：宿主（Electron）内 import `.ts` 可用——Node 24 类型剥离在宿主内生效。
 5. `tools/pre-execute` 返回 `ask` 的确切形状与用户侧呈现
 6. 定时器注册点（M2 主动联系才需要）；注意 initiator scope 是 process-local
 7. 若用 `systemPrompt` 的 context provider（`refreshContext`）替代 inject 放“每轮变化的状态”，
