@@ -1,0 +1,4 @@
+- insert:
+    - id: fishbowl
+      name: '@local/fishbowl'
+      config: {}

@@ -8,12 +8,14 @@
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单（按本机安装的 0.2.1-rc.3 核实） |
 | [prototype/](prototype) | Python 原型：验证"情绪确实改变了行为"（8/8 通过，已冻结） |
 | [src/](src) | M0：TypeScript 内核移植（纯逻辑、零依赖、Node ≥22.18 直接跑 .ts） |
+| [packages/plugin/](packages/plugin) | M1：DSH 插件（事件收集、异步评价、状态注入、工具约束） |
 
 ## 运行
 
 ```sh
-node src/test.ts    # 验收：数值与 Python 原型一致 + 可搬迁性验证
-node src/demo.ts    # 四组剧本演示（输出对齐 Python 原型）
+node src/test.ts                       # 内核验收：数值与 Python 原型一致 + 可搬迁性验证
+node packages/plugin/test/unit.test.ts # 插件单元测试
+node src/demo.ts                       # 四组剧本演示（输出对齐 Python 原型）
 ```
 
 或者双击 `run-test.cmd` / `run-demo.cmd`（自动找 node，找不到用 DSH 自带解释器）。

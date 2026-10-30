@@ -1,0 +1,75 @@
+/** 插件单元测试：评价器、注入摘要、约束决策、会话↔个体绑定。 */
+import fs from 'node:fs'
+import path from 'node:path'
+import * as sc from '../../../src/scenarios.ts'
+import { appraiseScripted } from '../lib/appraiser.js'
+import { createBinding } from '../lib/binding.js'
+import { normalizeConfig } from '../lib/config.js'
+import { refuseReason, verifyDecision } from '../lib/constraints.js'
+import { summaryText } from '../lib/injector.js'
+
+let failures = 0
+function check(name: string, cond: boolean, detail = ''): void {
+  console.log(`  [${cond ? 'PASS' : 'FAIL'}] ${name}${detail ? '  ' + detail : ''}`)
+  if (!cond) failures++
+}
+
+const stateDir = path.join(process.cwd(), 'test-tmp', 'plugin')
+const cfg = normalizeConfig({ stateDir })
+
+console.log('== 评价器（关键词版） ==')
+const rej = appraiseScripted('这个方案不行，重做。')
+check('否定 → goalCongruence -0.45', Math.abs(rej.goalCongruence + 0.45) < 1e-9, `gc=${rej.goalCongruence}`)
+const sorry = appraiseScripted('抱歉，是我的错，我保证下次不会了。')
+check('道歉 → 自归因 + 违诺', sorry.attribution === 'self' && sorry.normViolation > 0,
+  `att=${sorry.attribution} nv=${sorry.normViolation}`)
+const praise = appraiseScripted('谢谢，做得很好，我很喜欢。')
+check('夸奖 → 正向关系影响', praise.relationalImpact > 0, `ri=${praise.relationalImpact}`)
+const plain = appraiseScripted('下午三点开会。')
+check('中性 → 全默认', plain.goalCongruence === 0 && plain.normViolation === 0 && plain.attribution === 'circumstance')
+
+console.log('== 注入摘要 ==')
+const bias = { verbosity: 0.14, thresholdRefuse: 0.23, thresholdVerify: 0.78, riskAppetite: 0.83, disclosure: 0.30, patience: 0.17 }
+const affect = { valence: -0.68, arousal: 0.74, guilt: 0.6, longing: 0, mood: 0, named: {} }
+const summary = summaryText(bias, affect)
+check('包含六个旋钮数值', ['0.14', '0.23', '0.78', '0.83', '0.30', '0.17'].every(v => summary.includes(v)))
+check('愧疚以事实形式出现', summary.includes('未平复的愧疚'))
+check('不含情绪台词', !summary.includes('难过') && !summary.includes('生气'))
+check('明示"影响怎么做"', summary.includes('怎么做，而不是怎么说'))
+
+console.log('== 工具约束（纯决策函数） ==')
+const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
+check('高验证门槛 → bash 先 ask', verifyDecision(hot, 'bash', cfg)?.kind === 'ask')
+check('低验证门槛 → 放行', verifyDecision({ ...hot, thresholdVerify: 0.3 }, 'bash', cfg) === null)
+check('非名单工具 → 放行', verifyDecision(hot, 'read', cfg) === null)
+const strict = normalizeConfig({ stateDir, refuseTools: ['bash'] })
+check('低拒绝门槛 → 拒绝破坏性工具', (refuseReason({ ...hot, thresholdRefuse: 0.1 }, 'bash', strict) ?? '').includes('拒绝'))
+check('高拒绝门槛 → 放行', refuseReason({ ...hot, thresholdRefuse: 0.5 }, 'bash', strict) === null)
+check('对照组 control=true 时约束关闭', normalizeConfig({ stateDir, control: true }).control === true)
+
+console.log('== 会话 ↔ 个体绑定 ==')
+const binding = createBinding(cfg)
+const c1 = binding.creatureFor('session-a')
+const c2 = binding.creatureFor('session-a')
+const other = binding.creatureFor('session-b')
+check('同一会话绑定同一个体', c1.meta.creatureId === c2.meta.creatureId)
+check('不同会话是不同个体', c1.meta.creatureId !== other.meta.creatureId)
+check('气质是随机的（不写死在代码里）', typeof c1.meta.temperament.reactivity === 'number'
+  && c1.meta.temperament.reactivity >= 0.6 && c1.meta.temperament.reactivity <= 1.4)
+check('时区写入 meta（搬迁不变量）', c1.meta.timezone === cfg.timezone)
+check('模型随个体绑定', c1.meta.model.pinned === true)
+
+const T0 = 0
+for (let i = 0; i < 3; i++) c1.recordEpisode('rejected', sc.rejection(), undefined, T0)
+check('三连否定后耐心显著下降', c1.bias().patience < 0.30, `pati=${c1.bias().patience.toFixed(2)}`)
+check('个体目录已落盘', fs.existsSync(path.join(stateDir, c1.meta.creatureId, 'log.ndjson')))
+check('绑定表已落盘', fs.existsSync(path.join(stateDir, 'bindings.json')))
+
+console.log('== 配置默认值 ==')
+const d = normalizeConfig({})
+check('默认时区 Asia/Shanghai', d.timezone === 'Asia/Shanghai')
+check('默认评价器 scripted（离线可用）', d.appraiser.kind === 'scripted')
+check('默认状态目录在用户目录下（不进仓库）', d.stateDir.includes('.fishbowl'))
+
+console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
+process.exit(failures === 0 ? 0 : 1)
