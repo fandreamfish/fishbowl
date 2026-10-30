@@ -1,0 +1,17 @@
+{
+  "wake": {
+    "activeWindow": ["08:00", "23:30"],
+    "interval": { "mode": "random", "min": "30m", "max": "120m" },
+    "dwell": ["1m", "3m"],
+    "idleSkip": true,
+    "stateMultiplier": { "active": 1.0, "fading": 4.0, "dormant": 24.0 }
+  },
+  "contact": {
+    "window": ["09:00", "22:30"],
+    "dailyMax": 2,
+    "minGap": "3h",
+    "burst": { "max": 1, "per": "2h" },
+    "requireReason": true,
+    "unansweredStop": 3
+  }
+}

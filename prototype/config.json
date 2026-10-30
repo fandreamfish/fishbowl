@@ -1,0 +1,26 @@
+{
+  "seed": 7,
+  "creature": {
+    "name": "untitled",
+    "born_at": null
+  },
+  "wake": {
+    "active_window": ["08:00", "23:30"],
+    "interval": { "mode": "random", "min": "30m", "max": "120m" },
+    "dwell": ["1m", "3m"],
+    "budget": { "calls_per_wake": 1, "calls_per_day": 24 },
+    "idle_skip": true,
+    "catch_up_missed": false,
+    "state_multiplier": { "active": 1.0, "fading": 4.0, "dormant": 24.0 }
+  },
+  "contact": {
+    "daily_max": 2,
+    "window": ["09:00", "22:30"],
+    "min_gap": "3h",
+    "burst": { "max": 1, "per": "2h" },
+    "require_reason": true,
+    "unanswered_stop": 3,
+    "reset": "rolling_24h"
+  },
+  "growth": { "g": 1.0 }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "fishbowl-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "fishbowl cognitive core: appraisal -> affect -> decision bias. Pure logic, zero dependencies.",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "demo": "node src/demo.ts",
+    "test": "node src/test.ts"
+  }
+}

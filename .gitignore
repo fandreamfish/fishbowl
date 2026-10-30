@@ -1,0 +1,20 @@
+# 依赖
+node_modules/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 本地提取的 DSH 安装包源码（他人的代码，不进仓库）
+.inspect/
+
+# 运行测试产生的临时个体目录
+test-tmp/
+demo-tmp/
+
+# 个体状态：记忆、情绪、人格永远不进仓库（DESIGN.md §15.3）
+creatures/
+
+# 日志与系统文件
+*.log
+.DS_Store
