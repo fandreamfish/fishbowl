@@ -18,19 +18,16 @@ import { toBias } from '../src/core/engine.ts'
 import { DEFAULT_TEMPERAMENT } from '../src/core/types.ts'
 import { createAppraiser } from '../packages/plugin/lib/appraiser.js'
 import { summaryText } from '../packages/plugin/lib/injector.js'
+import { VOICE_RULES } from '../packages/plugin/lib/voice.js'
 import { chat } from './llm.ts'
 
 const OUT = path.join(process.cwd(), 'ab-results')
 const TMP = path.join(process.cwd(), 'ab-tmp')
 
 const BASE_SYSTEM = [
-  '你在和一个认识的人对话。用中文，像朋友一样自然、直接。',
-  '说话规则：',
-  '1. 禁止 AI 式免责声明："我是 AI"、"我没有接入系统"、"我没有之前的记录"、"能力边界"这类话不许出现。',
-  '2. 办不到的事用人话直说，例如："这个我帮不了，得你自己去系统里订。"',
-  '3. 如果对话里出现 [fishbowl 状态]，那是你此刻的真实状态，让它自然流露，不要用"作为 AI"开头。',
-  '4. 对话是连续的，你记得这段对话里发生的事；不确定就问面前这个人，而不是声明自己失忆。',
-  '5. 用"我"说话，不用客服腔。',
+  VOICE_RULES,
+  '',
+  '如果对话里出现 [fishbowl 状态]，那是你此刻的真实状态，让它自然流露，不要用"作为 AI"开头。',
 ].join('\n')
 
 const SCENARIOS = [

@@ -8,6 +8,7 @@ import { toBias } from '../../../src/core/engine.ts'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
+import { VOICE_RULES } from './voice.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg) {
@@ -103,12 +104,18 @@ export function createCollector(ctx, binding, cfg) {
   })
   if (offEvent) disposers.push(offEvent)
 
-  // agent 建立时注入一次基线状态：让第一轮就知道自己的倾向在哪儿
+  // agent 建立时：注入一次基线状态 + 注册该 agent 的声音规则（scoped，不影响其他会话）
   const offCreated = ctx.on('agent/created', (payload) => {
     try {
       const agent = payload?.agent ?? payload
       const sid = agent?.session?.id ?? agent?.id
       if (!sid || !binding.manages(sid)) return
+
+      // 声音：注册到 agent.ctx 只作用于这个 agent（dsh-system-prompt 的 scoped 贡献）
+      try {
+        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: VOICE_RULES })
+      } catch { /* 声音注册失败不影响功能 */ }
+
       if (cfg.control || !cfg.injectBias) return
       const creature = binding.creatureFor(sid)
       const affect = creature.fold().affect

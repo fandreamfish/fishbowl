@@ -8,6 +8,7 @@ import { normalizeConfig } from '../lib/config.js'
 import { refuseReason, verifyDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
+import { VOICE_RULES } from '../lib/voice.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -38,6 +39,12 @@ check('愧疚以事实形式出现', summary.includes('未平复的愧疚'))
 check('不含情绪台词', !summary.includes('难过') && !summary.includes('生气'))
 check('明示"影响怎么做"', summary.includes('怎么做，而不是怎么说'))
 check('声明快照≠人格（防自我叙事固化）', summary.includes('不是人格') && summary.includes('照实说还不确定'))
+check('状态摘要不含声音规则（声音走独立机制）', !summary.includes('不表演认错'))
+
+console.log('== 声音规则（few-shot 语域） ==')
+check('禁止表演式认错', VOICE_RULES.includes('不表演认错'))
+check('包含真实对话样例', VOICE_RULES.includes('哪不行？说具体点，我改。'))
+check('禁止自我剖析', VOICE_RULES.includes('不分析自己'))
 
 console.log('== 注入消息形状（事故回归测试） ==')
 const m1 = injectMessage('hello')
