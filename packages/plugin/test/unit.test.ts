@@ -36,6 +36,7 @@ check('包含六个旋钮数值', ['0.14', '0.23', '0.78', '0.83', '0.30', '0.17
 check('愧疚以事实形式出现', summary.includes('未平复的愧疚'))
 check('不含情绪台词', !summary.includes('难过') && !summary.includes('生气'))
 check('明示"影响怎么做"', summary.includes('怎么做，而不是怎么说'))
+check('声明快照≠人格（防自我叙事固化）', summary.includes('不是人格') && summary.includes('照实说还不确定'))
 
 console.log('== 注入消息形状（事故回归测试） ==')
 const m1 = injectMessage('hello')

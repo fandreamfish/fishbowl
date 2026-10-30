@@ -24,7 +24,8 @@ export function summaryText(bias, affect) {
       + ` · 风险${f(bias.riskAppetite)}(${q(bias.riskAppetite, 0.4, 0.6, '保守', '敢试')})`
       + ` · 披露${f(bias.disclosure)}(${q(bias.disclosure, 0.4, 0.6, '保留', '愿意说')})`
       + ` · 耐心${f(bias.patience)}(${q(bias.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
-    '让它们影响你怎么做，而不是怎么说。',
+    '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
+      + '被问到你是什么样的人时，不要拿这些数字编造性格——你还没有长期经历，照实说还不确定。',
   ].join('\n')
 }
 

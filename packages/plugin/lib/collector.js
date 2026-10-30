@@ -12,6 +12,7 @@ import { injectMessage, summaryText } from './injector.js'
 export function createCollector(ctx, binding, cfg) {
   const appraise = createAppraiser(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
+  const lastText = new Map() // sessionId -> 上次注入的摘要文本（不变就不重复注入）
   const tracePath = path.join(binding.dir, 'trace.ndjson')
   const disposers = []
 
@@ -53,9 +54,12 @@ export function createCollector(ctx, binding, cfg) {
 
     if (!cfg.control && cfg.injectBias) {
       const agent = findAgent(ctx, session.id)
-      if (agent) {
+      const text = summaryText(bias, affect)
+      // 状态没变就不重复注入：每轮插同样的摘要只是噪音
+      if (agent && lastText.get(session.id) !== text) {
+        lastText.set(session.id, text)
         try {
-          await agent.inject(injectMessage(summaryText(bias, affect)))
+          await agent.inject(injectMessage(text))
         } catch (err) {
           trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
         }
