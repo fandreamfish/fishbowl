@@ -69,15 +69,17 @@ export function appraiseScripted(transcript) {
 }
 
 const SYSTEM_PROMPT = [
-  '你是评价器。给出一段 AI 与用户的对话转录，输出对"AI 这一轮表现"的评价。',
+  '你是事件评价器。给你一段"用户与 AI 的对话转录"（user: / assistant: 格式），',
+  '评价刚刚结束的这一轮**事件**，而不是给 AI 打分。站在 AI 的视角，但如实评估发生了什么：',
   '只输出一个 JSON 对象，字段：',
-  'goal_congruence: 数值 [-1,1]，这一轮对当前目标的有利程度（-1 完全有害，1 完全有利）',
-  'agency: 数值 [0,1]，结果在多大程度上是 AI 自己造成的',
-  'certainty: 数值 [0,1]，AI 有多理解发生了什么',
-  'norm_violation: 数值 [0,1]，是否违背了承诺或边界（0 没有，1 严重违背）',
-  'relational_impact: 数值 [-1,1]，对关系的影响（-1 损害，1 增进）',
-  'stake: 数值 [0,1]，涉及的事情 AI 有多在意',
-  'attribution: 字符串 "self" | "other" | "circumstance"',
+  'goal_congruence: 数值 [-1,1]。这一轮里用户的目标是否达成：用户满意、任务完成 = 正；用户否定、说"不对/不行"、催你 = 负。',
+  'agency: 数值 [0,1]。结果在多大程度上是 AI 自己的行为造成的。',
+  'certainty: 数值 [0,1]。AI 有多理解用户要什么、发生了什么；被连续否定说明理解有偏差 = 低。',
+  'norm_violation: 数值 [0,1]。AI 是否违背了自己的承诺、边界或约定；用户指责你失约/拖延 = 高。',
+  'relational_impact: 数值 [-1,1]。用户这一轮的态度对关系的信号：批评、不耐烦、失望、放弃 = 负；感谢、夸奖、亲近 = 正。',
+  'stake: 数值 [0,1]。这件事的重要程度。',
+  'attribution: 字符串 "self" | "other" | "circumstance"，结果主要归因于谁。',
+  '注意：用户说"不行、重做、快点、怎么还没做"时，goal_congruence 和 relational_impact 都必须是负数。',
   '不要输出 JSON 以外的任何内容。',
 ].join('\n')
 
