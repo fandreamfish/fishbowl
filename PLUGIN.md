@@ -250,3 +250,17 @@ export const Config = Schema.object({    // Schemastery，用户可在 patch 层
 6. 定时器注册点（M2 主动联系才需要）；注意 initiator scope 是 process-local
 7. 若用 `systemPrompt` 的 context provider（`refreshContext`）替代 inject 放“每轮变化的状态”，
    语义与 inject 的差异（谁进日志、谁进 KV cache）
+
+## 0.2.1-rc.5 适配（2026-10-31）
+
+- **`tools.guard` 语义变更**：只有返回 `undefined` 是放行；返回 `null` 会被当成"拒绝，理由 null"，
+  整条工具调用变成 `Error: null`。我们的 `refuseReason` 返回 `string | null`，钩子里必须过
+  `guardVerdict()` 归一成 `undefined`。（症状：插件启用后所有工具全灭。）
+- **profile 的 `dsh.profile.bundles` 决定激活**：升级后 fishbowl 不在列表里 → 插件根本没加载
+  （路由 404）。补回列表末尾即可（HMR 热生效，无需重启）。
+- **新清单要求**：`exports['./icon']` + `icon.svg` + `files` + `description` + `locale/*.json`
+  （设置页/插件页读取标题与描述）。
+- 新增插件管理器（`plugin_manager` 工具 / 侧栏插件页），启停写 `cordis.patch.yml` 的 `disabled`。
+- 接口核对：`session/event`、`agent.inject/followup`、`systemPrompt.section`、
+  `webServer.register`、客户端 `settings.section` 均未变；会话目录编码（分隔符折叠为 `-`、`~XXXX` 转义）
+  也未变，工作区枚举仍可用。

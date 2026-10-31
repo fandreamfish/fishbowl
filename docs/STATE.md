@@ -1,6 +1,6 @@
 # fishbowl 项目状态与开发要点
 
-> 最后更新：M6.1。这份文档是给"下次开工的人（或 AI）"看的操作手册。
+> 最后更新：M8（DSH 0.2.1-rc.5 适配）。这份文档是给"下次开工的人（或 AI）"看的操作手册。
 > 密钥类信息**不在本文件**——见同目录 `SECRETS.local.md`（已 gitignore，不进仓库）。
 
 ## 1. 项目一句话
@@ -17,7 +17,7 @@ DSH 插件。不是记忆插件——记忆是底料，人格是派生。核心�
 |---|---|
 | 仓库 | `D:\fish-memory` |
 | 远程 | `github.com/fandreamfish/fishbowl`（私有） |
-| 宿主 checkout | `S:\DeepSeek Harness\resources\app.asar\dsh\` |
+| 宿主版本 | **0.2.1-rc.5**（2026-10-31 升级）|`n| 宿主 checkout | `S:\DeepSeek Harness\resources\app.asar\dsh\` |
 | DSH 配置目录 | `C:\Users\24358\.dsh\` |
 | profile | `C:\Users\24358\.dsh\profiles\desktop\` |
 | 插件配置 | `profiles\desktop\cordis.patch.yml`（fishbowl 段） |

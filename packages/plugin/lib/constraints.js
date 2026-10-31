@@ -1,10 +1,14 @@
-/** 工具约束：情绪 → 工具策略。
+/**
+ * 工具约束：情绪 → 工具策略。
  *  - guard：同步、单调拒绝（破坏性工具 + 低拒绝门槛）
- *  - tools/pre-execute：返回 { kind: 'ask' }（危险工具 + 高验证门槛）
+ *  - tools/pre-execute：返回 { kind: 'ask', reason }（危险工具 + 高验证门槛）
  *
- * 决策函数是纯函数，可独立测试。
- * 宿主回调一律 try/catch 并回退 next()——插件绝不允许弄断宿主的工具瀑布
- * （真实事故：回调里同步 fold 大日志 + 抛异常，导致工具间歇性全灭）。
+ * rc.5 契约（0.2.1-rc.5 起）：
+ *   `guard` 的返回值里**只有 `undefined` 表示放行**——返回 null 会被当成
+ *   "拒绝，理由 null"，整条工具调用变成 `Error: null`（真机上踩过：
+ *   插件一启用所有工具全灭）。所以放行一律 return undefined。
+ *
+ * 决策函数是纯函数，可独立测试；宿主回调一律 try/catch 并回退放行。
  */
 
 /** @param {import('../../src/core/types.ts').Bias} bias */
@@ -28,6 +32,14 @@ export function refuseReason(bias, toolName, cfg) {
   return null
 }
 
+/**
+ * rc.5 契约：guard 只有返回 undefined 才是放行。
+ * 纯函数给的 null（"没有意见"）必须归一成 undefined，否则会被当成拒绝理由。
+ */
+export function guardVerdict(reason) {
+  return reason === null || reason === undefined ? undefined : reason
+}
+
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createConstraints(ctx, binding, cfg) {
   const disposers = []
@@ -35,12 +47,14 @@ export function createConstraints(ctx, binding, cfg) {
   if (typeof ctx.tools?.guard === 'function') {
     const off = ctx.tools.guard((exec) => {
       try {
-        if (cfg.control || cfg.refuseTools.length === 0) return null
+        // rc.5：只有 undefined 是放行；null/false 都会被当成拒绝理由
+        if (cfg.control || cfg.refuseTools.length === 0) return undefined
         const sid = sessionIdOf(exec)
-        if (!sid || !binding.manages(sid)) return null
-        return refuseReason(binding.biasFor(sid, 5000, workspaceOfExec(exec)), toolNameOf(exec), cfg)
+        if (!sid || !binding.manages(sid)) return undefined
+        const reason = refuseReason(binding.biasFor(sid, 5000, workspaceOfExec(exec)), toolNameOf(exec), cfg)
+        return guardVerdict(reason)
       } catch {
-        return null
+        return undefined
       }
     })
     if (off) disposers.push(off)
@@ -48,7 +62,7 @@ export function createConstraints(ctx, binding, cfg) {
 
   const off = ctx.on('tools/pre-execute', (exec, next) => {
     try {
-      if (!next) return undefined
+      if (typeof next !== 'function') return undefined
       if (cfg.control) return next()
       const sid = sessionIdOf(exec)
       if (!sid || !binding.manages(sid)) return next()

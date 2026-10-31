@@ -10,7 +10,7 @@ import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
-import { refuseReason, verifyDecision } from '../lib/constraints.js'
+import { guardVerdict, refuseReason, verifyDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
@@ -236,6 +236,8 @@ check('非名单工具 → 放行', verifyDecision(hot, 'read', cfg) === null)
 const strict = normalizeConfig({ stateDir, refuseTools: ['bash'] })
 check('低拒绝门槛 → 拒绝破坏性工具', (refuseReason({ ...hot, thresholdRefuse: 0.1 }, 'bash', strict) ?? '').includes('拒绝'))
 check('高拒绝门槛 → 放行', refuseReason({ ...hot, thresholdRefuse: 0.5 }, 'bash', strict) === null)
+check('rc.5：放行必须是 undefined（null 会被当成拒绝理由）', guardVerdict(null) === undefined)
+check('rc.5：拒绝理由原样返回', guardVerdict('x') === 'x')
 check('对照组 control=true 时约束关闭', normalizeConfig({ stateDir, control: true }).control === true)
 
 console.log('== 会话 ↔ 个体绑定 ==')
