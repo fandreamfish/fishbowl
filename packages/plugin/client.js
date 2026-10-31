@@ -66,6 +66,7 @@ function makeFactory() {
       const [sess, setSess] = useState('')
       const [moveOpen, setMoveOpen] = useState(false)
       const [pick, setPick] = useState(null)
+      const [pickWs, setPickWs] = useState(null)
 
       const load = useCallback(async () => {
         try {
@@ -150,56 +151,81 @@ function makeFactory() {
           : f.occupancy.kind === 'workspace'
             ? '屋子：' + f.occupancy.id
             : '房间：' + f.occupancy.id.slice(0, 20) + (f.occupancy.workspace ? '（屋子：' + f.occupancy.workspace + '）' : '')
-        const pickItem = (label, disabled, selected, onPick, key) => e('button', {
+
+        // —— 搬家弹框：左边屋子，右边该屋子下的房间（左右树） ——
+        const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+        const modal = { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 12, padding: 16, width: 620, maxWidth: '92vw', maxHeight: '72vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }
+        const col = { flex: 1, minWidth: 0, border: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.2))', borderRadius: 10, padding: 8, maxHeight: '44vh', overflow: 'auto' }
+        const node = (label, disabled, active, onClick, key) => e('div', {
           key,
-          disabled,
           style: {
-            ...btnS, margin: 2, textAlign: 'left',
-            opacity: disabled ? 0.45 : 1,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            fontWeight: selected ? 600 : 400,
-            background: selected ? 'var(--dsw-alias-bg-2, rgba(127,127,127,0.16))' : 'transparent',
+            padding: '7px 9px', borderRadius: 8, marginBottom: 4, fontSize: 13,
+            cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.45 : 1,
+            background: active ? 'var(--dsw-alias-bg-2, rgba(127,127,127,0.16))' : 'transparent',
+            fontWeight: active ? 600 : 400, wordBreak: 'break-all',
           },
-          onClick: () => { if (!disabled) onPick() },
+          onClick: () => { if (!disabled) onClick() },
           children: label,
         })
+        const roomsOf = (w) => sessions.filter((s2) => (s2.workspace || '') === (w || ''))
+
+        const moveModal = moveOpen ? e('div', { style: overlay, onClick: () => { setMoveOpen(false); setPick(null) }, children: [
+          e('div', { style: modal, onClick: (ev) => ev.stopPropagation(), children: [
+            e('div', { style: { ...rowS, marginBottom: 10 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 14 }, children: '搬家 · ' + f.name + '的房间' }, 't'),
+              e('button', { style: btnS, onClick: () => { setMoveOpen(false); setPick(null); setPickWs(null) }, children: '×' }, 'x'),
+            ] }, 'hdr'),
+            e('div', { style: { display: 'flex', gap: 8 }, children: [
+              e('div', { style: col, children: [
+                e('div', { style: { ...lab, marginBottom: 6 }, children: '屋子（工作区）' }, 'lw'),
+                ...workspaces.map((w, i) => {
+                  const taken = occupiedWs[w]
+                  const disabled = !!taken && taken !== f.name
+                  const active = pickWs === w
+                  return node((active ? '▾ ' : '▸ ') + w + (disabled ? '（' + taken + ' 已住）' : ''), false, active, () => { setPickWs(w); setPick(null) }, 'w' + i)
+                }),
+                !workspaces.length ? e('div', { style: lab, children: '还没有见过工作区' }, 'nows') : null,
+              ] }, 'left'),
+              e('div', { style: col, children: [
+                e('div', { style: { ...lab, marginBottom: 6 }, children: '房间（会话）' }, 'lr'),
+                pickWs
+                  ? e('div', { children: [
+                      node('整个屋子（所有会话）' + (occupiedWs[pickWs] && occupiedWs[pickWs] !== f.name ? '（' + occupiedWs[pickWs] + ' 已住）' : pick && pick.kind === 'workspace' ? '（已选）' : ''), !!(occupiedWs[pickWs] && occupiedWs[pickWs] !== f.name), !!(pick && pick.kind === 'workspace' && pick.id === pickWs), () => setPick({ kind: 'workspace', id: pickWs }), 'all'),
+                      ...roomsOf(pickWs).map((s2, i) => {
+                        const taken = occupiedSess[s2.id]
+                        const disabled = !!taken && taken !== f.name
+                        const active = !!(pick && pick.kind === 'session' && pick.id === s2.id)
+                        return node(s2.id + (disabled ? '（' + taken + ' 已住）' : ''), disabled, active, () => setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }), 'r' + i)
+                      }),
+                      !roomsOf(pickWs).length ? e('div', { style: lab, children: '这个屋子还没有记录到的房间' }, 'norooms') : null,
+                    ] }, 'rooms')
+                  : e('div', { style: lab, children: '先点左边选一个屋子，这里会展开它的房间' }, 'pickfirst'),
+              ] }, 'right'),
+            ] }, 'cols'),
+            e('div', { style: { ...rowS, marginTop: 12 }, children: [
+              e('span', { style: { ...lab, fontSize: 12 }, children: pick ? '已选：' + (pick.kind === 'workspace' ? '整个屋子 ' + pick.id : '房间 ' + pick.id) : '还没选' }, 'sel'),
+              e('div', { style: { display: 'flex', gap: 8 }, children: [
+                e('button', { style: btnS, onClick: () => { setMoveOpen(false); setPick(null) }, children: '取消' }, 'c'),
+                e('button', { style: { ...btnP, opacity: pick ? 1 : 0.5, cursor: pick ? 'pointer' : 'not-allowed', fontSize: 13, padding: '6px 14px' }, onClick: () => act(async () => {
+                  if (!pick) return
+                  await postJson(API + '/fish/' + f.id + '/occupy', { kind: pick.kind, id: pick.id, workspace: pick.workspace })
+                  setMoveOpen(false); setPick(null)
+                }, '搬进去了'), children: '入住' }, 'ok'),
+              ] }, 'acts'),
+            ] }, 'foot'),
+          ] }, 'modal'),
+        ] }) : null
 
         body = e('div', { children: [
           e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 }, children: f.name + '的房间' }, 'rn'),
             e('div', { style: { ...lab, marginBottom: 4 }, children: roomLine + ' · ' + f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'occ'),
             e('div', { style: { display: 'flex', gap: 6, marginTop: 8 }, children: [
-              e('button', { style: btn, onClick: () => { setMoveOpen((v) => !v); setPick(null) }, children: moveOpen ? '收起' : '搬家' }),
+              e('button', { style: btn, onClick: () => { setMoveOpen(true); setPick(null); setPickWs(null) }, children: '搬家' }),
               f.occupancy ? e('button', { style: { ...btnS, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
             ] }, 'btns'),
-            moveOpen ? e('div', { style: { marginTop: 10, borderTop: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.15))', paddingTop: 10 }, children: [
-              e('div', { style: { ...lab, marginBottom: 4 }, children: '屋子（整个工作区，所有会话都由她接待）' }, 'l1'),
-              ...workspaces.map((w, i) => {
-                const taken = occupiedWs[w]
-                const disabled = !!taken && taken !== f.name
-                const selected = pick && pick.kind === 'workspace' && pick.id === w
-                return pickItem(w + (disabled ? '（' + taken + ' 已住）' : selected ? '（选中）' : ''), disabled, selected, () => setPick({ kind: 'workspace', id: w }), 'w' + i)
-              }),
-              !workspaces.length ? e('div', { style: lab, children: '还没有见过工作区（打开一个项目会话就会被记录）' }, 'nows') : null,
-              e('div', { style: { ...lab, margin: '10px 0 4px' }, children: '房间（单个会话；同屋子的其他会话不受影响）' }, 'l2'),
-              ...sessions.map((s2, i) => {
-                const taken = occupiedSess[s2.id]
-                const wsTaken = s2.workspace ? occupiedWs[s2.workspace] : null
-                const disabled = (!!taken && taken !== f.name) || (!!wsTaken && wsTaken !== f.name)
-                const selected = pick && pick.kind === 'session' && pick.id === s2.id
-                const why = taken && taken !== f.name ? '（' + taken + ' 已住）' : wsTaken && wsTaken !== f.name ? '（屋子被 ' + wsTaken + ' 住了）' : selected ? '（选中）' : ''
-                return pickItem(s2.id.slice(0, 20) + (s2.workspace ? ' · ' + s2.workspace : '') + why, disabled, selected, () => setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }), 's' + i)
-              }),
-              e('div', { style: { display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }, children: [
-                e('button', { style: { ...btnP, opacity: pick ? 1 : 0.5, cursor: pick ? 'pointer' : 'not-allowed' }, onClick: () => act(async () => {
-                  if (!pick) return
-                  await postJson(API + '/fish/' + f.id + '/occupy', { kind: pick.kind, id: pick.id, workspace: pick.workspace })
-                  setMoveOpen(false); setPick(null)
-                }, '搬进去了'), children: '入住' }),
-                e('span', { style: { ...lab, fontSize: 12 }, children: pick ? '已选：' + (pick.kind === 'workspace' ? '屋子 ' : '房间 ') + pick.id : '先选一个屋子或房间' }, 'sel'),
-              ] }, 'go'),
-            ] }, 'picker') : null,
           ] }, 'room'),
+          moveModal,
           e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '她的请求' }, 'reqh'),
             e('div', { style: { ...lab, marginBottom: 8 }, children: '她有事想征求你同意时会提请求。一天最多一次，一周最多三次；没答的可以在这里补答。' }, 'reqhint'),
