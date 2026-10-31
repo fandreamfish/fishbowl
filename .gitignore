@@ -25,3 +25,5 @@ creatures/
 .DS_Store
 
 .fish-ref/
+
+docs/SECRETS.local.md
