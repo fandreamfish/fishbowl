@@ -10,6 +10,22 @@ function q(x, lo, hi, loLabel, hiLabel) {
   return '中'
 }
 
+/** 你们最近说过的话（原文，按时间）。跨会话共享同一份。 */
+export function recentBlock(items, maxChars = 1500) {
+  const list = (items ?? []).filter((i) => i && i.text)
+  if (list.length === 0) return ''
+  const lines = []
+  let used = 0
+  for (const it of list) {
+    const time = new Date(it.ts).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    const text = it.text.replace(/\s+/g, ' ').trim().slice(0, 220)
+    const line = `[${time}] ${text}`
+    if (used + line.length > maxChars) break
+    lines.push(line)
+    used += line.length
+  }
+  return lines.length ? '（你们之前说过的话，按时间）：\n' + lines.join('\n') : ''
+}
 /** 用户这句话触发的回忆：短、只说命中的。 */
 export function recallBlock(claims) {
   const list = (claims ?? []).filter((c) => c && c.text)

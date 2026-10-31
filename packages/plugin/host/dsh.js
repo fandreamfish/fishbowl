@@ -157,6 +157,16 @@ export function createDshHost(ctx, cfg) {
       return findAgent(ctx, sessionId)
     },
 
+    /** 所有活着的 agent（跨会话同步用）。 */
+    listAgents() {
+      try {
+        const reg = ctx.agents
+        return typeof reg?.list === 'function' ? (reg.list() ?? []) : []
+      } catch {
+        return []
+      }
+    },
+
     /** 注册 HTTP 路由（kind: 'prefix' | 'exact'）。 */
     registerRoute(route) {
       const webServer = get('webServer')

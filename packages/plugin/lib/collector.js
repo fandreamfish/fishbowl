@@ -15,7 +15,7 @@ import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.j
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { createDshHost } from '../host/dsh.js'
-import { injectMessage, recallBlock, stateKey, summaryText } from './injector.js'
+import { injectMessage, recallBlock, recentBlock, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
 
@@ -59,16 +59,22 @@ export function createCollector(ctx, binding, cfg, host) {
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) return
       const hits = creature.recallMatches(text, cfg.growth, 2)
-      if (hits.length === 0) return
+      const epi = creature.episodeMatches(text, 2)
+      if (hits.length === 0 && epi.length === 0) return
       const now = Date.now()
       const seen = recalledSeen.get(creature.meta.creatureId) ?? new Map()
-      const fresh = hits.filter((h) => now - (seen.get(h.id) ?? 0) > 10 * 60_000)
-      if (fresh.length === 0) return
-      for (const h of fresh) seen.set(h.id, now)
+      const freshClaims = hits.filter((h) => now - (seen.get(h.id) ?? 0) > 10 * 60_000)
+      const freshEpi = epi.filter((e) => now - (seen.get('epi:' + e.ts) ?? 0) > 10 * 60_000)
+      if (freshClaims.length === 0 && freshEpi.length === 0) return
+      for (const h of freshClaims) seen.set(h.id, now)
+      for (const e of freshEpi) seen.set('epi:' + e.ts, now)
       recalledSeen.set(creature.meta.creatureId, seen)
       const agent = host.agentFor(session.id)
       if (!agent) return
-      host.inject(agent, injectMessage(recallBlock(fresh))).catch(() => {})
+      const parts = []
+      if (freshClaims.length) parts.push(recallBlock(freshClaims))
+      if (freshEpi.length) parts.push(recentBlock(freshEpi.map((e) => ({ ts: e.ts, text: e.text })), 700))
+      host.inject(agent, injectMessage(parts.filter(Boolean).join('\n'))).catch(() => {})
     } catch { /* 回忆失败不影响主流程 */ }
   }
   /** 巩固：把最近的转录压成语义与教训，落盘为事件（带去重与冷却）。 */
@@ -321,6 +327,20 @@ export function createCollector(ctx, binding, cfg, host) {
       }
 
       if (!cfg.control && cfg.injectBias) {
+        // 同一只鱼的其它会话：状态变了也同步过去（她要"在哪都一样"）
+        try {
+          const others = host.listAgents?.() ?? []
+          for (const a of others) {
+            const osid = a?.session?.id ?? a?.id
+            if (!osid || osid === session.id) continue
+            const oc = binding.resolve({ sessionId: osid, workspace: workspaceOf(a?.session) })
+            if (!oc || oc.meta.creatureId !== creature.meta.creatureId) continue
+            const k2 = stateKey(bias, affect, memory)
+            if (lastKey.get(osid) === k2) continue
+            lastKey.set(osid, k2)
+            await host.inject(a, injectMessage(summaryText(bias, affect, memory)))
+          }
+        } catch { /* 同步失败不影响主流程 */ await Promise.resolve() }
         const key = stateKey(bias, affect, memory)
         // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
         // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
@@ -415,7 +435,9 @@ export function createCollector(ctx, binding, cfg, host) {
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const memory = creature.memorySummary(cfg.growth)
-      const text = summaryText(bias, affect, memory)
+      // 基线里带上"你们之前说过的话"，新会话打开也能接上
+      const recent = recentBlock(creature.recentDialog(6))
+      const text = summaryText(bias, affect, memory) + (recent ? '\n' + recent : '')
       Promise.resolve()
         .then(() => host.inject(agent, injectMessage(text)))
         .catch(() => { /* agent 可能在注入前被销毁 */ })

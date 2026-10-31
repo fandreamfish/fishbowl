@@ -19,7 +19,7 @@ import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
 import { matchClaims } from '../../../src/core/recall.ts'
-import { recallBlock } from '../lib/injector.js'
+import { recallBlock, recentBlock } from '../lib/injector.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
@@ -362,5 +362,13 @@ shared.recordEpisode('joy', { goalCongruence: 1, agency: 0.5, certainty: 0.8, no
 check('记忆共享（同一个体摘要）', cA.memorySummary().semantics.includes('他每天早上七点起'))
 check('情绪共享（同一个体状态）', Math.abs(cA.fold().affect.valence - cB.fold().affect.valence) < 1e-9)
 check('工作区里的会话级解析也指向它', binding.occupantOf(s1)?.meta.creatureId === shared.meta.creatureId)
+console.log('== M14：跨会话原文记忆 ==')
+shared.recordEpisode('turn', { goalCongruence: 0.5, agency: 0.5, certainty: 0.7, normViolation: 0, relationalImpact: 0.3, stake: 0.4, attribution: 'other' }, 'user: 我每天早上七点起 assistant: 记下了')
+const rd = shared.recentDialog(5)
+check('最近对话含原文', rd.length >= 1 && rd[rd.length - 1].text.includes('七点'))
+check('按话题翻原文', shared.episodeMatches('我几点起', 2).length >= 1)
+check('无关话题翻不到', shared.episodeMatches('量子力学', 2).length === 0)
+check('最近对话渲染', recentBlock([{ ts: Date.now(), text: 'abc' }]).includes('abc'))
+check('最近对话有上限', recentBlock(Array.from({ length: 50 }, (_, i) => ({ ts: Date.now(), text: 'x'.repeat(200) + i })), 800).length <= 900)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

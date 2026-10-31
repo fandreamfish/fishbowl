@@ -10,7 +10,7 @@ import {
 } from './engine.ts'
 import { memoryWindowDays } from './growth.ts'
 import { Store } from './store.ts'
-import { matchClaims } from './recall.ts'
+import { matchClaims, matchTexts } from './recall.ts'
 import { uid } from './util.ts'
 
 export class Creature {
@@ -322,6 +322,23 @@ export class Creature {
     return matchClaims(this.claimsWithWeight(g), text, limit)
   }
 
+  /** 最近说过的话（原文，按时间正序）：跨会话共享同一份。 */
+  recentDialog(limit = 6): { ts: number; text: string }[] {
+    return this.store
+      .readEvents()
+      .filter((e): e is Extract<CreatureEvent, { t: 'episode' }> => e.t === 'episode' && typeof e.note === 'string')
+      .slice(-limit)
+      .map(e => ({ ts: e.ts, text: String(e.note) }))
+  }
+
+  /** 按话题翻原始对话（整个历史，不限时间）。 */
+  episodeMatches(text: string, limit = 3): { ts: number; text: string; score: number }[] {
+    const items = this.store
+      .readEvents()
+      .filter((e): e is Extract<CreatureEvent, { t: 'episode' }> => e.t === 'episode' && typeof e.note === 'string')
+      .map(e => ({ ts: e.ts, text: String(e.note) }))
+    return matchTexts(items, text, limit)
+  }
   /** 回忆（M6）：按重量翻出记忆，含已折叠的旧事。 */
   recall(g = 1, limit = 8): MemoryClaim[] {
     return this.claimsWithWeight(g).slice(0, limit)

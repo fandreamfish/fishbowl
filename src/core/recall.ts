@@ -36,3 +36,21 @@ export function matchClaims(claims, text, limit = 3) {
   }
   return scored.sort((a, b) => b.score - a.score).slice(0, limit)
 }
+
+/**
+ * 在一段段原文里找命中的片段（用于翻原始对话，而不只是认知）。
+ * @param {{ts: number, text: string}[]} items
+ * @param {string} text 用户这句话
+ */
+export function matchTexts(items, text, limit = 3) {
+  const q = tokens(text)
+  if (q.size === 0) return []
+  const scored = []
+  for (const it of items ?? []) {
+    const t = tokens(it.text)
+    let hit = 0
+    for (const tok of t) if (q.has(tok)) hit += 1
+    if (hit > 0) scored.push({ ...it, score: hit })
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, limit)
+}
