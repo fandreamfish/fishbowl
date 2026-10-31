@@ -44,6 +44,24 @@ export function normalizeConfig(raw = {}) {
 
     // M2.4：关系原型（只影响语域与关系规则，不规定人格）
     relation: { kind: raw.relation?.kind || 'companion' },
+
+    // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
+    wake: {
+      enabled: raw.wake?.enabled === true,
+      activeWindow: raw.wake?.activeWindow ?? ['08:00', '23:30'],
+      interval: raw.wake?.interval ?? { mode: 'fixed', min: '60m' },
+      dwell: raw.wake?.dwell ?? ['1m', '3m'],
+      idleSkip: raw.wake?.idleSkip ?? true,
+      stateMultiplier: raw.wake?.stateMultiplier ?? { active: 1, fading: 4, dormant: 24 },
+    },
+    contact: {
+      window: raw.contact?.window ?? ['09:00', '22:30'],
+      dailyMax: raw.contact?.dailyMax ?? 2,
+      minGap: raw.contact?.minGap ?? '3h',
+      burst: raw.contact?.burst ?? { max: 1, per: '2h' },
+      requireReason: raw.contact?.requireReason ?? true,
+      unansweredStop: raw.contact?.unansweredStop ?? 3,
+    },
   }
   return c
 }

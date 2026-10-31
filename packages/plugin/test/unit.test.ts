@@ -12,6 +12,7 @@ import { refuseReason, verifyDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
+import { proactivePrompt, wakeReason } from '../lib/life.js'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
@@ -171,6 +172,17 @@ check('broken 的承诺不消失（没翻篇）', oc2.some(c => c.broken))
 const ms3 = named.memorySummary()
 check('注入含未完成的承诺（⚠ 标记）', ms3.commitments.some(c => c.includes('⚠')))
 check('摘要含承诺区', summaryText(baseBias, baseAff, ms3).includes('未完成的承诺'))
+
+console.log('== M3.0：清醒与主动联系（纯决策） ==')
+check('唤醒由头：先还债', (wakeReason({ openBroken: 1, longing: 0.9 })?.reason ?? '').includes('答应过'))
+check('唤醒由头：再想念', (wakeReason({ openBroken: 0, longing: 0.5 })?.reason ?? '').includes('很久没'))
+check('无事不开口', wakeReason({ openBroken: 0, longing: 0.2 }).reason === null)
+check('proactivePrompt 含由头与声音规则', proactivePrompt('很久没好好说话了', '名字：大肥鱼').includes('很久没好好说话了'))
+const m3cfg = normalizeConfig({ stateDir })
+check('wake 默认关闭（先观察后打开）', m3cfg.wake.enabled === false)
+check('contact 默认配额', m3cfg.contact.dailyMax === 2 && m3cfg.contact.unansweredStop === 3)
+const wakeCfg = normalizeConfig({ stateDir, wake: { enabled: true } })
+check('wake 可显式打开', wakeCfg.wake.enabled === true)
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

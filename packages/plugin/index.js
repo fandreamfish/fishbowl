@@ -15,6 +15,7 @@ import { createBinding } from './lib/binding.js'
 import { createCollector } from './lib/collector.js'
 import { createConstraints } from './lib/constraints.js'
 import { normalizeConfig } from './lib/config.js'
+import { createWakeLoop } from './lib/life.js'
 
 export const inject = ['tools', 'agents']
 
@@ -31,6 +32,10 @@ export function apply(ctx, config = {}) {
   if (ctx.agents) {
     const off = createCollector(ctx, binding, cfg)
     if (off) disposers.push(off)
+
+    // M3.0：清醒节律与主动联系（默认关闭）
+    const offLife = createWakeLoop(ctx, binding, cfg)
+    if (offLife) disposers.push(offLife)
   }
 
   return () => {
