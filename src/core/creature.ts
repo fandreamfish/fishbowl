@@ -8,6 +8,7 @@ import {
   applyAbsence, applyAppraisal, applyContact, applyElapse,
   applyRepair, salienceOf, toBias,
 } from './engine.ts'
+import { memoryWindowDays } from './growth.ts'
 import { Store } from './store.ts'
 import { uid } from './util.ts'
 
@@ -104,23 +105,26 @@ export class Creature {
     this.store.appendEvent({ t: 'self', id: uid(), ts: ts ?? Date.now(), claim, evidence, confidence, status: 'active' })
   }
 
-  /** 注入用记忆摘要：名字 + 最近几条活跃语义 + 教训。 */
-  memorySummary(): { name: string | null; semantics: string[]; procedures: string[] } {
+  /** 注入用记忆摘要：名字 + 置信度最高的活跃语义/教训/自我认知。g 控制遗忘窗口。 */
+  memorySummary(g = 1): { name: string | null; semantics: string[]; procedures: string[]; self: string[] } {
     const defaultPrefix = 'fish-'
     const name = this.meta.name && !this.meta.name.startsWith(defaultPrefix) ? this.meta.name : null
+    const windowMs = memoryWindowDays(g) * 86_400_000
+    const now = Date.now()
+    const recent = (e: CreatureEvent) => now - e.ts < windowMs
     const events = this.store.readEvents()
     const semantics = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'semantic' }> => e.t === 'semantic' && e.status === 'active')
+      .filter((e): e is Extract<CreatureEvent, { t: 'semantic' }> => e.t === 'semantic' && e.status === 'active' && recent(e))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 2)
       .map(e => e.claim)
     const procedures = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'procedure' }> => e.t === 'procedure' && e.status === 'active')
+      .filter((e): e is Extract<CreatureEvent, { t: 'procedure' }> => e.t === 'procedure' && e.status === 'active' && recent(e))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 1)
       .map(e => `${e.trigger} → ${e.action}`)
     const self = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'self' }> => e.t === 'self' && e.status === 'active' && e.confidence >= 0.5)
+      .filter((e): e is Extract<CreatureEvent, { t: 'self' }> => e.t === 'self' && e.status === 'active' && e.confidence >= 0.5 && recent(e))
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 2)
       .map(e => e.claim)

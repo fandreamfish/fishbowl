@@ -12,6 +12,7 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/ext
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { VOICE_RULES } from '../lib/voice.js'
+import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {
@@ -79,10 +80,23 @@ check('0.1 级变化触发新指纹', stateKey(baseBias, { ...baseAff, valence: 
 check('旋钮 0.1 级变化触发新指纹', stateKey({ ...baseBias, verbosity: 0.2 }, baseAff) !== stateKey(baseBias, baseAff))
 check('愧疚出现触发新指纹', stateKey(baseBias, { ...baseAff, guilt: 0.6 }) !== stateKey(baseBias, baseAff))
 
+console.log('== M2.3：成长率分层 ==')
+check('layerRate：战术 4×', Math.abs(layerRate('tactic', 1) - 4) < 1e-9)
+check('layerRate：自我认知 0.1×', Math.abs(layerRate('self', 1) - 0.1) < 1e-9)
+check('layerInterval：g=1 战术 3 轮', Math.abs(layerInterval('tactic', 1) - 3) < 1e-9)
+check('layerInterval：g=1 自我认知 120 轮', Math.abs(layerInterval('self', 1) - 120) < 1e-9)
+check('minEvidence：自我 ≥2，关系 ≥3', minEvidence('self') === 2 && minEvidence('relation') === 3 && minEvidence('tactic') === 1)
+check('记忆窗口：g 高忘得快', memoryWindowDays(1) === 90 && memoryWindowDays(4) === 22.5)
+check('关系类事实识别', isRelationClaim('我们之间的信任在变好') && !isRelationClaim('他喜欢猫'))
+
 console.log('== M2：巩固与身份 ==')
-check('g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, sinceLast: 99, g: 1 }))
-check('g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, sinceLast: 99, g: 1 }))
-check('g=2：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, sinceLast: 99, g: 2 }))
+check('战术层 g=1：2 轮触发', shouldConsolidate({ episodesSince: 2, salienceSince: 0, sinceLast: 99, g: 1, layer: 'tactic' }))
+check('战术层 g=1：1 轮不触发', !shouldConsolidate({ episodesSince: 1, salienceSince: 0, sinceLast: 99, g: 1, layer: 'tactic' }))
+check('偏好层 g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, sinceLast: 99, g: 1, layer: 'preference' }))
+check('偏好层 g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, sinceLast: 99, g: 1, layer: 'preference' }))
+check('关系层 g=1：10 轮触发', shouldConsolidate({ episodesSince: 10, salienceSince: 0, sinceLast: 99, g: 1, layer: 'relation' }))
+check('关系层 g=1：9 轮不触发', !shouldConsolidate({ episodesSince: 9, salienceSince: 0, sinceLast: 99, g: 1, layer: 'relation' }))
+check('g=2 偏好层：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, sinceLast: 99, g: 2, layer: 'preference' }))
 check('高显著度单轮触发', shouldConsolidate({ episodesSince: 1, salienceSince: 0.7, sinceLast: 99, g: 1 }))
 check('冷却期：刚巩固过不触发', !shouldConsolidate({ episodesSince: 5, salienceSince: 1, sinceLast: 1, g: 1 }))
 const dc = dedupeConsolidation(
@@ -93,15 +107,19 @@ check('去重：已有事实不再落盘', dc.semantics.length === 0)
 const pc = parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1","2"],"confidence":0.8}],"procedures":[{"trigger":"他说不行","action":"先问清楚","evidence":["3"],"confidence":0.7}]}')
 check('巩固解析：语义与教训', pc.semantics.length === 1 && pc.procedures.length === 1 && pc.semantics[0].claim === '他喜欢猫')
 check('巩固解析：垃圾输入得空数组', parseConsolidation('垃圾').semantics.length === 0)
-check('巩固解析：语义上限 3', parseConsolidation('{"semantics":[{"claim":"a"},{"claim":"b"},{"claim":"c"},{"claim":"d"}]}').semantics.length === 3)
+check('巩固解析：语义上限 3', parseConsolidation('{"semantics":[{"claim":"a","evidence":["1","2"]},{"claim":"b","evidence":["1","2"]},{"claim":"c","evidence":["1","2"]},{"claim":"d","evidence":["1","2"]}]}').semantics.length === 3)
+check('巩固解析：偏好需 ≥2 证据', parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1"],"confidence":0.9}]}').semantics.length === 0)
+check('巩固解析：关系类需 ≥3 证据', parseConsolidation('{"semantics":[{"claim":"我们之间的信任在变好","evidence":["1","2"],"confidence":0.9}]}').semantics.length === 0)
+check('巩固解析：关系类 3 证据通过', parseConsolidation('{"semantics":[{"claim":"我们之间的信任在变好","evidence":["1","2","3"],"confidence":0.9}]}').semantics.length === 1)
 check('身份正则预筛', IDENTITY_RE.test('我给你起个名字叫大肥鱼') && !IDENTITY_RE.test('今天天气不错'))
 check('身份解析', parseIdentity('{"named":true,"name":"大肥鱼"}') === '大肥鱼')
 check('身份解析：未命名 → null', parseIdentity('{"named":false}') === null)
 
 console.log('== M2.2：自我认知（证据门槛） ==')
-check('自我巩固：12 轮触发', shouldSelfConsolidate({ episodesSince: 12, sinceLast: 99, g: 1 }))
-check('自我巩固：11 轮不触发', !shouldSelfConsolidate({ episodesSince: 11, sinceLast: 99, g: 1 }))
-check('自我巩固：冷却', !shouldSelfConsolidate({ episodesSince: 20, sinceLast: 2, g: 1 }))
+check('自我巩固：默认 120 轮触发', shouldSelfConsolidate({ episodesSince: 120, sinceLast: 99, g: 1 }))
+check('自我巩固：119 轮不触发', !shouldSelfConsolidate({ episodesSince: 119, sinceLast: 99, g: 1 }))
+check('自我巩固：冷却', !shouldSelfConsolidate({ episodesSince: 121, sinceLast: 50, g: 1 }))
+check('自我巩固：interval 覆盖（测试用）', shouldSelfConsolidate({ episodesSince: 12, sinceLast: 99, g: 1, interval: 12 }))
 const ps = parseSelf('{"self":[{"claim":"被否定时先问清楚","evidence":["2","5","8"],"confidence":0.9},{"claim":"容易生气","evidence":["3"],"confidence":0.8}]}')
 check('证据门槛：单证据的自我描述被拒', ps.length === 1 && ps[0].claim === '被否定时先问清楚')
 check('置信度按证据数换算', Math.abs(ps[0].confidence - 1) < 1e-9)
@@ -111,8 +129,8 @@ const named = createBinding(cfg).creatureFor('session-m2-named')
 named.recordIdentity('大肥鱼')
 check('起名：meta 更新 + 事件落盘', named.meta.name === '大肥鱼'
   && named.store.readEvents().some((e: any) => e.t === 'identity'))
-named.recordSemantic('他喜欢猫', ['1', '2'], 0.8, 0)
-named.recordProcedure('他说不行', '先问清楚', ['3'], 0.7, 0)
+named.recordSemantic('他喜欢猫', ['1', '2'], 0.8)
+named.recordProcedure('他说不行', '先问清楚', ['3'], 0.7)
 const ms = named.memorySummary()
 check('记忆摘要：名字 + 语义 + 教训', ms.name === '大肥鱼'
   && ms.semantics.includes('他喜欢猫') && ms.procedures.includes('他说不行 → 先问清楚'))
@@ -123,7 +141,7 @@ check('未起名个体不含名字行', !summaryText(baseBias, baseAff, { name: 
 check('记忆变化触发新指纹', stateKey(baseBias, baseAff, { name: '大肥鱼', semantics: ['x'], procedures: [] })
   !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [] }))
 
-named.recordSelf('被否定时先问清楚而不是辩解', ['2', '5'], 0.67, 0)
+named.recordSelf('被否定时先问清楚而不是辩解', ['2', '5'], 0.67)
 const ms2 = named.memorySummary()
 check('memorySummary 含自我认知', ms2.self.includes('被否定时先问清楚而不是辩解'))
 const selfSummary = summaryText(baseBias, baseAff, ms2)

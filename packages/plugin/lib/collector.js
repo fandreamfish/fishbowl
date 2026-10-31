@@ -48,7 +48,7 @@ export function createCollector(ctx, binding, cfg) {
       const events = creature.store.readEvents()
       const episodes = events.filter((e) => e.t === 'episode').slice(-8)
       if (episodes.length < 3) return
-      const existing = creature.memorySummary()
+      const existing = creature.memorySummary(cfg.growth)
       const known = [
         '你已经记住的：',
         ...existing.semantics.map((c) => `- 事实: ${c}`),
@@ -88,7 +88,7 @@ export function createCollector(ctx, binding, cfg) {
       const events = creature.store.readEvents()
       const episodes = events.filter((e) => e.t === 'episode').slice(-14)
       if (episodes.length < 4) return
-      const existing = creature.memorySummary()
+      const existing = creature.memorySummary(cfg.growth)
       const known = [
         '你已经认定的自我描述：',
         ...existing.self.map((c) => `- ${c}`),
@@ -120,7 +120,7 @@ export function createCollector(ctx, binding, cfg) {
       creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const memory = creature.memorySummary()
+      const memory = creature.memorySummary(cfg.growth)
 
       trace({
         ts, sessionId: session.id, creatureId: creature.meta.creatureId,
@@ -214,7 +214,7 @@ export function createCollector(ctx, binding, cfg) {
       const creature = binding.creatureFor(sid)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const memory = creature.memorySummary()
+      const memory = creature.memorySummary(cfg.growth)
       const text = summaryText(bias, affect, memory)
       Promise.resolve()
         .then(() => agent.inject(injectMessage(text)))

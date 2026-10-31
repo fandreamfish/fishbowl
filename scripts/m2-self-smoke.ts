@@ -85,7 +85,7 @@ async function main() {
       for (const p of parsed.procedures) creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
     }
 
-    if (shouldSelfConsolidate({ episodesSince: scnt.episodesSinceSelf, sinceLast: scnt.sinceLastSelf, g: 1 })) {
+    if (shouldSelfConsolidate({ episodesSince: scnt.episodesSinceSelf, sinceLast: scnt.sinceLastSelf, g: 1, interval: 12 })) {
       scnt = { episodesSinceSelf: 0, sinceLastSelf: 0 }
       console.log('  → 自我巩固')
       const events = creature.store.readEvents()

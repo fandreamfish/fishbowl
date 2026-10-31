@@ -3,12 +3,18 @@
  * 触发与解析是纯函数；LLM 调用在插件侧（lib/llm.js）。
  * 设计原则：巩固产物必须落盘（重算会得到不同的东西），情绪才是重算的。
  */
+import { DEFAULT_LAYER_RATES, isRelationClaim } from './growth.ts'
+import type { MemoryLayer } from './growth.ts'
 
-/** 触发规则：证据量达到阈值（g 越大越频繁），且有冷却期（刚巩固过不重复触发）。 */
-export function shouldConsolidate(opts: { episodesSince: number; salienceSince: number; sinceLast: number; g: number }): boolean {
+/**
+ * 触发规则：证据量达到阈值（g 越大越频繁），且有冷却期。
+ * 分层：战术层默认最快（4×），偏好/关系由解析侧的证据门槛把关。
+ */
+export function shouldConsolidate(opts: { episodesSince: number; salienceSince: number; sinceLast: number; g: number; layer?: MemoryLayer }): boolean {
   const g = Math.max(opts.g, 0.1)
   if (opts.sinceLast < 2) return false // 冷却：至少隔 2 轮
-  return opts.episodesSince >= 5 / g || opts.salienceSince >= 0.6 / g
+  const rate = DEFAULT_LAYER_RATES[opts.layer ?? 'tactic']
+  return opts.episodesSince >= 5 / (g * rate) || opts.salienceSince >= 0.6 / (g * rate)
 }
 
 export const CONSOLIDATION_SYSTEM_PROMPT = [
@@ -47,6 +53,8 @@ export function parseConsolidation(text: string): { semantics: ParsedSemantic[];
         evidence: clean(s.evidence).slice(0, 8),
         confidence: clamp01(Number(s.confidence) || 0.5),
       }))
+      // 分层证据门槛：偏好 ≥2 个独立证据；关系类 ≥3（单次事件不能定义关系）
+      .filter((s) => s.evidence.length >= (isRelationClaim(s.claim) ? 3 : 2))
 
     const procedures = (Array.isArray(json.procedures) ? json.procedures : [])
       .slice(0, 2)

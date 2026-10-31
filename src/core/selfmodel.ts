@@ -4,11 +4,15 @@
  * 单次事件不能定义"我"——少于 2 个独立证据的自我描述直接丢弃。
  * 这对应 DESIGN.md §8.1 护栏 3：任何自我认知级改变至少需 2 个独立事件。
  */
+import { DEFAULT_LAYER_RATES } from './growth.ts'
 
-/** 触发规则：比巩固稀有得多（默认每 12/g 轮），且有冷却。 */
+/**
+ * 触发规则：极慢（默认 12 ÷ (0.1×g) 轮，g=1 时 120 轮），且有冷却。
+ * interval 参数仅用于测试/冒烟缩短周期。
+ */
 export function shouldSelfConsolidate(opts: { episodesSince: number; sinceLast: number; g: number; interval?: number }): boolean {
   const g = Math.max(opts.g, 0.1)
-  const every = (opts.interval ?? 12) / g
+  const every = opts.interval ?? 12 / (DEFAULT_LAYER_RATES.self * g)
   if (opts.sinceLast < Math.max(3, every / 2)) return false
   return opts.episodesSince >= every
 }
