@@ -77,11 +77,22 @@ export function createWakeLoop(ctx, binding, cfg, host) {
   if (!cfg.wake?.enabled) return () => {}
 
   const scheduler = new Scheduler(cfg.wake, cfg.timezone)
-  const gate = new ContactGate(cfg.contact, cfg.timezone)
+  const gates = new Map() // creatureId -> ContactGate（配额按鱼算，且从账本恢复）
   let timer = null
   let stopped = false
 
   /** 记一笔"她主动开口了"，方便排查。 */
+  /** 每只鱼一把闸；历史从账本恢复（重启不重复轰炸）。 */
+  function gateFor(creature, now) {
+    const cid = creature.meta.creatureId
+    let g = gates.get(cid)
+    if (!g) {
+      g = new ContactGate(cfg.contact, cfg.timezone)
+      gates.set(cid, g)
+    }
+    g.hydrate(creature.outreachTimes(now - 7 * 86_400_000))
+    return g
+  }
   function traceWake(sessionId, creatureId, reason) {
     try {
       fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
@@ -121,6 +132,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         const broken = creature.openCommitments(cfg.growth).filter(c => c.broken).length
         const longing = creature.fold().affect.longing
         const { reason } = wakeReason({ openBroken: broken, longing })
+        const gate = gateFor(creature, now)
         const decision = gate.can(now, reason !== null)
         report.push({ creature: creature.meta.name, reason: reason ?? null, longing: Number(longing.toFixed(2)), broken, gate: decision, at: now })
         if (!decision.ok || reason === null) continue
@@ -130,10 +142,12 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         if (!agent) {
           // 会话没开着——进投递队列，下次会话打开时补投
           creature.store.appendOutbox({ id: randomUUID(), ts: now, text, channel: 'dsm-session', delivered: false })
+          creature.recordOutreach(reason, now)
           gate.consume(now)
           continue
         }
         gate.consume(now)
+        creature.recordOutreach(reason, now)
         try {
           await host.wake(agent, injectMessage(text))
           traceWake(sid, cid, reason)

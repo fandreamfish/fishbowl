@@ -119,6 +119,8 @@ export type CreatureEvent =
   | { t: 'activity'; id: string; ts: number; title: string; status: 'started' | 'ended' }
   // —— M6：记忆强化（同一件事被再次提到 → 重量上升，不是重复落盘） ——
   | { t: 'reinforce'; id: string; ts: number; ref: string }
+  // —— M20：主动联系记账（配额跨重启，重启不重复轰炸） ——
+  | { t: 'outreach'; id: string; ts: number; reason?: string }
   // —— M7：日记 / 小纸条 / 请求 ——
   | { t: 'diary'; id: string; ts: number; date: string; text: string }
   | { t: 'note'; id: string; ts: number; text: string }

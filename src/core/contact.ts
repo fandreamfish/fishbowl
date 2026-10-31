@@ -26,6 +26,11 @@ export class ContactGate {
     return parseHm(this.cfg.window[0]) <= m && m < parseHm(this.cfg.window[1])
   }
 
+  /** 从账本恢复历史（跨重启的配额）。 */
+  hydrate(times: number[]): void {
+    this.history = [...times].sort((a, b) => a - b)
+  }
+
   can(nowMs: number, hasReason: boolean): { ok: boolean; reason: string } {
     if (!this.inWindow(nowMs)) return { ok: false, reason: 'quiet_hours' }
     if (this.cfg.requireReason !== false && !hasReason) return { ok: false, reason: 'no_reason' }

@@ -524,6 +524,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
             if (!text) return send(res, { ok: false, error: '生成失败' }, 500)
             try {
               await host.wake(target, injectMessage(text))
+              creature.recordOutreach('manual', Date.now())
               fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: Date.now(), event: 'wake-manual', creature: creature.meta.name, text }) + '\n')
               return send(res, { ok: true, text })
             } catch (e) {

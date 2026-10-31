@@ -4,6 +4,7 @@ import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { ACTIVITY_RE, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
 import { CHANNELS, memoryForChannel } from '../../../src/core/channels.ts'
+import { ContactGate } from '../../../src/core/contact.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
@@ -545,5 +546,19 @@ check('联系：每日上限被钳制', r2.contact.dailyMax === 10)
 check('联系：时段保留', r2.contact.window[1] === '22:30')
 const merged = mergeUiConfig({}, { wake: { enabled: true }, contact: { dailyMax: 1 } })
 check('UI 配置能合并进运行时配置', merged.wake.enabled === true && merged.contact.dailyMax === 1)
+console.log('== M20：主动联系跨重启 ==')
+const gateT = new ContactGate({ window: ['00:00', '23:59'], dailyMax: 2, minGap: '3h', burst: { max: 1, per: '2h' } }, 'Asia/Shanghai')
+const t0 = new Date('2026-10-31T10:00:00+08:00').getTime()
+gateT.hydrate([t0 - 1000, t0 - 2000])
+check('hydrate 后配额生效（今天已两次）', gateT.can(t0, true).ok === false)
+const gateT2 = new ContactGate({ window: ['00:00', '23:59'], dailyMax: 5, minGap: '3h', burst: { max: 5, per: '2h' } }, 'Asia/Shanghai')
+gateT2.hydrate([t0 - 60_000])
+check('hydrate 后最小间隔生效', gateT2.can(t0, true).reason === 'min_gap')
+const ocFish = binding.birth('联系鱼')
+const vBefore = ocFish.fold().affect.valence
+ocFish.recordOutreach('test', Date.now())
+const vAfter = ocFish.fold().affect.valence
+check('outreach 事件可读', ocFish.outreachTimes().length === 1)
+check('outreach 不影响情绪重放', Math.abs(vBefore - vAfter) < 1e-9)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

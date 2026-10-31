@@ -122,6 +122,19 @@ export class Creature {
     this.store.appendEvent({ t: 'activity', id: uid(), ts: ts ?? Date.now(), title, status })
   }
 
+  /** 她主动找过你（配额跨重启用）。 */
+  recordOutreach(reason?: string, ts?: number): void {
+    this.store.appendEvent({ t: 'outreach', id: uid(), ts: ts ?? Date.now(), reason })
+  }
+
+  /** 最近的主动联系时间（滚动窗口用）。 */
+  outreachTimes(since = 0): number[] {
+    return this.store
+      .readEvents()
+      .filter((e): e is Extract<CreatureEvent, { t: 'outreach' }> => e.t === 'outreach' && e.ts >= since)
+      .map(e => e.ts)
+      .sort((a, b) => a - b)
+  }
   /** 封存（M4）：停止时间。 */
   recordFreeze(ts?: number): void {
     this.store.appendEvent({ t: 'freeze', id: uid(), ts: ts ?? Date.now() })
