@@ -39,23 +39,32 @@ export function apply(ctx, config = {}) {
   const disposers = []
   const binding = createBinding(cfg)
 
+  /** 子系统失败只记一笔，绝不拖垮激活（宿主启动的底线）。 */
+  function safe(name, fn) {
+    try {
+      const off = fn()
+      if (typeof off === 'function') disposers.push(off)
+    } catch (err) {
+      try {
+        fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
+          ts: Date.now(), warn: `${name} init failed: ${String(err && err.message || err)}`,
+        }) + '\n')
+      } catch { /* 记不下来也只能算 */ }
+    }
+  }
+
   if (ctx.tools && cfg.applyConstraints) {
-    const off = createConstraints(ctx, binding, cfg)
-    if (off) disposers.push(off)
+    safe('constraints', () => createConstraints(ctx, binding, cfg))
   }
 
   if (ctx.agents) {
-    const off = createCollector(ctx, binding, cfg)
-    if (off) disposers.push(off)
-
+    safe('collector', () => createCollector(ctx, binding, cfg))
     // M3.0：清醒节律与主动联系（默认关闭）
-    const offLife = createWakeLoop(ctx, binding, cfg)
-    if (offLife) disposers.push(offLife)
+    safe('wake', () => createWakeLoop(ctx, binding, cfg))
   }
 
   // M5：设置页后端（状态 / 配置）
-  const offUi = createUiRoute(ctx, cfg, binding)
-  if (offUi) disposers.push(offUi)
+  safe('ui-route', () => createUiRoute(ctx, cfg, binding))
 
   return () => {
     for (const d of disposers) {
