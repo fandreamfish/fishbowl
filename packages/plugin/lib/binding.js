@@ -137,8 +137,10 @@ export function createBinding(cfg) {
     }
   }
 
-  /** 生一只新鱼（可选住处）。 */
-  function birth(occ = null) {
+  /** 生一只新鱼：名字必填（可选住处）。 */
+  function birth(name, occ = null) {
+    const clean = String(name ?? '').trim()
+    if (!clean) throw new Error('新鱼必须有名字')
     const cid = randomUUID()
     const meta = {
       schemaVersion: 1,
@@ -167,10 +169,10 @@ export function createBinding(cfg) {
   }
 
   /**
-   * 这个会话归哪只鱼；没有就出生一只住进这个会话（首个使用者）。
+   * 这个会话归哪只鱼。没有就是没有——不再自动出生（鱼必须由人起名创建）。
    */
   function resolve(session) {
-    return occupantOf(session) ?? birth({ kind: 'session', id: session.sessionId, workspace: session.workspace ?? undefined })
+    return occupantOf(session)
   }
 
   /**
@@ -200,5 +202,5 @@ export function createBinding(cfg) {
   // 兼容：把旧的 bindings.json 迁移成个体自己的住处
   migrateLegacyBindings()
 
-  return { dir: cfg.stateDir, creatureFor: (sid) => occupantOf({ sessionId: sid }) ?? resolve({ sessionId: sid }), resolve, occupantOf, listCreatures, assign, release, birth, get, conflictFor, biasFor, manages, scopes }
+  return { dir: cfg.stateDir, creatureFor: (sid) => occupantOf({ sessionId: sid }), resolve, occupantOf, listCreatures, assign, release, birth, get, conflictFor, biasFor, manages, scopes }
 }

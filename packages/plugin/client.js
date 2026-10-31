@@ -74,6 +74,9 @@ function makeFactory() {
       const [pick, setPick] = useState(null)
       const [pickWs, setPickWs] = useState(null)
       const [moveErr, setMoveErr] = useState('')
+      const [newOpen, setNewOpen] = useState(false)
+      const [newName, setNewName] = useState('')
+      const [newErr, setNewErr] = useState('')
 
       const load = useCallback(async () => {
         try {
@@ -109,8 +112,28 @@ function makeFactory() {
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),
           e('div', { style: { ...rowS, marginTop: 8 }, children: [
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
-            e('button', { style: btnP, onClick: () => act(async () => { await postJson(API + '/fish', {}) }, '接回了一条新的') , children: '带一条新的回家' }),
+            e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr('') }, children: '带一条新的回家' }, 'newbtn'),
           ] }, 'add'),
+          newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
+            e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 12, padding: 18, width: 380, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
+              e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 10 }, children: '给新鱼起个名字' }, 'h'),
+              e('input', { style: inp, value: newName, placeholder: '例：大肥鱼', autofocus: true, onInput: (ev) => setNewName(ev.target.value) }, 'i'),
+              e('div', { style: { ...lab, fontSize: 12, marginTop: 6 }, children: '名字是她的身份，之后只读（历史会被铭记）。' }, 'hint'),
+              newErr ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 6 }, children: newErr }, 'e') : null,
+              e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }, children: [
+                e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: () => setNewOpen(false), children: '取消' }, 'c'),
+                e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: async () => {
+                  const name = newName.trim()
+                  if (!name) { setNewErr('先起个名字'); return }
+                  try {
+                    await postJson(API + '/fish', { name })
+                    setNewOpen(false); setNewName(''); setNewErr('')
+                    await load()
+                  } catch (x) { setNewErr(String((x && x.message) || x)) }
+                }, children: '创建' }, 'ok'),
+              ] }, 'acts'),
+            ] }, 'modal'),
+          ] }) : null,
         ] }, 'root')
       }
 
@@ -306,10 +329,7 @@ function makeFactory() {
         body = e('div', { children: [
           born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
           e('div', { style: box, children: [
-            e('div', { style: rowS, children: [
-              e('span', { style: lab, children: '名字（新鱼出生时使用）' }, 'l'),
-              e('input', { style: { ...inp, width: 200, opacity: born ? 0.5 : 1 }, value: seedName, disabled: born, onInput: (ev) => setSeedName(ev.target.value) }, 'i'),
-            ] }, 'n'),
+
             e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
             e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, disabled: born, onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
           ] }, 'seed'),

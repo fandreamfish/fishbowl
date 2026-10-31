@@ -15,6 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { renameScopeAsync } from './rename.js'
 
 const ROUTE = '/fishbowl-ui'
 
@@ -214,6 +215,8 @@ export function createUiRoute(ctx, cfg, binding) {
           if (parts[0] === 'fish' && parts.length === 1 && req.method === 'GET') return send(res, stateView())
           if (parts[0] === 'fish' && parts.length === 1 && req.method === 'POST') {
             const body = JSON.parse(await readBody(req) || '{}')
+            const name = String(body.name ?? '').trim()
+            if (!name) return send(res, { ok: false, error: '先给它起个名字' }, 400)
             const occ = body.occupancy && body.occupancy.kind
               ? { kind: body.occupancy.kind, id: String(body.occupancy.id ?? ''), workspace: body.occupancy.workspace ? String(body.occupancy.workspace) : undefined }
               : null
@@ -221,7 +224,8 @@ export function createUiRoute(ctx, cfg, binding) {
               const conflict = binding.conflictFor('', occ)
               if (conflict) return send(res, { ok: false, error: `这个住处已经住着「${conflict.name}」了` }, 409)
             }
-            const c = binding.birth(occ)
+            const c = binding.birth(name, occ)
+            if (occ) renameScopeAsync(ctx, occ, name)
             return send(res, { ok: true, fish: fishView(c) })
           }
 
@@ -239,6 +243,7 @@ export function createUiRoute(ctx, cfg, binding) {
               if (!occ.id) return send(res, { ok: false, error: '住处的 id 不能为空' }, 400)
               try {
                 binding.assign(parts[1], occ)
+                renameScopeAsync(ctx, occ, binding.get(parts[1]).meta.name)
                 return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
               } catch (e) {
                 return send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)

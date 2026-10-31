@@ -17,6 +17,7 @@ import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
 import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
+import { scopeTitle } from '../lib/rename.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
@@ -132,7 +133,8 @@ check('证据门槛：单证据的自我描述被拒', ps.length === 1 && ps[0].
 check('置信度按证据数换算', Math.abs(ps[0].confidence - 1) < 1e-9)
 check('自我认知垃圾输入 → 空', parseSelf('垃圾').length === 0)
 
-const named = createBinding(cfg).creatureFor('session-m2-named')
+const bindingM2 = createBinding(cfg)
+const named = bindingM2.birth('大肥鱼', { kind: 'session', id: 'session-m2-named' })
 named.recordIdentity('大肥鱼')
 check('起名：meta 更新 + 事件落盘', named.meta.name === '大肥鱼'
   && named.store.readEvents().some((e: any) => e.t === 'identity'))
@@ -242,11 +244,13 @@ check('对照组 control=true 时约束关闭', normalizeConfig({ stateDir, cont
 
 console.log('== 会话 ↔ 个体绑定 ==')
 const binding = createBinding(cfg)
-const c1 = binding.creatureFor('session-a')
-const c2 = binding.creatureFor('session-a')
-const other = binding.creatureFor('session-b')
-check('同一会话绑定同一个体', c1.meta.creatureId === c2.meta.creatureId)
+const SID = 'session-a-' + Date.now()
+const c1 = binding.birth('测试鱼', { kind: 'session', id: SID })
+const c2 = binding.occupantOf({ sessionId: SID })
+const other = binding.birth('另一条', { kind: 'session', id: 'session-b' })
+check('同一会话绑定同一个体', c1.meta.creatureId === c2?.meta.creatureId)
 check('不同会话是不同个体', c1.meta.creatureId !== other.meta.creatureId)
+check('没有住户的会话没有鱼', binding.occupantOf({ sessionId: 'nobody-' + Date.now() }) === null)
 check('气质是随机的（不写死在代码里）', typeof c1.meta.temperament.reactivity === 'number'
   && c1.meta.temperament.reactivity >= 0.6 && c1.meta.temperament.reactivity <= 1.4)
 check('时区写入 meta（搬迁不变量）', c1.meta.timezone === cfg.timezone)
@@ -265,7 +269,7 @@ check('默认评价器 scripted（离线可用）', d.appraiser.kind === 'script
 check('默认状态目录在用户目录下（不进仓库）', d.stateDir.includes('.fishbowl'))
 
 console.log('== M6：记忆重量、折叠与回忆 ==')
-const m6 = binding.creatureFor('session-m6-memory-' + Date.now())
+const m6 = binding.birth('记忆鱼', { kind: 'session', id: 'session-m6-memory-' + Date.now() })
 const nowMs = Date.now()
 const dayMs = 86_400_000
 m6.recordSemantic('他喜欢猫', ['e1', 'e2'], 0.6, nowMs - 1 * dayMs)
@@ -303,8 +307,8 @@ check('不同工作区不冲突', findConflict({ kind: 'workspace', id: 'D:\\oth
 check('解析：会话级优先', resolveOccupant({ sessionId: 's1', workspace: W }, [{ creatureId: 'ws', occupancy: { kind: 'workspace', id: W } }, { creatureId: 'se', occupancy: { kind: 'session', id: 's1', workspace: W } }])?.creatureId === 'se')
 check('解析：没有住户 → null', resolveOccupant({ sessionId: 's2', workspace: 'D:\\z' }, [{ creatureId: 'ws', occupancy: { kind: 'workspace', id: W } }]) === null)
 
-const fishA = binding.birth({ kind: 'workspace', id: W })
-const fishB = binding.birth()
+const fishA = binding.birth('甲鱼', { kind: 'workspace', id: W })
+const fishB = binding.birth('乙鱼')
 let conflictMsg = ''
 try { binding.assign(fishB.meta.creatureId, { kind: 'session', id: 'session-x', workspace: W }) } catch (e) { conflictMsg = e.message }
 check('工作区被占 → 会话也进不去', conflictMsg.includes('已经住着'))
@@ -313,7 +317,8 @@ let relOk = false
 try { binding.assign(fishB.meta.creatureId, { kind: 'session', id: 'session-x-' + Date.now(), workspace: W }); relOk = true } catch { relOk = false }
 check('释放后可以搬进去', relOk)
 check('住处写进个体自己的 meta（不是会话表）', !!binding.get(fishB.meta.creatureId)?.meta.occupancy)
-check('新鱼默认未分配', binding.birth().meta.occupancy === null)
+check('新鱼默认未分配', binding.birth('丙鱼').meta.occupancy === null)
+check('新鱼必须有名字', (() => { try { binding.birth(''); return false } catch { return true } })())
 
 console.log('== M7：日记 / 小纸条 / 请求 ==')
 const nowJ = Date.now()
@@ -327,5 +332,9 @@ check('纸条解析：带引号也剥掉', parseNote('“别熬夜。”') === '
 check('请求解析：ask=false → null', parseRequest('{"ask":false}') === null)
 check('请求解析：ask=true', parseRequest('{"ask":true,"text":"能让我看看那个视频吗"}') === '能让我看看那个视频吗')
 
+console.log('== M9：入住改名 ==')
+check('入住会话 → 名字的房间', scopeTitle('小肥鱼', { kind: 'session', id: 's' }) === '小肥鱼的房间')
+check('入住工作区 → 名字 的屋子', scopeTitle('小肥鱼', { kind: 'workspace', id: 'w' }) === '小肥鱼 的屋子')
+check('没住处 → 空标题', scopeTitle('小肥鱼', null) === '')
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)
