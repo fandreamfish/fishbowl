@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { CHANNELS, memoryForChannel } from '../../../src/core/channels.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
@@ -183,6 +184,22 @@ check('wake 默认关闭（先观察后打开）', m3cfg.wake.enabled === false)
 check('contact 默认配额', m3cfg.contact.dailyMax === 2 && m3cfg.contact.unansweredStop === 3)
 const wakeCfg = normalizeConfig({ stateDir, wake: { enabled: true } })
 check('wake 可显式打开', wakeCfg.wake.enabled === true)
+
+console.log('== M3.1：通道与投递队列 ==')
+const fullMem = { name: '大肥鱼', semantics: ['他喜欢猫'], procedures: ['x'], self: ['y'], commitments: ['z'] }
+check('intimate 全给', memoryForChannel(fullMem, 'intimate').semantics.length === 1)
+check('social 只给名字', memoryForChannel(fullMem, 'social').semantics.length === 0 && memoryForChannel(fullMem, 'social').name === '大肥鱼')
+check('public 什么都不给', memoryForChannel(fullMem, 'public').name === null && memoryForChannel(fullMem, 'public').commitments.length === 0)
+check('通道表：qq-group 是 public', CHANNELS['qq-group'].register === 'public')
+check('通道表：dsm-session 是 intimate', CHANNELS['dsm-session'].register === 'intimate')
+
+const q = named.store
+q.appendOutbox({ id: 'o1', ts: Date.now(), text: 'hi', channel: 'dsm-session', delivered: false })
+check('投递队列：入队可读', q.readOutbox().some(o => o.id === 'o1' && !o.delivered))
+q.appendOutbox({ id: 'o1', ts: Date.now(), text: 'dup', channel: 'dsm-session', delivered: false })
+check('投递队列：id 幂等去重', q.readOutbox().filter(o => o.id === 'o1').length === 1)
+q.markOutboxDelivered('o1')
+check('投递队列：标记已投', q.readOutbox().some(o => o.id === 'o1' && o.delivered))
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

@@ -67,4 +67,47 @@ export class Store {
   dropCache(): void {
     fs.rmSync(this.cachePath, { force: true })
   }
+
+  // —— M3.1：投递队列（会话关着时，她想说的话攒在这里） ——
+
+  get outboxPath(): string { return path.join(this.dir, 'outbox.json') }
+
+  readOutbox(): OutboxItem[] {
+    try {
+      const raw = JSON.parse(fs.readFileSync(this.outboxPath, 'utf8'))
+      return Array.isArray(raw) ? raw : []
+    } catch {
+      return []
+    }
+  }
+
+  writeOutbox(items: OutboxItem[]): void {
+    fs.writeFileSync(this.outboxPath, JSON.stringify(items, null, 2))
+  }
+
+  appendOutbox(item: OutboxItem): void {
+    const items = this.readOutbox()
+    if (!items.some(i => i.id === item.id)) {
+      items.push(item)
+      this.writeOutbox(items)
+    }
+  }
+
+  markOutboxDelivered(id: string): void {
+    const items = this.readOutbox()
+    const it = items.find(i => i.id === id)
+    if (it) {
+      it.delivered = true
+      this.writeOutbox(items)
+    }
+  }
+}
+
+/** 投递队列条目：幂等（id 去重），at-least-once。 */
+export interface OutboxItem {
+  id: string
+  ts: number
+  text: string
+  channel: string
+  delivered: boolean
 }

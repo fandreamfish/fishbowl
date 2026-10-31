@@ -5,6 +5,7 @@
  */
 import { ContactGate } from '../../../src/core/contact.ts'
 import { Scheduler } from '../../../src/core/scheduler.ts'
+import { randomUUID } from 'node:crypto'
 import { injectMessage } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
@@ -84,10 +85,15 @@ export function createWakeLoop(ctx, binding, cfg) {
         if (!decision.ok || reason === null) continue
 
         const agent = findAgent(ctx, sid)
-        if (!agent) continue // 会话没开着就跳过；排队投递留给 M3.1
-        gate.consume(now)
         const text = await generateProactive(creature, reason)
         if (!text) continue
+        if (!agent) {
+          // M3.1：会话没开着——进投递队列，下次会话打开时补投
+          creature.store.appendOutbox({ id: randomUUID(), ts: now, text, channel: 'dsm-session', delivered: false })
+          gate.consume(now)
+          continue
+        }
+        gate.consume(now)
         try {
           await agent.followup(injectMessage(text))
         } catch { /* 会话状态变化时可能失败，忽略 */ }

@@ -251,8 +251,22 @@ export function createCollector(ctx, binding, cfg) {
         agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) })
       } catch { /* 声音注册失败不影响功能 */ }
 
-      if (cfg.control || !cfg.injectBias) return
       const creature = binding.creatureFor(sid)
+
+      // M3.1：会话重开 → 先补投攒着的话（幂等，失败下轮再试）
+      Promise.resolve()
+        .then(async () => {
+          const pending = creature.store.readOutbox().filter(o => !o.delivered)
+          for (const item of pending) {
+            try {
+              await agent.followup(injectMessage(item.text))
+              creature.store.markOutboxDelivered(item.id)
+            } catch { /* 单条失败不影响其余 */ }
+          }
+        })
+        .catch(() => { /* 绝不外抛 */ })
+
+      if (cfg.control || !cfg.injectBias) return
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const memory = creature.memorySummary(cfg.growth)
