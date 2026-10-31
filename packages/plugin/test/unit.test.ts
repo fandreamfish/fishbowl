@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { ACTIVITY_RE, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
 import { CHANNELS, memoryForChannel } from '../../../src/core/channels.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
@@ -200,6 +201,19 @@ q.appendOutbox({ id: 'o1', ts: Date.now(), text: 'dup', channel: 'dsm-session', 
 check('投递队列：id 幂等去重', q.readOutbox().filter(o => o.id === 'o1').length === 1)
 q.markOutboxDelivered('o1')
 check('投递队列：标记已投', q.readOutbox().some(o => o.id === 'o1' && o.delivered))
+
+console.log('== M3.2：共享活动与积压合并 ==')
+check('活动预筛', ACTIVITY_RE.test('我们一起看《三体》吧') && !ACTIVITY_RE.test('今天天气不错'))
+check('活动解析', parseActivity('{"changed":true,"title":"看《三体》","status":"started"}')?.title === '看《三体》')
+check('活动解析：无变化 → null', parseActivity('{"changed":false}') === null)
+named.recordActivity('看《三体》', 'started')
+check('当前活动可见', named.currentActivity() === '看《三体》')
+named.recordActivity('看《三体》', 'ended')
+check('活动结束后清空', named.currentActivity() === null)
+check('注入含活动行', summaryText(baseBias, baseAff, { ...ms3, activity: '看《三体》' }).includes('正在一起做的事'))
+const mp = mergePendingText([{ id: 'a', text: 'x1' }, { id: 'b', text: 'x2' }, { id: 'c', text: 'x3' }, { id: 'd', text: 'x4' }])
+check('积压 >3 合并成一条', mp.text !== null && mp.ids.length === 4 && (mp.text ?? '').includes('攒了'))
+check('积压 ≤3 不合并', mergePendingText([{ id: 'a', text: 'x1' }]).text === null)
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

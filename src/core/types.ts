@@ -109,6 +109,8 @@ export type CreatureEvent =
   // —— M2.4：承诺（说出口的"我会做"；broken 不消失——没翻篇） ——
   | { t: 'commitment'; id: string; ts: number; text: string }
   | { t: 'commitment-resolved'; id: string; ts: number; ref: string; status: 'fulfilled' | 'broken' }
+  // —— M3.2：共享活动（一起看/读/学） ——
+  | { t: 'activity'; id: string; ts: number; title: string; status: 'started' | 'ended' }
 
 /** 四条不变量随目录走：模型、时区、schema、气质。 */
 export interface CreatureMeta {

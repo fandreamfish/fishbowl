@@ -110,6 +110,25 @@ export class Creature {
     this.store.appendEvent({ t: 'commitment', id: uid(), ts: ts ?? Date.now(), text })
   }
 
+  /** 共享活动（M3.2）。 */
+  recordActivity(title: string, status: 'started' | 'ended', ts?: number): void {
+    this.store.appendEvent({ t: 'activity', id: uid(), ts: ts ?? Date.now(), title, status })
+  }
+
+  /** 当前正在一起做的事（记忆窗口内最后一次 started 且未 ended）。 */
+  currentActivity(g = 1): string | null {
+    const events = this.store.readEvents()
+    const windowMs = memoryWindowDays(g) * 86_400_000
+    const now = Date.now()
+    let current: string | null = null
+    for (const e of events) {
+      if (e.t !== 'activity' || now - e.ts >= windowMs) continue
+      if (e.status === 'started') current = e.title
+      else if (current === e.title) current = null
+    }
+    return current
+  }
+
   /** 承诺结算：fulfilled 或 broken。broken 的承诺不消失——没翻篇。 */
   resolveCommitment(ref: string, status: 'fulfilled' | 'broken', ts?: number): void {
     this.store.appendEvent({ t: 'commitment-resolved', id: uid(), ts: ts ?? Date.now(), ref, status })
@@ -156,6 +175,7 @@ export class Creature {
       .slice(0, 2)
       .map(e => e.claim)
     const commitments = this.openCommitments(g).slice(-2).map(c => (c.broken ? '⚠ ' : '') + c.text)
-    return { name, semantics, procedures, self, commitments }
+    const activity = this.currentActivity(g)
+    return { name, semantics, procedures, self, commitments, activity }
   }
 }

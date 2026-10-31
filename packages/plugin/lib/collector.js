@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { ACTIVITY_RE, ACTIVITY_SYSTEM_PROMPT, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
 import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { salienceOf, toBias } from '../../../src/core/engine.ts'
 import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
@@ -136,6 +137,20 @@ export function createCollector(ctx, binding, cfg) {
     }
   }
 
+  /** 共享活动（M3.2）：一起看/读/学 → activity 事件。 */
+  async function detectActivity(sessionId, creature, transcript) {
+    try {
+      const raw = await callLLM(cfg, ACTIVITY_SYSTEM_PROMPT, transcript.slice(-800), { maxTokens: 60 })
+      const parsed = parseActivity(raw)
+      if (parsed) {
+        creature.recordActivity(parsed.title, parsed.status)
+        trace({ ts: Date.now(), sessionId, event: 'activity', ...parsed })
+      }
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `activity failed: ${String(err && err.message || err)}` })
+    }
+  }
+
   async function finishTurn(session) {
     try {
       const buf = buffers.get(session.id)
@@ -183,6 +198,10 @@ export function createCollector(ctx, binding, cfg) {
         }
         if (a.normViolation >= 0.2) {
           void checkBroken(session.id, creature, transcript)
+        }
+        // —— M3.2：共享活动 ——
+        if (ACTIVITY_RE.test(transcript)) {
+          void detectActivity(session.id, creature, transcript)
         }
         // —— M2.2：自我认知（稀有触发 + 冷却） ——
         const scnt = selfCounters.get(session.id) ?? { episodesSinceSelf: 0, sinceLastSelf: 99 }
@@ -253,10 +272,18 @@ export function createCollector(ctx, binding, cfg) {
 
       const creature = binding.creatureFor(sid)
 
-      // M3.1：会话重开 → 先补投攒着的话（幂等，失败下轮再试）
+      // M3.1：会话重开 → 先补投攒着的话（幂等，失败下轮再试；>3 条合并成一条不刷屏）
       Promise.resolve()
         .then(async () => {
           const pending = creature.store.readOutbox().filter(o => !o.delivered)
+          const merged = mergePendingText(pending)
+          if (merged.text !== null) {
+            try {
+              await agent.followup(injectMessage(merged.text))
+              for (const id of merged.ids) creature.store.markOutboxDelivered(id)
+            } catch { /* 下轮再试 */ }
+            return
+          }
           for (const item of pending) {
             try {
               await agent.followup(injectMessage(item.text))
