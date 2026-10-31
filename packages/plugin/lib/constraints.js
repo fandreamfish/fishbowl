@@ -38,7 +38,7 @@ export function createConstraints(ctx, binding, cfg) {
         if (cfg.control || cfg.refuseTools.length === 0) return null
         const sid = sessionIdOf(exec)
         if (!sid || !binding.manages(sid)) return null
-        return refuseReason(binding.biasFor(sid), toolNameOf(exec), cfg)
+        return refuseReason(binding.biasFor(sid, 5000, workspaceOfExec(exec)), toolNameOf(exec), cfg)
       } catch {
         return null
       }
@@ -54,7 +54,7 @@ export function createConstraints(ctx, binding, cfg) {
       if (!sid || !binding.manages(sid)) return next()
       const name = toolNameOf(exec)
       if (!name) return next()
-      const dec = verifyDecision(binding.biasFor(sid), name, cfg)
+      const dec = verifyDecision(binding.biasFor(sid, 5000, workspaceOfExec(exec)), name, cfg)
       if (!dec) return next()
       return dec
     } catch {
@@ -71,6 +71,13 @@ export function createConstraints(ctx, binding, cfg) {
 function sessionIdOf(exec) {
   const a = exec?.agent
   return a?.session?.id || a?.id || exec?.sessionId || null
+}
+
+/** 会话所在工作区（住工作区的鱼也能被找到）。 */
+function workspaceOfExec(exec) {
+  const s = exec?.agent?.session ?? exec?.session
+  const cwd = s?.header?.cwd ?? s?.cwd
+  return typeof cwd === 'string' && cwd.length > 0 ? cwd : undefined
 }
 
 function toolNameOf(exec) {

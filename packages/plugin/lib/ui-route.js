@@ -1,6 +1,16 @@
 /**
- * 设置页的后端：把个体状态暴露给同源的 client UI。
- * 路由：/fishbowl-ui/state（GET）· /fishbowl-ui/config（GET/POST）
+ * 设置页后端（M7）：鱼是第一公民。
+ *
+ * 路由（同源）：
+ *   GET  /fish                     列表（含住处、状态、记忆、请求数）
+ *   POST /fish                     生一条新鱼（可带住处）
+ *   POST /fish/:id/occupy          搬进工作区/会话（互斥，冲突 409）
+ *   POST /fish/:id/release         搬出去（不归任何会话）
+ *   GET  /fish/:id/diary           日记
+ *   GET  /fish/:id/notes           小纸条
+ *   GET  /fish/:id/requests        请求（含历史与答复）
+ *   POST /fish/:id/requests/:rid/answer  补答 {answer:'yes'|'no'}
+ *   GET/POST /config               成长率与来历（来历出生后只读）
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -18,6 +28,11 @@ export function summarizeEvent(e) {
     case 'commitment-resolved': return { text: e.ref.slice(0, 8), meta: e.status === 'broken' ? '违诺' : '已兑现' }
     case 'activity': return { text: e.title, meta: e.status === 'started' ? '开始' : '结束' }
     case 'identity': return { text: e.name, meta: '名字' }
+    case 'diary': return { text: e.text.slice(0, 60), meta: '日记' }
+    case 'note': return { text: e.text, meta: '小纸条' }
+    case 'request': return { text: e.text, meta: '请求' }
+    case 'request-answered': return { text: e.ref.slice(0, 8), meta: e.answer === 'yes' ? '同意' : '不同意' }
+    case 'reinforce': return { text: e.ref.slice(0, 8), meta: '又提到' }
     case 'freeze': return { text: '封存', meta: '' }
     case 'unfreeze': return { text: '解封', meta: '' }
     default: return { text: e.t, meta: '' }
@@ -43,49 +58,40 @@ export function seedChanged(prev, next) {
 }
 
 export function createUiRoute(ctx, cfg, binding) {
-  // Cordis：未在 inject 里声明的服务不能直接访问 ctx.webServer；
-  // 用 ctx.get 取可选服务（dsh-pet 同款），没有 webServer 的 profile 也能正常激活。
   const webServer = typeof ctx.get === 'function' ? ctx.get('webServer') : null
   if (!webServer || typeof webServer.register !== 'function') return () => {}
   const stateDir = cfg.stateDir
 
-  function buildState() {
-    const creatures = []
-    for (const [sessionId, creatureId] of Object.entries(binding.bindings)) {
-      try {
-        const c = binding.creatureFor(sessionId)
-        const affect = c.fold().affect
-        const memory = c.memorySummary(cfg.growth)
-        const events = c.store.readEvents().slice(-40)
-        creatures.push({
-          sessionId,
-          creatureId,
-          name: c.meta.name,
-          frozen: c.isFrozen(),
-          affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
-          memory,
-          temperament: c.meta.temperament,
-          outbox: c.store.readOutbox().filter(o => !o.delivered).length,
-          episodes: c.store.readEvents().filter(e => e.t === 'episode').length,
-          events: events.map(e => ({ t: e.t, ts: e.ts, ...summarizeEvent(e) })),
-        })
-      } catch { /* 单个个体坏了不影响整体 */ }
-    }
+  function fishView(c) {
+    const affect = c.fold().affect
+    const events = c.store.readEvents()
+    const memory = c.memorySummary(cfg.growth)
     return {
-      born: creatures.some((c) => c.episodes > 0),
-      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
-      creatures,
+      id: c.meta.creatureId,
+      name: c.meta.name,
+      bornAt: c.meta.bornAt,
+      frozen: c.isFrozen(),
+      occupancy: c.meta.occupancy ?? null,
+      episodes: events.filter(e => e.t === 'episode').length,
+      affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
+      memory,
+      pendingRequests: c.pendingRequests(),
+      requests: c.requests().slice(-10).reverse(),
+      notes: c.notes(5),
+      diary: c.diaries(3),
+      outbox: c.store.readOutbox().filter(o => !o.delivered).length,
+      events: events.slice(-40).map(e => ({ t: e.t, ts: e.ts, ...summarizeEvent(e) })),
     }
   }
 
-  /** 来历只读判定：已经有任何个体出生（有过对话轮次）→ 不许改 seed。 */
-  function isBorn() {
-    for (const sid of Object.keys(binding.bindings)) {
-      try {
-        if (binding.creatureFor(sid).store.readEvents().some(e => e.t === 'episode')) return true
-      } catch { /* 单个个体坏了不影响判定 */ }
+  function stateView() {
+    const fish = binding.listCreatures().map(fishView)
+    return {
+      born: fish.some(f => f.episodes > 0),
+      scopes: binding.scopes,
+      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
+      fish,
     }
-    return false
   }
 
   function readBody(req) {
@@ -97,42 +103,93 @@ export function createUiRoute(ctx, cfg, binding) {
     })
   }
 
+  const send = (res, obj, code = 200) => {
+    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify(obj))
+  }
+
   let dispose
   try {
     dispose = webServer.register({
       kind: 'prefix',
       path: ROUTE,
       handler: async (req, res) => {
-      try {
-        const url = new URL(req.url ?? '/', 'http://localhost')
-        const sub = url.pathname.slice(ROUTE.length)
-        const send = (obj) => {
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' })
-          res.end(JSON.stringify(obj))
-        }
-        if (sub === '/state' && req.method === 'GET') return send(buildState())
-        if (sub === '/config' && req.method === 'GET') return send({ growth: cfg.growth, seed: cfg.seed ?? null })
-        if (sub === '/config' && req.method === 'POST') {
-          const body = JSON.parse(await readBody(req) || '{}')
-          const ui = mergeUiConfig({}, body)
-          // 公理 A1：她出生后来历只读——历史会被铭记，只能说服，不能修改
-          if (isBorn() && seedChanged(cfg.seed, ui.seed)) {
-            res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' })
-            res.end(JSON.stringify({ ok: false, error: '她已经出生了，来历不能再改（历史会被铭记，只能说服不能修改）' }))
-            return
+        try {
+          const url = new URL(req.url ?? '/', 'http://localhost')
+          const sub = url.pathname.slice(ROUTE.length)
+          const parts = sub.split('/').filter(Boolean)
+
+          // —— 鱼列表 / 新生 ——
+          if (parts[0] === 'fish' && parts.length === 1 && req.method === 'GET') return send(res, stateView())
+          if (parts[0] === 'fish' && parts.length === 1 && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req) || '{}')
+            const occ = body.occupancy && body.occupancy.kind
+              ? { kind: body.occupancy.kind, id: String(body.occupancy.id ?? ''), workspace: body.occupancy.workspace ? String(body.occupancy.workspace) : undefined }
+              : null
+            if (occ) {
+              const conflict = binding.conflictFor('', occ)
+              if (conflict) return send(res, { ok: false, error: `这个住处已经住着「${conflict.name}」了` }, 409)
+            }
+            const c = binding.birth(occ)
+            return send(res, { ok: true, fish: fishView(c) })
           }
-          fs.writeFileSync(uiConfigPath(stateDir), JSON.stringify({ growth: ui.growth, seed: ui.seed ?? null }, null, 2))
-          // 运行中立即生效（下次会话时 seed 会进入声音段）
-          if (typeof ui.growth === 'number') cfg.growth = ui.growth
-          if (ui.seed && !isBorn()) cfg.seed = ui.seed
-          return send({ ok: true, growth: cfg.growth, seed: cfg.seed ?? null })
+
+          // —— 单条鱼 ——
+          if (parts[0] === 'fish' && parts.length >= 3) {
+            const c = binding.get(parts[1])
+            if (!c) return send(res, { ok: false, error: '找不到这条鱼' }, 404)
+            const action = parts[2]
+            if (action === 'occupy' && req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              if (body.kind !== 'workspace' && body.kind !== 'session') return send(res, { ok: false, error: '住处类型不对' }, 400)
+              const occ = body.kind === 'workspace'
+                ? { kind: 'workspace', id: String(body.id ?? '') }
+                : { kind: 'session', id: String(body.id ?? ''), workspace: body.workspace ? String(body.workspace) : undefined }
+              if (!occ.id) return send(res, { ok: false, error: '住处的 id 不能为空' }, 400)
+              try {
+                binding.assign(parts[1], occ)
+                return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
+              } catch (e) {
+                return send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)
+              }
+            }
+            if (action === 'release' && req.method === 'POST') {
+              binding.release(parts[1])
+              return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
+            }
+            if (action === 'diary' && req.method === 'GET') return send(res, { ok: true, diary: c.diaries(30) })
+            if (action === 'notes' && req.method === 'GET') return send(res, { ok: true, notes: c.notes(30) })
+            if (action === 'requests' && req.method === 'GET') return send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
+            if (action === 'requests' && parts.length >= 5 && parts[4] === 'answer' && req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              if (body.answer !== 'yes' && body.answer !== 'no') return send(res, { ok: false, error: 'answer 只能是 yes 或 no' }, 400)
+              c.answerRequest(parts[3], body.answer)
+              return send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
+            }
+          }
+
+          // —— 兼容旧路径 ——
+          if (sub === '/state' && req.method === 'GET') return send(res, stateView())
+          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null })
+          if (sub === '/config' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req) || '{}')
+            const ui = mergeUiConfig({}, body)
+            // 公理 A1：她出生后来历只读——历史会被铭记，只能说服，不能修改
+            if (stateView().born && seedChanged(cfg.seed, ui.seed)) {
+              return send(res, { ok: false, error: '她已经出生了，来历不能再改（历史会被铭记，只能说服不能修改）' }, 409)
+            }
+            fs.writeFileSync(uiConfigPath(stateDir), JSON.stringify({ growth: ui.growth, seed: ui.seed ?? null }, null, 2))
+            if (typeof ui.growth === 'number') cfg.growth = ui.growth
+            if (ui.seed && !stateView().born) cfg.seed = ui.seed
+            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null })
+          }
+
+          res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+          res.end('not found')
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
+          res.end(String(e?.message ?? e))
         }
-        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end('not found')
-      } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
-        res.end(String(e?.message ?? e))
-      }
       },
     })
   } catch {

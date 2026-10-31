@@ -113,6 +113,11 @@ export type CreatureEvent =
   | { t: 'activity'; id: string; ts: number; title: string; status: 'started' | 'ended' }
   // —— M6：记忆强化（同一件事被再次提到 → 重量上升，不是重复落盘） ——
   | { t: 'reinforce'; id: string; ts: number; ref: string }
+  // —— M7：日记 / 小纸条 / 请求 ——
+  | { t: 'diary'; id: string; ts: number; date: string; text: string }
+  | { t: 'note'; id: string; ts: number; text: string }
+  | { t: 'request'; id: string; ts: number; text: string }
+  | { t: 'request-answered'; id: string; ts: number; ref: string; answer: 'yes' | 'no' }
   // —— M4：封存（停止时间：不经历、不缺席、不想念） ——
   | { t: 'freeze'; id: string; ts: number }
   | { t: 'unfreeze'; id: string; ts: number }
@@ -126,4 +131,6 @@ export interface CreatureMeta {
   timezone: string
   model: { id: string; pinned: true }
   temperament: Temperament
+  /** M7：住处（工作区或会话）；空 = 未分配，任何会话都不归她。 */
+  occupancy?: { kind: 'workspace' | 'session'; id: string; workspace?: string } | null
 }

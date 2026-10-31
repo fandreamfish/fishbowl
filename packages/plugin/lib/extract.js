@@ -52,3 +52,9 @@ export function toolNameOf(event) {
 export function isFishbowlInjection(event) {
   return event?.type === 'user/message' && event?.data?.source?.kind === 'fishbowl'
 }
+
+/** 会话所在的工作区（绝对路径）；取不到返回 undefined。 */
+export function workspaceOf(session) {
+  const cwd = session?.header?.cwd ?? session?.cwd ?? session?.meta?.cwd
+  return typeof cwd === 'string' && cwd.length > 0 ? cwd : undefined
+}

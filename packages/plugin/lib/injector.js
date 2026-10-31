@@ -33,6 +33,10 @@ export function summaryText(bias, affect, memory) {
   if (mem.commitments?.length) parts.push(`未完成的承诺: ${mem.commitments.join('；')}`)
   if (mem.activity) parts.push(`正在一起做的事: ${mem.activity}`)
   if (mem.folded > 0) parts.push(`有些事记不清了（${mem.folded} 件；想得起来再提）`)
+  if (mem.requests?.pending?.length) parts.push(`还在等回音: ${mem.requests.pending.join('；')}`)
+  if (mem.requests?.answered?.length) {
+    parts.push(`他答过的: ${mem.requests.answered.map(r => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
+  }
   parts.push(
     '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
       + '被问到你是什么样的人时：上面有"自我认知"就只按那些说，没有就照实说"我还没有足够的经历确定自己是什么样的人"，不要从情绪数字里编。',
@@ -65,6 +69,6 @@ export function stateKey(bias, affect, memory) {
     .map(v => Math.round(v * 10)).join(',')
   const affectPart = [Math.round(affect.valence * 10), Math.round(affect.arousal * 10)].join(',')
   const guiltPart = affect.guilt > 0.05 ? 'g' : ''
-  const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}:${memory?.self?.length ?? 0}:${memory?.commitments?.length ?? 0}:${memory?.activity ?? ''}:${memory?.folded ?? 0}`
+  const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}:${memory?.self?.length ?? 0}:${memory?.commitments?.length ?? 0}:${memory?.activity ?? ''}:${memory?.folded ?? 0}:${memory?.requests?.pending?.length ?? 0}`
   return `${knobs}|${affectPart}|${guiltPart}|${memPart}`
 }

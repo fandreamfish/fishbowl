@@ -44,6 +44,11 @@ export class Store {
     fs.writeFileSync(this.metaPath, JSON.stringify(meta, null, 2) + '\n')
   }
 
+  /** 更新任意 meta 字段（住处 / 冻结标记等）。 */
+  writeMeta(meta: CreatureMeta): void {
+    fs.writeFileSync(this.metaPath, JSON.stringify(meta, null, 2) + '\n')
+  }
+
   appendEvent(ev: CreatureEvent): void {
     fs.appendFileSync(this.logPath, JSON.stringify(ev) + '\n')
   }

@@ -1,6 +1,11 @@
 /**
- * 会话 ↔ 个体绑定。
- * 新会话第一次出现时创建一个个体：气质随机（不可指定），状态全在独立目录。
+ * 住处解析（M7）：会话 → 鱼。
+ *
+ * 与旧版（bindings.json 会话→个体写死）的区别：
+ *   - 鱼是第一公民，住处是**鱼自己的属性**（meta.occupancy）
+ *   - 解析优先级：会话级 > 工作区级；都没有 = 没有鱼
+ *   - 一个工作区/会话只能住一只鱼（互斥在 assign 时检查）
+ *   - 自动出生：没鱼住的会话第一次使用时，生一只并住进这个会话（可随时搬走）
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -8,39 +13,116 @@ import { randomUUID } from 'node:crypto'
 import { Creature } from '../../../src/core/creature.ts'
 import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
 import { mulberry32 } from '../../../src/core/util.ts'
+import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createBinding(cfg) {
   fs.mkdirSync(cfg.stateDir, { recursive: true })
-  const bindingsPath = path.join(cfg.stateDir, 'bindings.json')
-
-  /** @type {Record<string,string>} */
-  let bindings = {}
-  try {
-    bindings = JSON.parse(fs.readFileSync(bindingsPath, 'utf8'))
-  } catch {
-    /* 首次运行 */
-  }
-
-  const cache = new Map()
+  const scopesPath = path.join(cfg.stateDir, 'scopes.json')
+  const cache = new Map() // creatureId -> Creature
   const biasCache = new Map() // creatureId -> { ts, bias }
+  /** 见过的住处（工作区路径 / 会话），供设置页选择。 */
+  let scopes = { workspaces: [], sessions: [{ id: '', workspace: '' }] }
+  try {
+    const raw = JSON.parse(fs.readFileSync(scopesPath, 'utf8'))
+    scopes = { workspaces: raw.workspaces ?? [], sessions: raw.sessions ?? [] }
+  } catch { /* 首次运行 */ }
+  // 清理占位
+  scopes.sessions = scopes.sessions.filter(s => s && s.id)
+  scopes.workspaces = [...new Set(scopes.workspaces.filter(Boolean))]
+  let scopesDirty = false
 
-  /**
-   * 带 TTL 的 bias。工具约束在**每次工具调用**时都会读它，
-   * 绝不能每次都同步 fold 整个日志（宿主主线程会被卡住）。
-   */
-  function biasFor(sessionId, maxAgeMs = 5000) {
-    const c = creatureFor(sessionId)
-    const hit = biasCache.get(c.meta.creatureId)
-    const now = Date.now()
-    if (hit && now - hit.ts < maxAgeMs) return hit.bias
-    const bias = c.bias()
-    biasCache.set(c.meta.creatureId, { ts: now, bias })
-    return bias
+  function saveScopes() {
+    try {
+      fs.writeFileSync(scopesPath, JSON.stringify(scopes, null, 2))
+      scopesDirty = false
+    } catch { /* 写失败不影响主流程 */ }
   }
 
-  function save() {
-    fs.writeFileSync(bindingsPath, JSON.stringify(bindings, null, 2))
+  /** 记下这次见到的住处。 */
+  function noteScope(sessionId, workspace) {
+    if (workspace && !scopes.workspaces.includes(workspace)) { scopes.workspaces.push(workspace); scopesDirty = true }
+    const hit = scopes.sessions.find(s => s.id === sessionId)
+    if (!hit) { scopes.sessions.push({ id: sessionId, workspace: workspace ?? '' }); scopesDirty = true }
+    else if (workspace && hit.workspace !== workspace) { hit.workspace = workspace; scopesDirty = true }
+    if (scopesDirty) saveScopes()
+  }
+
+  /** 旧的 bindings.json（会话→个体）迁移：把住处写进各自的 meta，然后退役旧文件。 */
+  function migrateLegacyBindings() {
+    const legacyPath = path.join(cfg.stateDir, 'bindings.json')
+    if (!fs.existsSync(legacyPath)) return
+    try {
+      const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf8'))
+      for (const [sessionId, cid] of Object.entries(legacy)) {
+        const c = get(cid)
+        if (c && !c.meta.occupancy) c.setOccupancy({ kind: 'session', id: sessionId })
+      }
+      fs.renameSync(legacyPath, legacyPath + '.legacy')
+    } catch { /* 迁移失败不阻塞 */ }
+  }
+
+  /** 所有个体（读 meta 的住处），按出生时间排序。 */
+  function listCreatures() {
+    const out = []
+    let names = []
+    try {
+      names = fs.readdirSync(cfg.stateDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+        .map(d => d.name)
+    } catch { return out }
+    for (const cid of names) {
+      const dir = path.join(cfg.stateDir, cid)
+      if (!fs.existsSync(path.join(dir, 'meta.json'))) continue
+      try {
+        const c = cache.get(cid) ?? Creature.open(dir)
+        cache.set(cid, c)
+        out.push(c)
+      } catch { /* 坏目录跳过 */ }
+    }
+    return out.sort((a, b) => String(a.meta.bornAt).localeCompare(String(b.meta.bornAt)))
+  }
+
+  /** 住处冲突检查：返回已占用的那只鱼（或 null）。 */
+  function conflictFor(creatureId, occ) {
+    const others = listCreatures()
+      .filter(c => c.meta.creatureId !== creatureId)
+      .map(c => ({ creatureId: c.meta.creatureId, name: c.meta.name, occupancy: c.meta.occupancy }))
+      .filter(c => c.occupancy)
+    const hit = findConflict(occ, others)
+    if (!hit) return null
+    const other = others.find(o => o.creatureId === hit)
+    return { creatureId: hit, name: other?.name ?? hit.slice(0, 8) }
+  }
+
+  /** 确定这条鱼住进某个住处；冲突则抛错（调用方转成 409）。 */
+  function assign(creatureId, occ) {
+    const c = get(creatureId)
+    if (!c) throw new Error('找不到这条鱼')
+    const conflict = conflictFor(creatureId, occ)
+    if (conflict) {
+      const err = new Error(`这个住处已经住着「${conflict.name}」了`)
+      err.code = 'OCCUPIED'
+      throw err
+    }
+    c.setOccupancy(occ)
+    return c
+  }
+
+  function release(creatureId) {
+    const c = get(creatureId)
+    if (c) c.releaseOccupancy()
+    return c
+  }
+
+  function get(creatureId) {
+    const hit = cache.get(creatureId)
+    if (hit) return hit
+    const dir = path.join(cfg.stateDir, creatureId)
+    if (!fs.existsSync(path.join(dir, 'meta.json'))) return null
+    const c = Creature.open(dir)
+    cache.set(creatureId, c)
+    return c
   }
 
   /** 出生：气质随机，不可指定。 */
@@ -55,33 +137,56 @@ export function createBinding(cfg) {
     }
   }
 
-  /**
-   * @param {string} sessionId
-   * @returns {Creature}
-   */
-  function creatureFor(sessionId) {
-    let cid = bindings[sessionId]
-    if (!cid) {
-      cid = randomUUID()
-      bindings[sessionId] = cid
-      save()
-      const meta = {
-        schemaVersion: 1,
-        creatureId: cid,
-        name: cfg.seed?.name || `fish-${cid.slice(0, 8)}`,
-        bornAt: new Date().toISOString(),
-        timezone: cfg.timezone,
-        model: { id: cfg.model, pinned: true },
-        temperament: randomTemperament(),
-      }
-      Creature.create(path.join(cfg.stateDir, cid), meta)
+  /** 生一只新鱼（可选住处）。 */
+  function birth(occ = null) {
+    const cid = randomUUID()
+    const meta = {
+      schemaVersion: 1,
+      creatureId: cid,
+      name: cfg.seed?.name || `fish-${cid.slice(0, 8)}`,
+      bornAt: new Date().toISOString(),
+      timezone: cfg.timezone,
+      model: { id: cfg.model, pinned: true },
+      temperament: randomTemperament(),
+      occupancy: occ,
     }
-    let c = cache.get(cid)
-    if (!c) {
-      c = Creature.open(path.join(cfg.stateDir, cid))
-      cache.set(cid, c)
-    }
+    Creature.create(path.join(cfg.stateDir, cid), meta)
+    const c = Creature.open(path.join(cfg.stateDir, cid))
+    cache.set(cid, c)
     return c
+  }
+
+  /**
+   * 这个会话归哪只鱼（不凭空出生）。
+   */
+  function occupantOf(session) {
+    noteScope(session.sessionId, session.workspace)
+    const creatures = listCreatures()
+    const hit = resolveOccupant(session, creatures.map(c => ({ creatureId: c.meta.creatureId, occupancy: c.meta.occupancy })))
+    return hit ? get(hit.creatureId) : null
+  }
+
+  /**
+   * 这个会话归哪只鱼；没有就出生一只住进这个会话（首个使用者）。
+   */
+  function resolve(session) {
+    return occupantOf(session) ?? birth({ kind: 'session', id: session.sessionId, workspace: session.workspace ?? undefined })
+  }
+
+  /**
+   * 带 TTL 的 bias。工具约束在**每次工具调用**时都会读它，
+   * 绝不能每次都同步 fold 整个日志（宿主主线程会被卡住）。
+   * 找不到住户时不出生（工具调用不该造鱼），返回中性偏置。
+   */
+  function biasFor(sessionId, maxAgeMs = 5000, workspace) {
+    const c = occupantOf({ sessionId, workspace })
+    if (!c) return { verbosity: 0.5, thresholdRefuse: 0.5, thresholdVerify: 0.5, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
+    const hit = biasCache.get(c.meta.creatureId)
+    const now = Date.now()
+    if (hit && now - hit.ts < maxAgeMs) return hit.bias
+    const bias = c.bias()
+    biasCache.set(c.meta.creatureId, { ts: now, bias })
+    return bias
   }
 
   /** 会话有没有被这个插件管理 */
@@ -90,5 +195,8 @@ export function createBinding(cfg) {
     return cfg.sessionFilter.includes(sessionId)
   }
 
-  return { dir: cfg.stateDir, bindings, creatureFor, biasFor, manages }
+  // 兼容：把旧的 bindings.json 迁移成个体自己的住处
+  migrateLegacyBindings()
+
+  return { dir: cfg.stateDir, creatureFor: (sid) => occupantOf({ sessionId: sid }) ?? resolve({ sessionId: sid }), resolve, occupantOf, listCreatures, assign, release, birth, get, conflictFor, biasFor, manages, scopes }
 }

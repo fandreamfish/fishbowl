@@ -10,8 +10,9 @@ import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBro
 import { salienceOf, toBias } from '../../../src/core/engine.ts'
 import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import { createAppraiser } from './appraiser.js'
-import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
+import { isFishbowlInjection, messageText, textOf, toolNameOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
+import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
@@ -171,6 +172,58 @@ export function createCollector(ctx, binding, cfg) {
     }
   }
 
+  /** 日记（M7）：一天一篇；只在今天还没写时生成。 */
+  async function maybeDiary(sessionId, creature, transcript, affect) {
+    try {
+      const now = Date.now()
+      const today = localDate(now, cfg.timezone)
+      if (creature.hasDiary(today)) return
+      const affectLine = `效价 ${affect.valence.toFixed(2)}，唤醒 ${affect.arousal.toFixed(2)}${affect.guilt > 0.05 ? `，愧疚 ${affect.guilt.toFixed(2)}` : ''}`
+      const raw = await callLLM(cfg, DIARY_SYSTEM_PROMPT, buildDiaryPrompt(transcript, affectLine), { json: false, maxTokens: 400 })
+      const text = parseDiary(raw)
+      if (!text) return
+      creature.recordDiary(today, text, now)
+      trace({ ts: now, sessionId, event: 'diary', date: today })
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `diary failed: ${String(err && err.message || err)}` })
+    }
+  }
+
+  /** 小纸条（M7）：一天最多一张；情绪够强或刚有新的记忆时才写。 */
+  async function maybeNote(sessionId, creature, affect) {
+    try {
+      const now = Date.now()
+      const today = localDate(now, cfg.timezone)
+      if (creature.notes(1).some(n => localDate(n.ts, cfg.timezone) === today)) return
+      const strong = Math.abs(affect.valence) > 0.5 || affect.guilt > 0.3 || affect.longing > 0.4
+      if (!strong) return
+      const stateLine = `效价 ${affect.valence.toFixed(2)}，唤醒 ${affect.arousal.toFixed(2)}，愧疚 ${affect.guilt.toFixed(2)}，想念 ${affect.longing.toFixed(2)}`
+      const raw = await callLLM(cfg, NOTE_SYSTEM_PROMPT, stateLine, { json: false, maxTokens: 80 })
+      const text = parseNote(raw)
+      if (!text) return
+      creature.recordNote(text, now)
+      trace({ ts: now, sessionId, event: 'note' })
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `note failed: ${String(err && err.message || err)}` })
+    }
+  }
+
+  /** 请求（M7）：一天最多一次、一周最多三次；配额在 journal.js。 */
+  async function maybeRequest(sessionId, creature, transcript) {
+    try {
+      const now = Date.now()
+      const ask = canAsk(now, creature.requests().map(r => r.ts), cfg.timezone)
+      if (!ask.ok) return
+      const raw = await callLLM(cfg, REQUEST_SYSTEM_PROMPT, transcript.slice(-800), { maxTokens: 60 })
+      const text = parseRequest(raw)
+      if (!text) return
+      creature.recordRequest(text, now)
+      trace({ ts: now, sessionId, event: 'request', text })
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `request failed: ${String(err && err.message || err)}` })
+    }
+  }
+
   async function finishTurn(session) {
     try {
       const buf = buffers.get(session.id)
@@ -181,7 +234,7 @@ export function createCollector(ctx, binding, cfg) {
         .join('\n')
         .slice(-cfg.transcriptLimit)
 
-      const creature = binding.creatureFor(session.id)
+      const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       const a = await appraise(transcript)
       const ts = Date.now()
       creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
@@ -232,6 +285,10 @@ export function createCollector(ctx, binding, cfg) {
           selfCounters.set(session.id, { episodesSinceSelf: 0, sinceLastSelf: 0 })
           void selfConsolidate(session.id, creature)
         }
+        // —— M7：日记 / 小纸条 / 请求 ——
+        void maybeDiary(session.id, creature, transcript, affect)
+        void maybeNote(session.id, creature, affect)
+        void maybeRequest(session.id, creature, transcript)
       }
 
       if (!cfg.control && cfg.injectBias) {
@@ -291,7 +348,7 @@ export function createCollector(ctx, binding, cfg) {
         agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) + seedLine })
       } catch { /* 声音注册失败不影响功能 */ }
 
-      const creature = binding.creatureFor(sid)
+      const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
 
       // M3.1：会话重开 → 先补投攒着的话（幂等，失败下轮再试；>3 条合并成一条不刷屏）
       Promise.resolve()

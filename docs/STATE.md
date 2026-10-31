@@ -113,17 +113,31 @@ Invoke-RestMethod -Uri 'https://api.github.com/repos/fandreamfish/fishbowl/conte
 
 ## 9. 当前状态
 
-- 阶段：M0–M6 全部完成；`m6.1` 为最新 tag
+- 阶段：M0–M7 全部完成；`m7` 为最新 tag
 - 插件：已启用（profile desktop，link 安装）
 - 配置：`appraiser=deepseek`、`relation=companion`、`wake.enabled=false`
-- 设置页：侧栏应有 fishbowl 项（m5.2 修复后待最终确认停用/启用行为）
+- 住处模型（M7）：鱼自带 `meta.occupancy`（工作区 / 会话），不再有会话→个体的绑定表；旧的 `bindings.json` 首次启动自动迁移成 `.legacy`
+- 设置页：鱼列表 → 单鱼详情（状态 / 住处 / 日记 / 小纸条 / 请求 / 人设）
 - 待办：
-  1. 真机验证设置页出现与停用消失
+  1. 真机验证新设置页（列表、住处互斥、请求补答）
   2. 叫醒消息去祈使句 + 冷落事件化
   3. 记忆分"他说/我的认知" + 五步认知循环
   4. 成长瓶颈制（g 降级为环境参数）
   5. QQ 桥真机联调、B 站通道
 - 用户待办：联调完删 DeepSeek key、轮换 GitHub PAT
+
+## 9.1 M7 数据布局
+
+```
+creatures/
+  scopes.json            见过的住处（工作区路径 / 会话），供设置页选择
+  ui-config.json         设置页保存的成长率与来历
+  trace.ndjson           每轮评价轨迹
+  <id>/meta.json         含 occupancy（住处）——鱼是第一公民
+  <id>/log.ndjson        事件：episode/semantic/procedure/self/commitment/activity/
+                         diary/note/request/request-answered/reinforce/freeze...
+  <id>/outbox.json       会话关着时攒着的话
+```
 
 ## 10. 回滚
 

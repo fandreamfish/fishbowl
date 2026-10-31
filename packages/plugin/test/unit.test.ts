@@ -16,6 +16,8 @@ import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
 import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
+import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
+import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
@@ -252,7 +254,7 @@ const T0 = 0
 for (let i = 0; i < 3; i++) c1.recordEpisode('rejected', sc.rejection(), undefined, T0)
 check('三连否定后耐心显著下降', c1.bias().patience < 0.30, `pati=${c1.bias().patience.toFixed(2)}`)
 check('个体目录已落盘', fs.existsSync(path.join(stateDir, c1.meta.creatureId, 'log.ndjson')))
-check('绑定表已落盘', fs.existsSync(path.join(stateDir, 'bindings.json')))
+check('住处表已落盘（scopes.json）', fs.existsSync(path.join(stateDir, 'scopes.json')))
 
 console.log('== 配置默认值 ==')
 const d = normalizeConfig({})
@@ -288,6 +290,40 @@ check('注入含折叠提示', summaryText(baseBias, baseAff, ms6).includes('记
 console.log('== M6：来历出生后只读 ==')
 check('seed 未改 → 不锁', seedChanged({ name: 'a', background: '' }, { name: 'a', background: '' }) === false)
 check('seed 改动 → 锁', seedChanged({ name: 'a' }, { name: 'b' }) === true)
+
+console.log('== M7：住处（工作区/会话）互斥与解析 ==')
+const W = 'D:\\ws-' + Date.now()
+check('工作区冲突：同工作区', findConflict({ kind: 'workspace', id: W }, [{ creatureId: 'a', occupancy: { kind: 'workspace', id: W } }]) === 'a')
+check('工作区冲突：其会话被占也算', findConflict({ kind: 'workspace', id: W }, [{ creatureId: 'b', occupancy: { kind: 'session', id: 's1', workspace: W } }]) === 'b')
+check('会话冲突：同会话', findConflict({ kind: 'session', id: 's1', workspace: W }, [{ creatureId: 'c', occupancy: { kind: 'session', id: 's1', workspace: W } }]) === 'c')
+check('会话冲突：工作区被占也算', findConflict({ kind: 'session', id: 's9', workspace: W }, [{ creatureId: 'd', occupancy: { kind: 'workspace', id: W } }]) === 'd')
+check('不同工作区不冲突', findConflict({ kind: 'workspace', id: 'D:\\other' }, [{ creatureId: 'e', occupancy: { kind: 'workspace', id: W } }]) === null)
+check('解析：会话级优先', resolveOccupant({ sessionId: 's1', workspace: W }, [{ creatureId: 'ws', occupancy: { kind: 'workspace', id: W } }, { creatureId: 'se', occupancy: { kind: 'session', id: 's1', workspace: W } }])?.creatureId === 'se')
+check('解析：没有住户 → null', resolveOccupant({ sessionId: 's2', workspace: 'D:\\z' }, [{ creatureId: 'ws', occupancy: { kind: 'workspace', id: W } }]) === null)
+
+const fishA = binding.birth({ kind: 'workspace', id: W })
+const fishB = binding.birth()
+let conflictMsg = ''
+try { binding.assign(fishB.meta.creatureId, { kind: 'session', id: 'session-x', workspace: W }) } catch (e) { conflictMsg = e.message }
+check('工作区被占 → 会话也进不去', conflictMsg.includes('已经住着'))
+binding.release(fishA.meta.creatureId)
+let relOk = false
+try { binding.assign(fishB.meta.creatureId, { kind: 'session', id: 'session-x-' + Date.now(), workspace: W }); relOk = true } catch { relOk = false }
+check('释放后可以搬进去', relOk)
+check('住处写进个体自己的 meta（不是会话表）', !!binding.get(fishB.meta.creatureId)?.meta.occupancy)
+check('新鱼默认未分配', binding.birth().meta.occupancy === null)
+
+console.log('== M7：日记 / 小纸条 / 请求 ==')
+const nowJ = Date.now()
+check('本地日期', localDate(nowJ, 'Asia/Shanghai').length === 10)
+check('请求配额：今天没问过 → 可以', canAsk(nowJ, [], 'Asia/Shanghai').ok === true)
+check('请求配额：今天问过 → 不行', canAsk(nowJ, [nowJ - 3600_000], 'Asia/Shanghai').ok === false)
+check('请求配额：本周满三次 → 不行', canAsk(nowJ, [nowJ - 3 * 86400_000, nowJ - 4 * 86400_000, nowJ - 5 * 86400_000], 'Asia/Shanghai').ok === false)
+check('日记解析', parseDiary('  今天他来了，我有点高兴。  ') === '今天他来了，我有点高兴。')
+check('日记解析：空 → null', parseDiary('   ') === null)
+check('纸条解析：带引号也剥掉', parseNote('“别熬夜。”') === '别熬夜。')
+check('请求解析：ask=false → null', parseRequest('{"ask":false}') === null)
+check('请求解析：ask=true', parseRequest('{"ask":true,"text":"能让我看看那个视频吗"}') === '能让我看看那个视频吗')
 
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)
