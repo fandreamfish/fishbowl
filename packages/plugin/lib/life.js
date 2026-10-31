@@ -65,12 +65,21 @@ export function wakeStatePath(stateDir) {
   return path.join(stateDir, 'wake-state.json')
 }
 
-/** 用她的声音写一句开场白（循环和"现在叫一次"共用）。 */
-export async function generateProactive(cfg, creature, reason) {
-  const mem = creature.memorySummary(cfg.growth)
-  const stateLine = `名字：${mem.name ?? '（还没名字）'}；未完成的承诺：${mem.commitments.join('；') || '无'}`
-  const text = await callLLM(cfg, voiceRulesFor(cfg.relation?.kind), proactivePrompt(reason, stateLine), { json: false, maxTokens: 80 })
-  return String(text ?? '').trim().slice(0, 200)
+/**
+ * 唤醒用的"舞台提示"：只给处境，不替她说话。
+ * 她看到这句会自己开口，回复才是她的话（assistant 角色）。
+ * 不写祈使句——祈使句会被当成任务清单逐条执行。
+ */
+export function wakeTrigger(now, reason) {
+  const t = new Date(now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return `（醒一醒。现在是 ${t}。${reason}）`
+}
+
+/** 由头 → 一句处境描述（给 wakeTrigger 用）。 */
+export function wakeSituation(reason) {
+  if (/答应过的事/.test(reason)) return '你还有答应过的事没做完。'
+  if (/很久没/.test(reason)) return '你很久没跟他说过话了。'
+  return reason
 }
 export function createWakeLoop(ctx, binding, cfg, host) {
   host = host ?? createDshHost(ctx, cfg)
@@ -137,7 +146,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         report.push({ creature: creature.meta.name, reason: reason ?? null, longing: Number(longing.toFixed(2)), broken, gate: decision, at: now })
         if (!decision.ok || reason === null) continue
 
-        const text = await generateProactive(cfg, creature, reason)
+        const text = wakeTrigger(now, wakeSituation(reason))
         if (!text) continue
         if (!agent) {
           // 会话没开着——进投递队列，下次会话打开时补投

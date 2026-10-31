@@ -18,7 +18,7 @@ import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { injectMessage } from './injector.js'
 import { normalizeConfig } from './config.js'
 import { createDshHost, workspaceOf } from '../host/dsh.js'
-import { generateProactive, wakeStatePath } from './life.js'
+import { wakeStatePath, wakeSituation, wakeTrigger } from './life.js'
 import { buildView } from '../../memory/src/records.ts'
 import { validateMemory } from '../../memory/src/config.ts'
 
@@ -520,7 +520,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
             }
             if (!target || !creature) return send(res, { ok: false, error: '没有活着的会话' }, 400)
             const reason = '你想主动找他（手动触发）'
-            const text = await generateProactive(cfg, creature, reason)
+            const text = wakeTrigger(Date.now(), wakeSituation(reason))
             if (!text) return send(res, { ok: false, error: '生成失败' }, 500)
             try {
               await host.wake(target, injectMessage(text))

@@ -15,7 +15,7 @@ import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerd
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
-import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason } from '../lib/life.js'
+import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
 import { createCollector } from '../lib/collector.js'
@@ -192,6 +192,8 @@ check('唤醒由头：先还债', (wakeReason({ openBroken: 1, longing: 0.9 })?.
 check('唤醒由头：再想念', (wakeReason({ openBroken: 0, longing: 0.5 })?.reason ?? '').includes('很久没'))
 check('无事不开口', wakeReason({ openBroken: 0, longing: 0.2 }).reason === null)
 check('proactivePrompt 含由头与声音规则', proactivePrompt('很久没好好说话了', '名字：大肥鱼').includes('很久没好好说话了'))
+check('舞台提示只给处境、不写祈使句', wakeTrigger(1793433715546, wakeSituation('很久没好好说话了')).includes('很久没跟他说过话'))
+check('舞台提示带时间', wakeTrigger(1793433715546, 'x').includes('醒一醒'))
 const m3cfg = normalizeConfig({ stateDir })
 check('wake 默认关闭（先观察后打开）', m3cfg.wake.enabled === false)
 check('contact 默认配额', m3cfg.contact.dailyMax === 2 && m3cfg.contact.unansweredStop === 3)
