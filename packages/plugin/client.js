@@ -146,11 +146,13 @@ function makeFactory() {
           if (o.kind === 'workspace') occupiedWs[o.id] = g.name
           else occupiedSess[o.id] = g.name
         }
-        const roomLine = !f.occupancy
-          ? '还没有房间'
+        const base = (p) => (p ? (p.split(/[\\/]/).filter(Boolean).pop() || '') : '')
+        const wsPath = f.occupancy ? (f.occupancy.kind === 'workspace' ? f.occupancy.id : (f.occupancy.workspace || '')) : ''
+        const roomName = !f.occupancy
+          ? '未分配'
           : f.occupancy.kind === 'workspace'
-            ? '屋子：' + f.occupancy.id
-            : '房间：' + f.occupancy.id.slice(0, 20) + (f.occupancy.workspace ? '（屋子：' + f.occupancy.workspace + '）' : '')
+            ? '整个屋子（所有会话）'
+            : f.occupancy.id
 
         // —— 搬家弹框：左边屋子，右边该屋子下的房间（左右树） ——
         const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }
@@ -225,7 +227,12 @@ function makeFactory() {
                 f.occupancy ? e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
               ] }, 'btns'),
             ] }, 'head'),
-            e('div', { style: { ...lab, marginBottom: 4, fontSize: 12.5 }, children: roomLine }, 'occ'),
+            e('div', { style: { display: 'grid', gridTemplateColumns: '52px 1fr', rowGap: 4, fontSize: 12.5, marginBottom: 4 }, children: [
+              e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '屋子' }, 'wl'),
+              e('div', { style: { wordBreak: 'break-all' }, children: wsPath ? base(wsPath) : '—' }, 'wv'),
+              e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '房间' }, 'rl'),
+              e('div', { style: { wordBreak: 'break-all' }, children: roomName }, 'rv'),
+            ] }, 'occ'),
             e('div', { style: { ...lab, fontSize: 12 }, children: f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'meta'),
           ] }, 'room'),
           moveModal,
