@@ -4,18 +4,17 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { ACTIVITY_RE, ACTIVITY_SYSTEM_PROMPT, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
 import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
-import { salienceOf, toBias } from '../../../src/core/engine.ts'
-import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
+import { applyAppraisal, salienceOf, toBias } from '../../../src/core/engine.ts'
+import { createMemoryStore } from '../memory/store.js'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { createDshHost } from '../host/dsh.js'
-import { injectMessage, recallBlock, recentBlock, stateKey, summaryText } from './injector.js'
+import { injectMessage, recallBlock, recentBlock } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
 
@@ -23,13 +22,13 @@ import { voiceRulesFor } from './voice.js'
 const REQUEST_CUE = /可以吗|行不行|能不能|要不要|同意|允许|准不准|我想(?:去|要|做|试)|帮我|拜托|征求/
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
-export function createCollector(ctx, binding, cfg, host) {
+export function createCollector(ctx, binding, cfg, host, memorySource) {
   host = host ?? createDshHost(ctx, cfg)
   const appraise = createAppraiser(cfg)
+  const getMemory = memorySource ?? createMemoryStore(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
-  const lastKey = new Map() // sessionId -> stateKey（肉眼可见的变化才注入）
-  const consolidating = new Map() // sessionId -> { episodesSince, salienceSince, sinceLast }
-  const selfCounters = new Map() // sessionId -> { episodesSinceSelf, sinceLastSelf }
+  const lastKey = new Map() // sessionId -> 指纹（肉眼可见的变化才注入）
+  const injectedBy = new Map() // sessionId -> 这一轮上下文里注入过的记忆 id
   const tracePath = path.join(binding.dir, 'trace.ndjson')
   const disposers = []
 
@@ -51,88 +50,51 @@ export function createCollector(ctx, binding, cfg, host) {
     bufferFor(sessionId).items.push({ role, text })
   }
 
+  /** 一个体一个记忆实例；设置页改了配置就顺手刷新。 */
+  function memoryFor(creature) {
+    return getMemory(creature)
+  }
+
+  /** 记忆系统的模型调用：吃 cfg.appraiser 那套配置；配额与优先级在 tick 里。 */
+  function memLlm() {
+    return (req) => callLLM(cfg, req.system, req.user, { maxTokens: req.maxTokens, json: true, model: req.model })
+  }
+
   /** 空壳鱼（默认名 + 没轮次 + 没记忆）就别注入中性数字了，纯噪音。 */
-  function isEmptyShell(creature, memory) {
+  function isEmptyShell(creature, view) {
     try {
       const defaultName = /^fish-/.test(creature.meta.name)
-      const episodes = creature.store.readEvents().filter((e) => e.t === 'episode').length
-      const hasMemory = (memory?.semantics?.length ?? 0) + (memory?.procedures?.length ?? 0) + (memory?.self?.length ?? 0) > 0
-      return defaultName && episodes === 0 && !hasMemory
+      return defaultName && (view?.turns?.length ?? 0) === 0 && (view?.memories?.length ?? 0) === 0
     } catch {
       return false
     }
   }
 
-  /** 用户这句话里提到的事 → 她"想起来"，注入一小段（同一条 10 分钟内不重复）。 */
-  const recalledSeen = new Map() // creatureId -> Map(claimId -> ts)
+  /** 用户这句话让她想起什么 → 注入一小段（同一条 10 分钟内不重复）。 */
+  const recalledSeen = new Map() // creatureId -> Map(memoryId -> ts)
   function maybeRecall(session, text) {
     try {
       if (!text || text.trim().length < 2) return
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) return
-      const hits = creature.recallMatches(text, cfg.growth, 2)
-      const epi = creature.episodeMatches(text, 2)
-      if (hits.length === 0 && epi.length === 0) return
+      const mem = memoryFor(creature)
+      const hits = mem.search(text, { limit: 2 })
+      if (!hits.length) return
       const now = Date.now()
       const seen = recalledSeen.get(creature.meta.creatureId) ?? new Map()
-      const freshClaims = hits.filter((h) => now - (seen.get(h.id) ?? 0) > 10 * 60_000)
-      const freshEpi = epi.filter((e) => now - (seen.get('epi:' + e.ts) ?? 0) > 10 * 60_000)
-      if (freshClaims.length === 0 && freshEpi.length === 0) return
-      for (const h of freshClaims) seen.set(h.id, now)
-      for (const e of freshEpi) seen.set('epi:' + e.ts, now)
+      const fresh = hits.filter((h) => now - (seen.get(h.id) ?? 0) > 10 * 60_000)
+      if (!fresh.length) return
+      for (const h of fresh) seen.set(h.id, now)
       recalledSeen.set(creature.meta.creatureId, seen)
+      // 记下这一轮注入过什么：下一轮她的总结要判断「真用到了没有」
+      const inj = injectedBy.get(session.id) ?? []
+      for (const h of fresh) if (!inj.includes(h.id)) inj.push(h.id)
+      injectedBy.set(session.id, inj)
       const agent = host.agentFor(session.id)
       if (!agent) return
-      const parts = []
-      if (freshClaims.length) parts.push(recallBlock(freshClaims))
-      if (freshEpi.length) parts.push(recentBlock(freshEpi.map((e) => ({ ts: e.ts, text: e.text })), 700))
-      host.inject(agent, injectMessage(parts.filter(Boolean).join('\n'))).catch(() => {})
+      const lines = fresh.map((h) => (h.kind === 'memory' ? h.text : '你说过：' + String(h.text || '').replace(/\s+/g, ' ').slice(0, 60)))
+      host.inject(agent, injectMessage(recallBlock(lines.map((text) => ({ text }))))).catch(() => {})
     } catch { /* 回忆失败不影响主流程 */ }
-  }
-  /** 巩固：把最近的转录压成语义与教训，落盘为事件（带去重与冷却）。 */
-  async function consolidate(sessionId, creature) {
-    try {
-      const events = creature.store.readEvents()
-      const episodes = events.filter((e) => e.t === 'episode').slice(-8)
-      if (episodes.length < 3) return
-      // 去重对全集（含已折叠的旧记忆）：同一件事再次提到 → 强化重量，不重复落盘
-      const existing = {
-        semantics: creature.claimTexts('semantic'),
-        procedures: creature.claimTexts('procedure'),
-      }
-      const known = [
-        '你已经记住的：',
-        ...existing.semantics.map((c) => `- 事实: ${c}`),
-        ...existing.procedures.map((c) => `- 教训: ${c}`),
-      ].join('\n')
-      const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
-      const raw = await callLLM(cfg, CONSOLIDATION_SYSTEM_PROMPT, `${known}\n\n最近对话：\n${lines}`, { maxTokens: 600 })
-      const parsed = parseConsolidation(raw)
-      const fresh = dedupeConsolidation(parsed, existing)
-      const ts = Date.now()
-      let reinforced = 0
-      for (const s of parsed.semantics) {
-        if (fresh.semantics.includes(s)) {
-          creature.recordSemantic(s.claim, s.evidence, s.confidence, ts)
-        } else {
-          const id = creature.findClaim(s.claim)
-          if (id) { creature.recordReinforce(id, ts); reinforced++ }
-        }
-      }
-      for (const p of parsed.procedures) {
-        if (fresh.procedures.includes(p)) {
-          creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
-        } else {
-          const id = creature.findClaim(`${p.trigger} → ${p.action}`)
-          if (id) { creature.recordReinforce(id, ts); reinforced++ }
-        }
-      }
-      if (fresh.semantics.length || fresh.procedures.length || reinforced > 0) {
-        trace({ ts, sessionId, event: 'consolidated', semantics: fresh.semantics, procedures: fresh.procedures, reinforced })
-      }
-    } catch (err) {
-      trace({ ts: Date.now(), sessionId, warn: `consolidate failed: ${String(err && err.message || err)}` })
-    }
   }
 
   /** 身份：用户起名 → identity 事件 + meta.name。 */
@@ -146,28 +108,6 @@ export function createCollector(ctx, binding, cfg, host) {
       }
     } catch (err) {
       trace({ ts: Date.now(), sessionId, warn: `identity failed: ${String(err && err.message || err)}` })
-    }
-  }
-
-  /** 自我认知：比巩固稀有得多；证据不足的部分直接丢弃。 */
-  async function selfConsolidate(sessionId, creature) {
-    try {
-      const events = creature.store.readEvents()
-      const episodes = events.filter((e) => e.t === 'episode').slice(-14)
-      if (episodes.length < 4) return
-      const existing = creature.memorySummary(cfg.growth)
-      const known = [
-        '你已经认定的自我描述：',
-        ...existing.self.map((c) => `- ${c}`),
-      ].join('\n')
-      const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
-      const raw = await callLLM(cfg, SELF_SYSTEM_PROMPT, `${known}\n\n最近对话：\n${lines}`, { maxTokens: 500 })
-      const parsed = dedupeSelf(parseSelf(raw), existing.self)
-      const ts = Date.now()
-      for (const s of parsed) creature.recordSelf(s.claim, s.evidence, s.confidence, ts)
-      if (parsed.length) trace({ ts, sessionId, event: 'self-consolidated', self: parsed })
-    } catch (err) {
-      trace({ ts: Date.now(), sessionId, warn: `self-consolidate failed: ${String(err && err.message || err)}` })
     }
   }
 
@@ -284,10 +224,28 @@ export function createCollector(ctx, binding, cfg, host) {
       if (!creature) { buffers.delete(session.id); return }
       const a = await appraise(transcript)
       const ts = Date.now()
-      creature.recordEpisode('turn', a, transcript.slice(0, 400), ts)
+      const mem = memoryFor(creature)
+
+      // ① 先落盘（零 LLM，必然成功）：这一轮的转录 + 评价 + 当时的情绪峰值
+      const ws = workspaceOf(session)
+      const occ = creature.meta.occupancy
+      const scope = occ
+        ? { kind: occ.kind, id: occ.id, workspace: occ.workspace || ws }
+        : (ws ? { kind: 'workspace', id: ws } : undefined)
+      // 情绪峰值 = 这一轮评价之后的情绪。先算出来，免得事件写下去就改不了
+      const peak = { ...JSON.parse(JSON.stringify(creature.fold().affect)) }
+      applyAppraisal(peak, a, creature.temperament)
+
+      const injected = injectedBy.get(session.id) ?? []
+      injectedBy.delete(session.id)
+      mem.observe({ note: transcript, scope, appraisal: a, salience: salienceOf(a), affect: peak, injected, ts })
+
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const memory = creature.memorySummary(cfg.growth)
+      const commitments = creature.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+      const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
+      // 这一轮注入过哪些记忆 → 下一轮她的总结用来判定「真用到了没有」
+      injectedBy.set(session.id, snap.picked)
 
       trace({
         ts, sessionId: session.id, creatureId: creature.meta.creatureId,
@@ -296,17 +254,10 @@ export function createCollector(ctx, binding, cfg, host) {
         bias,
       })
 
-      // —— M2：巩固与身份（异步，失败不影响主流程） ——
-      const cnt = consolidating.get(session.id) ?? { episodesSince: 0, salienceSince: 0, sinceLast: 99 }
-      cnt.episodesSince += 1
-      cnt.salienceSince += salienceOf(a)
-      cnt.sinceLast += 1
-      consolidating.set(session.id, cnt)
       if (cfg.appraiser.kind === 'deepseek') {
-        if (shouldConsolidate({ episodesSince: cnt.episodesSince, salienceSince: cnt.salienceSince, sinceLast: cnt.sinceLast, g: cfg.growth })) {
-          consolidating.set(session.id, { episodesSince: 0, salienceSince: 0, sinceLast: 0 })
-          void consolidate(session.id, creature)
-        }
+        // 双总结 + 到点整理：异步、有预算、失败可重试；绝不阻塞对话
+        void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model } })
+          .catch((err) => trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick failed: ${String(err?.message || err)}` }))
         if (IDENTITY_RE.test(transcript)) {
           void detectIdentity(session.id, creature, transcript)
         }
@@ -323,15 +274,6 @@ export function createCollector(ctx, binding, cfg, host) {
         if (ACTIVITY_RE.test(transcript)) {
           void detectActivity(session.id, creature, transcript)
         }
-        // —— M2.2：自我认知（稀有触发 + 冷却） ——
-        const scnt = selfCounters.get(session.id) ?? { episodesSinceSelf: 0, sinceLastSelf: 99 }
-        scnt.episodesSinceSelf += 1
-        scnt.sinceLastSelf += 1
-        selfCounters.set(session.id, scnt)
-        if (shouldSelfConsolidate({ episodesSince: scnt.episodesSinceSelf, sinceLast: scnt.sinceLastSelf, g: cfg.growth })) {
-          selfCounters.set(session.id, { episodesSinceSelf: 0, sinceLastSelf: 0 })
-          void selfConsolidate(session.id, creature)
-        }
         // —— M7：日记 / 小纸条 / 请求 ——
         void maybeDiary(session.id, creature, transcript, affect)
         void maybeNote(session.id, creature, affect)
@@ -347,27 +289,26 @@ export function createCollector(ctx, binding, cfg, host) {
             if (!osid || osid === session.id) continue
             const oc = binding.resolve({ sessionId: osid, workspace: workspaceOf(a?.session) })
             if (!oc || oc.meta.creatureId !== creature.meta.creatureId) continue
-            const k2 = stateKey(bias, affect, memory)
-            if (lastKey.get(osid) === k2) continue
-            lastKey.set(osid, k2)
-            await host.inject(a, injectMessage(summaryText(bias, affect, memory)))
+            if (lastKey.get(osid) === snap.fingerprint) continue
+            lastKey.set(osid, snap.fingerprint)
+            await host.inject(a, injectMessage(snap.text))
           }
         } catch { /* 同步失败不影响主流程 */ await Promise.resolve() }
-        const key = stateKey(bias, affect, memory)
         // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
         // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
-        if (key !== lastKey.get(session.id)) {
-          lastKey.set(session.id, key)
+        if (snap.fingerprint !== lastKey.get(session.id)) {
+          lastKey.set(session.id, snap.fingerprint)
           const agent = host.agentFor(session.id)
           if (agent) {
             try {
-              await host.inject(agent, injectMessage(summaryText(bias, affect, memory)))
+              await host.inject(agent, injectMessage(snap.text))
             } catch (err) {
               trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
             }
           }
         }
       }
+      buffers.delete(session.id)
       buffers.delete(session.id)
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session.id, warn: `collect failed: ${String(err && err.message || err)}` })
@@ -445,15 +386,18 @@ export function createCollector(ctx, binding, cfg, host) {
         .catch(() => { /* 绝不外抛 */ })
 
       if (cfg.control || !cfg.injectBias) return
+      const mem = memoryFor(creature)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const memory = creature.memorySummary(cfg.growth)
+      const commitments = creature.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+      const snap = mem.render({ affect, bias, name: creature.meta.name, commitments })
+      injectedBy.set(sid, snap.picked)
       // 基线里带上"你们之前说过的话"，新会话打开也能接上
       const recent = recentBlock(creature.recentDialog(6))
-      const text = summaryText(bias, affect, memory) + (recent ? '\n' + recent : '')
+      const text = snap.text + (recent ? '\n' + recent : '')
       Promise.resolve()
         .then(() => {
-          if (isEmptyShell(creature, memory)) return
+          if (isEmptyShell(creature, snap.view)) return
           trace({ ts: Date.now(), sessionId: sid, event: 'inject', kind: 'baseline', name: creature.meta.name })
           return host.inject(agent, injectMessage(text))
         })

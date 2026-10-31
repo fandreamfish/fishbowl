@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { apply } from '../packages/plugin/index.js'
+import { apply } from '../../packages/plugin/index.js'
 
 const dir = path.join(os.tmpdir(), 'fishbowl-apply-smoke-' + Date.now())
 fs.mkdirSync(dir, { recursive: true })

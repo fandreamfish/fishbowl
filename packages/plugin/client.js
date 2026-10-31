@@ -42,6 +42,35 @@ function makeFactory() {
       return '会话 ' + shortId(occ.id) + (occ.workspace ? '（' + (occ.workspace.split(/[\\\\/]/).filter(Boolean).pop() || '') + '）' : '')
     }
 
+    /** 时间戳 → 2026-10-31 16:20 */
+    const fmtTime = (ts) => {
+      const n = Number(ts)
+      if (!n) return '—'
+      const d = new Date(n)
+      if (Number.isNaN(d.getTime())) return '—'
+      const p = (x) => String(x).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    }
+    /** 时间戳 → 12 天前 */
+    const ago = (ts) => {
+      const n = Number(ts)
+      if (!n) return ''
+      const s = Math.max(0, Date.now() - n) / 1000
+      if (s < 60) return '刚刚'
+      if (s < 3600) return Math.floor(s / 60) + ' 分钟前'
+      if (s < 86400) return Math.floor(s / 3600) + ' 小时前'
+      return Math.floor(s / 86400) + ' 天前'
+    }
+    const chip = { fontSize: 11, padding: '1px 7px', borderRadius: 6, background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.14))', color: 'var(--dsw-alias-text-2, #666)', whiteSpace: 'nowrap' }
+    const kvRow = (k, v, key) => e('div', {
+      key,
+      style: { display: 'flex', gap: 8, marginTop: 3, fontSize: 12, lineHeight: 1.6 },
+      children: [
+        e('span', { style: { color: 'var(--dsw-alias-text-3, #999)', flex: '0 0 auto', minWidth: 36 }, children: k }, 'k'),
+        e('span', { style: { wordBreak: 'break-all' }, children: v }, 'v'),
+      ],
+    })
+
     function FishCard(props) {
       const f = props.f
       return e('div', {
@@ -58,6 +87,318 @@ function makeFactory() {
             ? e('div', { style: { fontSize: 12, color: 'var(--dsw-alias-warning, #b26a00)' }, children: '有 ' + f.pendingRequests.length + ' 个请求在等你回话' }, 'r')
             : null,
         ] }, props.k)
+    }
+
+    /** 记忆配置卡：改的是她的记忆行为，不是性能参数。保存后写 ui-config.json 并留痕。 */
+    function MemoryConfigCard(props) {
+      const cfg = props.cfg
+      const [d, setD] = useState(null)
+      const [tagText, setTagText] = useState('')
+      const [busy, setBusy] = useState(false)
+      const [err, setErr] = useState('')
+      const [msg, setMsg] = useState('')
+
+      useEffect(() => {
+        setD(cfg ? JSON.parse(JSON.stringify(cfg)) : null)
+        setTagText((((cfg && cfg.tags) || [])).join('，'))
+      }, [cfg])
+
+      if (!d) return e('div', { style: box, children: '记忆配置读取中…' }, 'mcfg-loading')
+
+      const set = (k, v) => setD(Object.assign({}, d, { [k]: v }))
+      const numInp = { width: 92, padding: '4px 8px', borderRadius: 8, border: '1px solid var(--dsw-alias-border, #ddd)', background: 'var(--dsw-alias-bg-1, transparent)', color: 'inherit', font: 'inherit', fontSize: 13, boxSizing: 'border-box' }
+      const field = (k, label, hint, lo, hi) => e('div', {
+        key: 'f-' + k,
+        style: { marginBottom: 9 },
+        children: [
+          e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, children: [
+            e('span', { style: { fontSize: 13 }, children: label }, 'l'),
+            e('input', { type: 'number', min: String(lo), max: String(hi), value: d[k], style: numInp, onInput: (ev) => set(k, Number(ev.target.value)) }, 'i'),
+          ] }, 'r'),
+          e('div', { style: { ...lab, fontSize: 11.5 }, children: hint }, 'h'),
+        ],
+      })
+      const group = (title, nodes, key) => e('div', { key, style: { marginBottom: 10 }, children: [
+        e('div', { style: { fontSize: 11.5, color: 'var(--dsw-alias-text-3, #999)', margin: '2px 0 6px' }, children: title }, 't'),
+        ...nodes,
+      ] })
+
+      const save = async () => {
+        setBusy(true)
+        setErr('')
+        setMsg('')
+        try {
+          const payload = Object.assign({}, d, {
+            tags: String(tagText || '').split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
+          })
+          const r = await postJson(API + '/memory/config', payload)
+          setD(JSON.parse(JSON.stringify(r.config)))
+          setTagText((r.config.tags || []).join('，'))
+          setMsg('已保存')
+        } catch (x) {
+          setErr(String((x && x.message) || x))
+        }
+        setBusy(false)
+      }
+
+      return e('div', { style: box, children: [
+        e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 2 }, children: '记忆配置' }, 'h'),
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 10 }, children: '对整个记忆系统生效。改的是她的记忆行为：记得多细、多久整理一次、注入多少。' }, 'hint'),
+
+        group('记录与整理', [
+          field('turnsPerRecord', '每几轮记录一次', '1 = 每轮都落一条，延迟为零；调大省调用，但她会晚记一点', 1, 20),
+          field('consolidateCap', '整理阈值', '未整理的轮数到这个数就排队整理（空闲时执行）', 5, 100),
+        ], 'g1'),
+
+        group('召回与注入', [
+          field('recallPool', '召回池', '每次最多捞多少条候选（必须装得下注入条数）', 5, 100),
+          field('injectBudget', '注入预算（字）', '每次注入给记忆留的字数；低于 300 只剩情绪、放不下记忆', 300, 4000),
+          e('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }, children: [
+            e('span', { style: { fontSize: 13, flex: 1 }, children: '合并层 : 最近 turn' }, 'l'),
+            e('input', { type: 'number', min: '0', max: '20', value: d.memoryRatio, style: numInp, onInput: (ev) => set('memoryRatio', Number(ev.target.value)) }, 'a'),
+            e('span', { style: lab, children: ':' }, 'sep'),
+            e('input', { type: 'number', min: '0', max: '20', value: d.turnRatio, style: numInp, onInput: (ev) => set('turnRatio', Number(ev.target.value)) }, 'b'),
+          ] }, 'ratio'),
+        ], 'g2'),
+
+        group('其它', [
+          e('label', { key: 'plain', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
+            e('input', { type: 'checkbox', checked: !!d.herSummaryOnPlainTurns, onChange: (ev) => set('herSummaryOnPlainTurns', ev.target.checked) }, 'c'),
+            e('span', { children: '平淡轮也写「她的总结」' }, 't'),
+          ] }),
+          e('label', { key: 'search', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
+            e('input', { type: 'checkbox', checked: d.searchTool !== false, onChange: (ev) => set('searchTool', ev.target.checked) }, 'c'),
+            e('span', { children: '允许她主动翻记忆（memory_search）' }, 't'),
+          ] }),
+          e('div', { key: 'writer', style: { marginBottom: 8 }, children: [
+            e('div', { style: { fontSize: 13, marginBottom: 3 }, children: '同时写入' }, 'l'),
+            e('select', {
+              value: d.singleWriter || 'warn',
+              style: { ...inp, padding: '6px 9px', fontSize: 12.5, boxSizing: 'border-box' },
+              onChange: (ev) => set('singleWriter', ev.target.value),
+              children: [
+                e('option', { key: 'w', value: 'warn', children: '检测并告警（默认）' }, 'w'),
+                e('option', { key: 's', value: 'strict', children: '抢不到就拒绝启动' }, 's'),
+                e('option', { key: 'o', value: 'off', children: '不检测' }, 'o'),
+              ],
+            }, 's'),
+            e('div', { style: { ...lab, fontSize: 11.5, marginTop: 3 }, children: '同一只鱼只该有一个进程在写。告警模式下照样写，只是设置页会挂一条警告。' }, 'h'),
+          ] }),
+          e('label', { key: 'emb', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
+            e('input', {
+              type: 'checkbox',
+              checked: !!(d.embeddings && d.embeddings.enabled),
+              onChange: (ev) => set('embeddings', { ...(d.embeddings || {}), enabled: ev.target.checked }),
+            }, 'c'),
+            e('span', { children: '向量检索（默认关，先跑评测再开）' }, 't'),
+          ] }),
+          d.embeddings && d.embeddings.enabled
+            ? e('div', { key: 'embconf', style: { marginBottom: 8, paddingLeft: 22 }, children: [
+                e('div', { style: { fontSize: 12.5, marginBottom: 3 }, children: 'embedding 模型' }, 'l1'),
+                e('input', {
+                  style: { ...inp, padding: '6px 9px', fontSize: 12.5, boxSizing: 'border-box', marginBottom: 6 },
+                  value: d.embeddings.model || '',
+                  placeholder: '例：text-embedding-3-small',
+                  onInput: (ev) => set('embeddings', { ...d.embeddings, model: ev.target.value }),
+                }, 'i1'),
+                e('div', { style: { fontSize: 12.5, marginBottom: 3 }, children: 'embedding 服务地址' }, 'l2'),
+                e('input', {
+                  style: { ...inp, padding: '6px 9px', fontSize: 12.5, boxSizing: 'border-box' },
+                  value: d.embeddings.baseUrl || '',
+                  placeholder: '留空 = 跟评价器同源；密钥沿用评价器那把',
+                  onInput: (ev) => set('embeddings', { ...d.embeddings, baseUrl: ev.target.value }),
+                }, 'i2'),
+              ] })
+            : null,
+          e('div', { key: 'model', style: { marginBottom: 8 }, children: [
+            e('div', { style: { fontSize: 13, marginBottom: 3 }, children: '中性总结模型' }, 'l'),
+            e('input', { style: { ...inp, padding: '6px 9px', fontSize: 12.5, boxSizing: 'border-box' }, value: d.neutralModel || '', placeholder: '留空 = 跟评价器同一个模型', onInput: (ev) => set('neutralModel', ev.target.value) }, 'i'),
+          ] }),
+          e('div', { key: 'tags', children: [
+            e('div', { style: { fontSize: 13, marginBottom: 3 }, children: '主题标签词表' }, 'l'),
+            e('input', { style: { ...inp, padding: '6px 9px', fontSize: 12.5, boxSizing: 'border-box' }, value: tagText, placeholder: '用逗号分隔', onInput: (ev) => setTagText(ev.target.value) }, 'i'),
+            e('div', { style: { ...lab, fontSize: 11.5, marginTop: 3 }, children: '留一个「其他」兜底；这个标签占比超过三成就该改词表了' }, 'h'),
+          ] }),
+        ], 'g3'),
+
+        e('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }, children: [
+          e('button', { style: busy ? { ...btnP, opacity: 0.55, cursor: 'default' } : btnP, disabled: busy, onClick: save, children: busy ? '保存中…' : '保存' }, 'save'),
+          e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
+          e('span', { style: { fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, children: err }, 'e'),
+        ] }, 'acts'),
+      ] }, 'mcfg')
+    }
+
+    /** 记忆详情：合并记忆 + 轮次记录。新结构（turn/merged）优先，旧结构做兼容映射。 */
+    function MemoryDetail(props) {
+      const [data, setData] = useState(null)
+      const [err, setErr] = useState('')
+      const [tab, setTab] = useState('merged')
+      const [kind, setKind] = useState('all')
+      const [q, setQ] = useState('')
+      const [open, setOpen] = useState(null)
+      const [tick, setTick] = useState(0)
+
+      useEffect(() => {
+        let dead = false
+        const load = async (attempt) => {
+          try {
+            const d = await getJson(API + '/fish/' + props.fishId + '/memory')
+            if (!dead) { setData(d); setErr('') }
+          } catch (x) {
+            if (dead) return
+            setErr(String((x && x.message) || x))
+            if (attempt < 2) setTimeout(() => { void load(attempt + 1) }, 1200)
+          }
+        }
+        void load(0)
+        return () => { dead = true }
+      }, [props.fishId, tick])
+
+      if (err && !data) return e('div', { style: box, children: '读不到记忆：' + err }, 'mdet-err')
+      if (!data) return e('div', { style: box, children: '读取记忆…' }, 'mdet-loading')
+
+      const st = data.stats || {}
+      const memories = data.memories || []
+      const turns = data.turns || []
+      const byTurn = {}
+      for (const m of memories) for (const id of (m.evidence || [])) (byTurn[id] = byTurn[id] || []).push(m)
+
+      const ql = String(q || '').trim().toLowerCase()
+      const has = (s) => String(s == null ? '' : s).toLowerCase().indexOf(ql) >= 0
+      const KIND_LABEL = { fact: '事实', lesson: '教训', relation: '关系', self: '自我' }
+      const SUBJECT_LABEL = { user: '关于他', self: '关于我', between: '关于我们', world: '关于世界' }
+      const KINDS = [['all', '全部'], ['fact', '事实'], ['lesson', '教训'], ['relation', '关系'], ['self', '自我']]
+      const memList = memories.filter((m) => (kind === 'all' || m.kind === kind) && (!ql || has(m.claim) || has(m.attitude) || (m.tags || []).some(has)))
+      const turnList = turns.filter((t) => !ql || has(t.neutral) || (t.her || []).some((h) => has(h.text)))
+      const active = 'var(--dsw-alias-bg-2, rgba(127,127,127,0.16))'
+
+      const statLine = [
+        (st.memoryTotal || 0) + ' 条合并记忆',
+        (st.turnTotal || 0) + ' 轮记录',
+        st.retired ? st.retired + ' 条已退休' : null,
+        st.pending === null || st.pending === undefined ? null : st.pending + ' 轮待整理',
+      ].filter(Boolean).join(' · ')
+
+      const detailOf = (m) => e('div', {
+        style: { marginTop: 8, paddingTop: 7, borderTop: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.14))' },
+        children: [
+          kvRow('状态', m.status === 'retired' ? '已退休 · 仍可查，不再注入' : '有效', 'st'),
+          kvRow('证据', m.evidenceMode === 'lines'
+            ? (m.evidence.length ? m.evidence.length + ' 行' : '无') + '（旧格式：提示词行号，无法回溯）'
+            : (m.evidence.length ? m.evidence.length + ' 轮 turn' : '无'), 'ev'),
+          kvRow('时间', fmtTime(m.createdAt) + (ago(m.createdAt) ? '（' + ago(m.createdAt) + '）' : ''), 'at'),
+          kvRow('情绪', m.affectPeak ? '效价 ' + fmt(m.affectPeak.valence) + ' · 唤醒 ' + fmt(m.affectPeak.arousal) : '未记录', 'af'),
+          kvRow('溯源', m.by ? ((m.by.model || '?') + ' · ' + (m.by.prompt || '?')) : '旧数据', 'by'),
+          m.supersedes ? kvRow('取代', shortId(m.supersedes), 'sp') : null,
+          m.evidenceMode === 'turns' && m.evidence.length ? kvRow('指向', m.evidence.map(shortId).join('、'), 'ids') : null,
+        ],
+      })
+
+      const memItem = (m, i) => {
+        const isOpen = open === 'm:' + m.id
+        return e('div', {
+          key: 'm' + i,
+          style: { padding: '9px 10px', borderRadius: 9, marginBottom: 6, border: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.16))', cursor: 'pointer' },
+          onClick: () => setOpen(isOpen ? null : 'm:' + m.id),
+          children: [
+            e('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }, children: [
+              e('span', { style: chip, children: KIND_LABEL[m.kind] || m.kind }, 'k'),
+              e('span', { style: { fontSize: 11, color: 'var(--dsw-alias-text-3, #999)' }, children: SUBJECT_LABEL[m.subject] || '' }, 's'),
+              e('span', { style: { fontSize: 11, color: 'var(--dsw-alias-text-3, #999)', marginLeft: 'auto' }, children: '置信 ' + fmt(m.confidence) + (m.reinforcements ? ' · 提及 ' + m.reinforcements + ' 次' : '') + (m.status === 'retired' ? ' · 已退休' : '') }, 'c'),
+            ] }, 'h'),
+            e('div', { style: { fontSize: 13, lineHeight: 1.6, opacity: m.status === 'retired' ? 0.62 : 1 }, children: m.claim }, 'claim'),
+            m.attitude ? e('div', { style: { fontSize: 12.5, color: 'var(--dsw-alias-text-2, #666)', marginTop: 2 }, children: '（' + m.attitude + '）' }, 'att') : null,
+            (m.tags || []).length ? e('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5 }, children: m.tags.map((t, j) => e('span', { key: 'tt' + j, style: chip, children: '#' + t })) }, 'tags') : null,
+            isOpen ? detailOf(m) : null,
+          ],
+        })
+      }
+
+      const turnDetail = (t) => e('div', {
+        style: { marginTop: 8, paddingTop: 7, borderTop: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.14))' },
+        children: [
+          e('div', { style: { fontSize: 11.5, color: 'var(--dsw-alias-text-3, #999)', marginBottom: 4 }, children: '她的看法（按时间追加）' }, 'sh'),
+          (t.her || []).length
+            ? t.her.map((h, i) => e('div', { key: 'h' + i, style: { marginBottom: 6 }, children: [
+                e('div', { style: { fontSize: 11, color: 'var(--dsw-alias-text-3, #999)' }, children: fmtTime(h.at) + (h.affect ? ' · 效价 ' + fmt(h.affect.valence) + ' / 唤醒 ' + fmt(h.affect.arousal) : '') }, 'ht'),
+                e('div', { style: { fontSize: 12.8, lineHeight: 1.6 }, children: h.text }, 'hx'),
+              ] }))
+            : e('div', { style: { fontSize: 12, color: 'var(--dsw-alias-text-3, #999)' }, children: '她还没对这条留下看法' }, 'noh'),
+          kvRow('存取', '被想起 ' + ((t.hits && t.hits.considered) || 0) + ' 次 · 真用到 ' + ((t.hits && t.hits.used) || 0) + ' 次', 'hits'),
+          (t.tags || []).length ? kvRow('标签', t.tags.map((x) => '#' + x).join(' '), 'tags') : null,
+          t.affectPeak ? kvRow('情绪', '效价 ' + fmt(t.affectPeak.valence) + ' · 唤醒 ' + fmt(t.affectPeak.arousal), 'af') : null,
+          (byTurn[t.id] || []).length ? kvRow('被引用', byTurn[t.id].map((m) => String(m.claim || '').slice(0, 18)).join('；'), 'ref') : null,
+          t.rawText ? e('div', { style: { marginTop: 6 }, children: [
+            e('div', { style: { fontSize: 11, color: 'var(--dsw-alias-text-3, #999)', marginBottom: 2 }, children: '原文' }, 'rh'),
+            e('div', { style: { fontSize: 12.5, whiteSpace: 'pre-wrap', background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.07))', borderRadius: 8, padding: '7px 9px' }, children: t.rawText }, 'rx'),
+          ] }) : null,
+        ],
+      })
+
+      const turnItem = (t, i) => {
+        const isOpen = open === 't:' + t.id
+        const latest = (t.her || [])[(t.her || []).length - 1]
+        return e('div', {
+          key: 't' + i,
+          style: { padding: '9px 10px', borderRadius: 9, marginBottom: 6, border: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.16))', cursor: 'pointer' },
+          onClick: () => setOpen(isOpen ? null : 't:' + t.id),
+          children: [
+            e('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }, children: [
+              e('span', { style: { fontSize: 11, color: 'var(--dsw-alias-text-3, #999)' }, children: fmtTime(t.occurredAt) + ' · ' + ago(t.occurredAt) }, 'time'),
+              e('span', { style: { ...chip, marginLeft: 'auto' }, children: t.summaryState === 'both' ? '双总结' : t.summaryState === 'her' ? '只有她' : t.summaryState === 'neutral' ? '只有中性' : '未总结' }, 'st'),
+            ] }, 'h'),
+            e('div', { style: { fontSize: 12.8, lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: isOpen ? 'none' : 66, overflow: 'hidden' }, children: t.neutral || '（还没有中性总结）' }, 'n'),
+            latest ? e('div', { style: { fontSize: 12.5, color: 'var(--dsw-alias-text-2, #666)', marginTop: 3 }, children: '（' + latest.text + '）' }, 'her') : null,
+            isOpen ? turnDetail(t) : null,
+          ],
+        })
+      }
+
+      const segBtn = (id, label) => e('button', {
+        key: 'seg-' + id,
+        style: tab === id ? { ...btnS, background: active, fontWeight: 600 } : btnS,
+        onClick: () => { setTab(id); setOpen(null) },
+        children: label,
+      })
+
+      return e('div', { style: { ...box, marginBottom: 0 }, children: [
+        e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 2 }, children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '记忆详情' }, 'h'),
+          e('button', { style: btnS, onClick: () => setTick((n) => n + 1), children: '刷新' }, 'r'),
+        ] }, 'head'),
+        e('div', { style: { ...lab, fontSize: 11.5 }, children: statLine }, 'stat'),
+        st.lock
+          ? e('div', { style: { ...lab, fontSize: 11.5, color: 'var(--dsw-alias-warning, #b26a00)', marginTop: 2 }, children: '⚠ 另一个进程（pid ' + st.lock.pid + '）也在写这只鱼——双写会让记忆错乱' }, 'lock')
+          : null,
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 10 }, children: data.view === 'legacy'
+          ? '数据来自旧结构（episode / semantic / procedure）：证据是行号、没有她与中性的两份总结。新的 turn / merged 落盘后这里自动切换。'
+          : '数据来自新结构（turn / merged）。' }, 'banner'),
+
+        e('div', { style: { display: 'flex', gap: 6, marginBottom: 8 }, children: [
+          segBtn('merged', '合并记忆 ' + memories.length),
+          segBtn('turns', '轮次记录 ' + turns.length),
+        ] }, 'seg'),
+
+        e('input', { style: { ...inp, padding: '6px 10px', fontSize: 12.5, boxSizing: 'border-box', marginBottom: 8 }, value: q, placeholder: tab === 'merged' ? '搜结论、态度、标签…' : '搜轮次内容…', onInput: (ev) => setQ(ev.target.value) }, 'q'),
+
+        tab === 'merged' ? e('div', { children: [
+          e('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }, children: KINDS.map(([id, label]) =>
+            e('button', {
+              key: id,
+              style: id === kind ? { ...btnS, background: active, fontWeight: 600 } : btnS,
+              onClick: () => setKind(id),
+              children: label + (id === 'all' ? '' : ' ' + ((st.byKind && st.byKind[id]) || 0)),
+            })) }, 'kinds'),
+          memList.length
+            ? memList.map(memItem)
+            : e('div', { style: { ...lab, padding: '10px 0' }, children: memories.length ? '没有匹配的记忆' : '还没有合并记忆。攒够整理阈值后会自动整理。' }, 'none'),
+        ] }, 'm-merged') : e('div', { children: [
+          turnList.length
+            ? turnList.map(turnItem)
+            : e('div', { style: { ...lab, padding: '10px 0' }, children: turns.length ? '没有匹配的轮次' : '还没有轮次记录。' }, 'none'),
+        ] }, 'm-turns'),
+      ] }, 'mdet')
     }
 
     function Section() {
@@ -149,7 +490,7 @@ function makeFactory() {
       const page = view.page || 'status'
       const setPage = (p) => setView({ ...view, page: p })
       const tabs = [
-        ['status', '状态'], ['home', '住所'], ['persona', '人设'],
+        ['status', '状态'], ['home', '住所'], ['persona', '人设'], ['memory', '记忆'],
       ]
 
       let body = null
@@ -391,6 +732,12 @@ function makeFactory() {
               : e('button', { style: { ...btnS, fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => setDelConfirm(true), children: '放生这条鱼' }, 'del'),
           ] }, 'danger'),
         ] }, 'persona')
+      } else if (page === 'memory') {
+        const memCfg = (data.config && data.config.memory) || null
+        body = e('div', { children: [
+          e(MemoryConfigCard, { cfg: memCfg }, 'mcfg'),
+          e(MemoryDetail, { fishId: f.id }, 'mdet'),
+        ] }, 'memory')
       }
 
       return e('div', { style: { fontSize: 13.5, lineHeight: 1.75 }, children: [

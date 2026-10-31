@@ -1,4 +1,4 @@
-/** 极简 LLM 调用（评价 / 巩固 / 身份共用）。密钥与模型来自 cfg.appraiser。 */
+/** 极简 LLM 调用（评价 / 总结 / 整理共用）。密钥与模型来自 cfg.appraiser，可被 opts.model 覆盖。 */
 export async function callLLM(cfg, system, user, opts = {}) {
   const a = cfg.appraiser
   const res = await fetch(`${a.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -8,7 +8,7 @@ export async function callLLM(cfg, system, user, opts = {}) {
       ...(a.apiKey ? { Authorization: `Bearer ${a.apiKey}` } : {}),
     },
     body: JSON.stringify({
-      model: a.model,
+      model: opts.model || a.model,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },

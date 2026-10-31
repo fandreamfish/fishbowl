@@ -232,6 +232,16 @@ export function createDshHost(ctx, cfg) {
       return typeof ctx.tools?.guard === 'function' ? ctx.tools.guard(fn) : undefined
     },
 
+    /** 注册一个工具（模型可见）。传的是注册表认的形状，不需要 dsh-tools 的 defineTool。 */
+    registerTool(def) {
+      if (typeof ctx.tools?.register !== 'function') return undefined
+      try {
+        return ctx.tools.register(def)
+      } catch {
+        return undefined
+      }
+    },
+
     preExecute(fn) {
       return ctx.on('tools/pre-execute', fn)
     },
@@ -278,6 +288,19 @@ export function createDshHost(ctx, cfg) {
 
     listScopes() {
       return enumerateScopes()
+    },
+
+    /**
+     * 会话当前的审批策略：'ask' | 'never'；拿不到返回 null。
+     * 策略是 never 时，插件发起的 ask 会被宿主**直接判成 rejected**，
+     * 工具结果还会写成「the user rejected」——所以调用方得先问这一句再决定要不要 ask。
+     */
+    approvalPolicy(session) {
+      try {
+        const approval = get('approval')
+        if (approval && typeof approval.effectivePolicy === 'function') return approval.effectivePolicy(session)
+      } catch { /* 服务形状不同 */ }
+      return null
     },
 
     /** 诊断用：服务挂没挂。 */

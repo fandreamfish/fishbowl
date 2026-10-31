@@ -96,6 +96,12 @@ export const BASELINE_BIAS: Bias = {
  */
 export type CreatureEvent =
   | { t: 'episode'; id: string; ts: number; kind: string; appraisal: Appraisal; salience: number; note?: string }
+  // —— M17：记忆系统的 turn 记录。appraisal/salience 供情绪重放，其余字段归记忆系统 ——
+  | {
+    t: 'turn'; id: string; ts: number; note?: string; appraisal?: Appraisal; salience?: number
+    scope?: unknown; raw?: unknown; injected?: string[]; tags?: string[]
+    summaryState?: string; affectPeak?: unknown; affectAtWrite?: unknown
+  }
   | { t: 'absence'; id: string; ts: number; wakingHours: number }
   | { t: 'contact'; id: string; ts: number; relief: number }   // relief ∈ [0,1]：重逢释放多少想念
   | { t: 'repair'; id: string; ts: number; amount: number }    // 修复违诺，减少愧疚

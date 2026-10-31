@@ -15,7 +15,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
+import { normalizeConfig } from './config.js'
 import { createDshHost } from '../host/dsh.js'
+import { buildView } from '../../memory/src/records.ts'
+import { validateMemory } from '../../memory/src/config.ts'
 
 const ROUTE = '/fishbowl-ui'
 
@@ -47,11 +50,229 @@ export function mergeUiConfig(raw, ui) {
   const out = { ...raw }
   if (typeof ui.growth === 'number' && Number.isFinite(ui.growth)) out.growth = ui.growth
   if (ui.seed && typeof ui.seed === 'object') out.seed = { name: String(ui.seed.name ?? ''), background: String(ui.seed.background ?? '') }
+  if (ui.memory && typeof ui.memory === 'object') out.memory = { ...(raw.memory || {}), ...ui.memory }
   return out
 }
 
+/** 只接受认识的记忆配置键（防前端塞垃圾）。 */
+export function pickMemoryConfig(x) {
+  const out = {}
+  for (const k of ['turnsPerRecord', 'consolidateCap', 'recallPool', 'injectBudget', 'memoryRatio', 'turnRatio']) {
+    if (typeof x?.[k] === 'number' && Number.isFinite(x[k])) out[k] = x[k]
+  }
+  if (typeof x?.herSummaryOnPlainTurns === 'boolean') out.herSummaryOnPlainTurns = x.herSummaryOnPlainTurns
+  if (typeof x?.neutralModel === 'string') out.neutralModel = x.neutralModel
+  if (typeof x?.searchTool === 'boolean') out.searchTool = x.searchTool
+  if (x?.singleWriter === 'off' || x?.singleWriter === 'warn' || x?.singleWriter === 'strict') out.singleWriter = x.singleWriter
+  if (x?.embeddings && typeof x.embeddings === 'object') {
+    out.embeddings = {
+      enabled: x.embeddings.enabled === true,
+      model: typeof x.embeddings.model === 'string' ? x.embeddings.model : '',
+      baseUrl: typeof x.embeddings.baseUrl === 'string' ? x.embeddings.baseUrl : '',
+    }
+  }
+  if (Array.isArray(x?.tags)) out.tags = x.tags.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()).slice(0, 40)
+  return out
+}
+
+/**
+ * 记忆配置的语义校验（纯函数）。
+ * 结构上合法的值不一定说得通：上限小于记录间隔、召回池装不下注入条数、标签表被清空。
+ * 规则本体在 packages/memory/src/config.ts，这里只做转出（设置页与引擎共用一份）。
+ */
+export function validateMemoryConfig(c) {
+  return validateMemory(c)
+}
+
+// —— 记忆系统视图（docs/MEMORY.md） ——
+
+const RELATION_RE = /我们|关系|信任|约定|答应|承诺|感情|亲密/
+
+/** 这条认知是谁的事。新结构里由模型给，旧结构里只能按字面猜（关系词优先）。 */
+export function subjectOf(text) {
+  const s = String(text ?? '')
+  if (RELATION_RE.test(s)) return 'between'
+  if (/^(用户|他)/.test(s)) return 'user'
+  if (/^(AI|我（AI）|我自己)/.test(s) || /AI\s*(会|在|给|对|把)/.test(s)) return 'self'
+  return 'world'
+}
+
+/** 旧认知（semantic / procedure / self）→ 统一的记忆视图。 */
+function legacyClaimView(e, reinforces) {
+  const text = e.t === 'procedure' ? `${e.trigger} → ${e.action}` : String(e.claim ?? '')
+  const kind = e.t === 'semantic' ? (RELATION_RE.test(text) ? 'relation' : 'fact') : e.t === 'procedure' ? 'lesson' : 'self'
+  return {
+    id: e.id,
+    kind,
+    subject: e.t === 'self' ? 'self' : subjectOf(text),
+    claim: text,
+    attitude: null,
+    tags: [],
+    evidence: Array.isArray(e.evidence) ? e.evidence.map(String) : [],
+    evidenceMode: 'lines', // 旧格式：提示词行号，无法回溯到 episode
+    confidence: Number(e.confidence ?? 0.5),
+    reinforcements: reinforces.get(e.id) ?? 0,
+    status: e.status ?? 'active',
+    createdAt: e.ts,
+    affectPeak: null,
+    affectAtWrite: null,
+    by: null,
+    supersedes: null,
+  }
+}
+
+/** 旧 episode → turn 记录视图。 */
+function legacyTurnView(e) {
+  const note = typeof e.note === 'string' ? e.note : ''
+  return {
+    id: e.id,
+    occurredAt: e.ts,
+    neutral: note,
+    her: [],
+    tags: [],
+    affectPeak: null,
+    salience: Number(e.salience ?? 0),
+    hits: { considered: 0, used: 0 },
+    summaryState: note ? 'neutral' : 'none',
+    scope: null,
+    rawText: null,
+    legacy: true,
+  }
+}
+
+/** 有没有另一个活着的进程也在写这只鱼（双写会让一个人变成两个）。 */
+export function otherWriter(dir) {
+  try {
+    const o = JSON.parse(fs.readFileSync(path.join(dir, '.writer.lock'), 'utf8'))
+    const pid = Number(o?.pid)
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return null
+    try {
+      process.kill(pid, 0)
+      return { pid, at: Number(o?.at) || 0 }
+    } catch (e) {
+      return e?.code === 'EPERM' ? { pid, at: Number(o?.at) || 0 } : null
+    }
+  } catch {
+    return null
+  }
+}
+
+/** 新结构：账本投影 → 设置页视图（字段名与前端约定一致）。 */
+function newDetail(events, cfg, dir) {
+  const v = buildView(events)
+  const turns = v.turns
+    .slice()
+    .reverse()
+    .map((t) => ({
+      id: t.id,
+      occurredAt: t.ts,
+      neutral: t.neutral,
+      her: t.her,
+      tags: t.tags,
+      affectPeak: t.affectPeak,
+      salience: t.salience,
+      hits: t.hits,
+      summaryState: t.summaryState,
+      scope: t.scope,
+      rawText: t.note,
+      legacy: false,
+    }))
+  const memories = v.memories.map((m) => ({ ...m, evidenceMode: 'turns' }))
+
+  const byKind = { fact: 0, lesson: 0, relation: 0, self: 0 }
+  let active = 0
+  let retired = 0
+  for (const m of memories) {
+    if (byKind[m.kind] !== undefined) byKind[m.kind] += 1
+    if (m.status === 'retired') retired += 1
+    else active += 1
+  }
+
+  memories.sort((a, b) => (a.status === b.status ? (b.createdAt || 0) - (a.createdAt || 0) : a.status === 'retired' ? 1 : -1))
+
+  return {
+    view: 'new',
+    config: cfg.memory ?? null,
+    stats: {
+      events: events.length,
+      turnTotal: v.turns.length,
+      memoryTotal: memories.length,
+      active,
+      retired,
+      byKind,
+      pending: Math.max(0, v.turns.length - v.watermark),
+      watermark: v.watermark,
+      lock: dir ? otherWriter(dir) : null,
+    },
+    memories: memories.slice(0, 1000),
+    turns: turns.slice(0, 500),
+  }
+}
+
+/** 旧结构：只有 episode / semantic / procedure 时，映射成同一套视图（明确标注是旧格式）。 */
+function legacyDetail(events, cfg) {
+  const reinforces = new Map()
+  for (const e of events) if (e.t === 'reinforce' && e.ref) reinforces.set(e.ref, (reinforces.get(e.ref) || 0) + 1)
+
+  const memories = []
+  const turns = []
+  for (const e of events) {
+    if (e.t === 'semantic' || e.t === 'procedure' || e.t === 'self') memories.push(legacyClaimView(e, reinforces))
+    else if (e.t === 'episode') turns.push(legacyTurnView(e))
+  }
+
+  const byKind = { fact: 0, lesson: 0, relation: 0, self: 0 }
+  let active = 0
+  let retired = 0
+  for (const m of memories) {
+    if (byKind[m.kind] !== undefined) byKind[m.kind] += 1
+    if (m.status === 'retired') retired += 1
+    else active += 1
+  }
+
+  memories.sort((a, b) => (a.status === b.status ? (b.createdAt || 0) - (a.createdAt || 0) : a.status === 'retired' ? 1 : -1))
+  turns.sort((a, b) => (b.occurredAt || 0) - (a.occurredAt || 0))
+
+  return {
+    view: 'legacy',
+    config: cfg.memory ?? null,
+    stats: {
+      events: events.length,
+      turnTotal: turns.length,
+      memoryTotal: memories.length,
+      active,
+      retired,
+      byKind,
+      // 旧结构没有水位线概念，不假装有待整理
+      pending: null,
+    },
+    memories: memories.slice(0, 1000),
+    turns: turns.slice(0, 500),
+  }
+}
+
+/**
+ * 记忆详情视图：配置之外的一切。
+ * 新结构（turn / merged）存在时优先用它；否则把旧的 episode / semantic / procedure 映射过来。
+ */
+export function memoryDetail(creature, cfg) {
+  const events = creature.store.readEvents()
+  const hasNew = events.some((e) => e.t === 'turn' || e.t === 'merged')
+  return hasNew ? newDetail(events, cfg, creature.store.dir) : legacyDetail(events, cfg)
+}
+
+
 export function uiConfigPath(stateDir) {
   return path.join(stateDir, 'ui-config.json')
+}
+
+/** 读-改-写 UI 配置（保留不认识的键，避免存记忆配置时把成长率冲掉）。 */
+export function saveUiConfig(stateDir, patch) {
+  let cur = {}
+  try { cur = JSON.parse(fs.readFileSync(uiConfigPath(stateDir), 'utf8')) } catch { /* 首次 */ }
+  const next = { ...(cur && typeof cur === 'object' ? cur : {}), ...patch }
+  fs.writeFileSync(uiConfigPath(stateDir), JSON.stringify(next, null, 2))
+  return next
 }
 
 /** seed 是否被这次请求改动（纯函数，便于测试）。 */
@@ -67,7 +288,20 @@ export function createUiRoute(ctx, cfg, binding, host) {
   function fishView(c, sessions) {
     const affect = c.fold().affect
     const events = c.store.readEvents()
-    const memory = c.memorySummary(cfg.growth)
+    const mv = memoryDetail(c, cfg)
+    const rank = (list) => list
+      .filter((m) => m.status === 'active')
+      .sort((a, b) => (b.reinforcements - a.reinforcements) || (b.confidence - a.confidence))
+    const memory = {
+      name: c.meta.name && !c.meta.name.startsWith('fish-') ? c.meta.name : null,
+      semantics: rank(mv.memories.filter((m) => m.kind === 'fact' || m.kind === 'relation')).slice(0, 3).map((m) => m.claim),
+      procedures: rank(mv.memories.filter((m) => m.kind === 'lesson')).slice(0, 2).map((m) => m.claim),
+      self: rank(mv.memories.filter((m) => m.kind === 'self')).slice(0, 2).map((m) => m.claim),
+      commitments: c.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text),
+      activity: c.currentActivity(cfg.growth),
+      folded: mv.stats.retired,
+      requests: c.requestDigest(),
+    }
     return {
       id: c.meta.creatureId,
       name: c.meta.name,
@@ -76,7 +310,7 @@ export function createUiRoute(ctx, cfg, binding, host) {
       occupancy: c.meta.occupancy
         ? { ...c.meta.occupancy, workspace: c.meta.occupancy.kind === 'session' ? (c.meta.occupancy.workspace || (sessions || []).find(s => s.id === c.meta.occupancy.id)?.workspace || '') : undefined }
         : null,
-      episodes: events.filter(e => e.t === 'episode').length,
+      episodes: events.filter((e) => e.t === 'episode' || e.t === 'turn').length,
       affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
       memory,
       pendingRequests: c.pendingRequests(),
@@ -106,7 +340,7 @@ export function createUiRoute(ctx, cfg, binding, host) {
     return {
       born: fish.some(f => f.episodes > 0),
       scopes,
-      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
+      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled, memory: cfg.memory },
       fish,
     }
   }
@@ -200,12 +434,28 @@ export function createUiRoute(ctx, cfg, binding, host) {
             }
             if (action === 'diary' && req.method === 'GET') return send(res, { ok: true, diary: c.diaries(30) })
             if (action === 'notes' && req.method === 'GET') return send(res, { ok: true, notes: c.notes(30) })
+            if (action === 'memory' && req.method === 'GET' && parts.length === 3) return send(res, { ok: true, ...memoryDetail(c, cfg) })
             if (action === 'requests' && req.method === 'GET') return send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
             if (action === 'requests' && parts.length >= 5 && parts[4] === 'answer' && req.method === 'POST') {
               const body = JSON.parse(await readBody(req) || '{}')
               if (body.answer !== 'yes' && body.answer !== 'no') return send(res, { ok: false, error: 'answer 只能是 yes 或 no' }, 400)
               c.answerRequest(parts[3], body.answer)
               return send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
+            }
+          }
+
+          // —— 记忆配置（全局；改的是她的记忆行为，不是单个会话） ——
+          if (parts[0] === 'memory' && parts[1] === 'config') {
+            if (req.method === 'GET') return send(res, { ok: true, config: cfg.memory })
+            if (req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              const merged = { ...cfg.memory, ...pickMemoryConfig(body) }
+              const errors = validateMemoryConfig(merged)
+              if (errors.length) return send(res, { ok: false, error: errors.join('；') }, 400)
+              // 再走一次归一化：钳制越界值，补齐缺失键
+              cfg.memory = normalizeConfig({ ...cfg, memory: merged }).memory
+              saveUiConfig(stateDir, { memory: cfg.memory })
+              return send(res, { ok: true, config: cfg.memory })
             }
           }
 
@@ -217,7 +467,7 @@ export function createUiRoute(ctx, cfg, binding, host) {
 
           // —— 兼容旧路径 ——
           if (sub === '/state' && req.method === 'GET') return send(res, stateView())
-          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null })
+          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory })
           if (sub === '/config' && req.method === 'POST') {
             const body = JSON.parse(await readBody(req) || '{}')
             const ui = mergeUiConfig({}, body)
@@ -225,10 +475,10 @@ export function createUiRoute(ctx, cfg, binding, host) {
             if (stateView().born && seedChanged(cfg.seed, ui.seed)) {
               return send(res, { ok: false, error: '她已经出生了，来历不能再改（历史会被铭记，只能说服不能修改）' }, 409)
             }
-            fs.writeFileSync(uiConfigPath(stateDir), JSON.stringify({ growth: ui.growth, seed: ui.seed ?? null }, null, 2))
+            saveUiConfig(stateDir, { growth: ui.growth, seed: ui.seed ?? null })
             if (typeof ui.growth === 'number') cfg.growth = ui.growth
             if (ui.seed && !stateView().born) cfg.seed = ui.seed
-            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null })
+            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory })
           }
 
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })

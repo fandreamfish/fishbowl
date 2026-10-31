@@ -8,8 +8,14 @@
  *   "拒绝，理由 null"，整条工具调用变成 `Error: null`（真机上踩过：
  *   插件一启用所有工具全灭）。所以放行一律 return undefined。
  *
+ * 审批策略是 never 时不能 ask（0.2.1-rc.5 实测）：宿主会把这次 ask 直接判成
+ * rejected，工具结果写成 `Error: the user rejected tool "pwsh"`——鱼会以为是他拒的，
+ * 甚至为此跟他争。没人能回答的确认，不如不问。
+ *
  * 决策函数是纯函数，可独立测试；宿主回调一律 try/catch 并回退放行。
  */
+import fs from 'node:fs'
+import path from 'node:path'
 
 /** @param {import('../../src/core/types.ts').Bias} bias */
 export function verifyDecision(bias, toolName, cfg) {
@@ -38,6 +44,17 @@ export function refuseReason(bias, toolName, cfg) {
  */
 export function guardVerdict(reason) {
   return reason === null || reason === undefined ? undefined : reason
+}
+
+/**
+ * 这次 ask 到底问不问得出来。
+ * 审批策略是 never 时，宿主不弹窗、直接判 rejected——问了只会让工具被挡，
+ * 而且结果写成「用户拒绝」，等于把一次策略拦截伪装成一次人际拒绝。
+ */
+export function askableDecision(decision, approvalPolicy) {
+  if (!decision) return null
+  if (approvalPolicy === 'never') return null
+  return decision
 }
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
@@ -69,12 +86,31 @@ export function createConstraints(ctx, binding, cfg, host) {
       if (!name) return next()
       const dec = verifyDecision(binding.biasFor(sid, 5000, workspaceOfExec(exec)), name, cfg)
       if (!dec) return next()
-      return dec
+      const policy = typeof host.approvalPolicy === 'function' ? host.approvalPolicy(exec?.agent?.session) : null
+      const ask = askableDecision(dec, policy)
+      if (!ask) {
+        // 没人能回答这次确认：不问了，让工具照常走（策略 never 本身就是"别问我"）
+        if (policy === 'never') noteUnanswerableAsk(sid, name)
+        return next()
+      }
+      return ask
     } catch {
       return typeof next === 'function' ? next() : undefined
     }
   })
   if (off) disposers.push(off)
+
+  let warned = false
+  /** 只记一次：策略关掉审批时，「先确认再动」这个倾向暂时失效。 */
+  function noteUnanswerableAsk(sessionId, toolName) {
+    if (warned) return
+    warned = true
+    try {
+      fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
+        ts: Date.now(), sessionId, warn: `ask skipped: approval policy is "never"（${toolName} 直接执行）`,
+      }) + '\n')
+    } catch { /* 记不下来也只能算 */ }
+  }
 
   return () => {
     for (const d of disposers) { try { d() } catch { /* 尽力清理 */ } }

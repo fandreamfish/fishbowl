@@ -10,12 +10,16 @@ import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
-import { guardVerdict, refuseReason, verifyDecision } from '../lib/constraints.js'
+import { guardVerdict, refuseReason, verifyDecision, askableDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
-import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
+import { mergeUiConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
+import { createMemoryTool, formatHit } from '../memory/tool.js'
+import { createCollector } from '../lib/collector.js'
+import { Creature } from '../../../src/core/creature.ts'
+import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
 import { matchClaims } from '../../../src/core/recall.ts'
@@ -370,5 +374,127 @@ check('按话题翻原文', shared.episodeMatches('我几点起', 2).length >= 1
 check('无关话题翻不到', shared.episodeMatches('量子力学', 2).length === 0)
 check('最近对话渲染', recentBlock([{ ts: Date.now(), text: 'abc' }]).includes('abc'))
 check('最近对话有上限', recentBlock(Array.from({ length: 50 }, (_, i) => ({ ts: Date.now(), text: 'x'.repeat(200) + i })), 800).length <= 900)
+
+console.log('== M17：记忆配置 ==')
+const goodCfg = normalizeConfig({}).memory
+check('默认配置本身合法', validateMemoryConfig(goodCfg).length === 0, JSON.stringify(validateMemoryConfig(goodCfg)))
+check('整理阈值不能小于记录间隔', validateMemoryConfig({ ...goodCfg, turnsPerRecord: 5, consolidateCap: 3 }).length === 1)
+check('召回池装不下注入条数 → 报错', validateMemoryConfig({ ...goodCfg, recallPool: 5, memoryRatio: 8, turnRatio: 4 }).length === 1)
+check('两个配比都是 0 → 报错', validateMemoryConfig({ ...goodCfg, memoryRatio: 0, turnRatio: 0 }).length === 1)
+check('空标签词表 → 报错', validateMemoryConfig({ ...goodCfg, tags: [] }).length === 1)
+check('pick 只认认识的键', JSON.stringify(pickMemoryConfig({ turnsPerRecord: 2, bogus: 1, tags: [' 工作 ', ''] })) === JSON.stringify({ turnsPerRecord: 2, tags: ['工作'] }))
+check('越界值被钳回范围', normalizeConfig({ memory: { turnsPerRecord: 99 } }).memory.turnsPerRecord === 20
+  && normalizeConfig({ memory: { injectBudget: 1 } }).memory.injectBudget === 300)
+
+console.log('== M17：记忆详情（旧数据兼容映射） ==')
+check('主语：关于他', subjectOf('用户的生日是 5 月 21 日') === 'user')
+check('主语：关于我', subjectOf('AI 给自己取名大肥鱼') === 'self')
+check('主语：关于我们', subjectOf('我们之间的信任变少了') === 'between')
+check('主语：关于世界', subjectOf('这个项目用 TS 写') === 'world')
+
+const memDir = path.join(stateDir, 'mem-fixture')
+fs.rmSync(memDir, { recursive: true, force: true })
+const memFish = Creature.create(memDir, {
+  schemaVersion: 1,
+  creatureId: 'mem-fixture',
+  name: '测试鱼',
+  bornAt: new Date(0).toISOString(),
+  timezone: 'Asia/Shanghai',
+  model: { id: 'test', pinned: true },
+  temperament: DEFAULT_TEMPERAMENT,
+})
+memFish.recordEpisode('turn', { goalCongruence: -0.5, agency: 0.5, certainty: 0.5, normViolation: 0, relationalImpact: -0.3, stake: 0.6, attribution: 'other' }, 'user: 这个方案不行\nassistant: 我改。')
+memFish.recordSemantic('用户讨厌被当成工具人', ['1', '2'], 0.8)
+memFish.recordProcedure('他抱怨方案时', '先问哪里不对再改', ['2'], 0.7)
+const semEv = memFish.store.readEvents().find((e) => e.t === 'semantic')
+if (semEv) memFish.recordReinforce(semEv.id)
+const memView = memoryDetail(memFish, cfg)
+check('旧数据 → legacy 视图', memView.view === 'legacy')
+check('episode 映射成轮次记录', memView.stats.turnTotal === 1)
+check('semantic + procedure → 两条记忆', memView.stats.memoryTotal === 2)
+check('reinforce 计入提及次数', memView.memories.some((m) => m.reinforcements === 1))
+check('证据标记为行号（无法回溯）', memView.memories.every((m) => m.evidenceMode === 'lines'))
+check('旧数据不假装有待整理', memView.stats.pending === null)
+check('按类型计数正确', memView.stats.byKind.fact === 1 && memView.stats.byKind.lesson === 1)
+check('配置随详情一起返回', !!memView.config && memView.config.consolidateCap === goodCfg.consolidateCap)
+
+console.log('== M17：memory_search 工具 ==')
+const emptyMem = () => ({ search: () => [], searchHybrid: async () => [], recordHit: () => {} })
+const tool = createMemoryTool({ resolve: () => null }, cfg, emptyMem)
+check('工具名与参数', tool.name === 'memory_search' && tool.parameters.required[0] === 'query')
+check('没有会话 → 明确说翻不了', (await tool.execute({ query: 'x' }, {})).includes('翻不了'))
+check('没有鱼住 → 明确说没记忆', (await tool.execute({ query: 'x' }, { agent: { session: { id: 's1' } } })).includes('没有鱼住'))
+
+const occupant = { resolve: () => ({ meta: { creatureId: 'c1' } }) }
+const toolEmpty = createMemoryTool(occupant, cfg, emptyMem)
+check('找不到 → 如实说没翻到', (await toolEmpty.execute({ query: '量子' }, { agent: { session: { id: 's1' } } })).includes('没翻到'))
+
+const hits = [{
+  kind: 'memory',
+  id: 'm1',
+  text: '他讨厌被当成工具人',
+  record: { kind: 'fact', claim: '他讨厌被当成工具人', evidence: ['a', 'b'], attitude: '有点心疼' },
+}]
+const toolHit = createMemoryTool(occupant, cfg, () => ({ search: () => hits, searchHybrid: async () => hits, recordHit: () => {} }))
+const out = await toolHit.execute({ query: '工具' }, { agent: { session: { id: 's1' } } })
+check('命中 → 结论 + 证据数 + 态度', out.includes('他讨厌被当成工具人') && out.includes('2 轮') && out.includes('有点心疼'))
+
+const turnLine = formatHit({ kind: 'turn', record: { ts: 0, neutral: '他说了句早', note: 'user: 早\nassistant: 早' } }, 0)
+check('轮次命中给出原话', turnLine.includes('他说了句早') && turnLine.includes('原话'))
+
+console.log('== M17：收集器端到端（scripted，不联网） ==')
+const e2eDir = path.join(stateDir, 'e2e')
+fs.rmSync(e2eDir, { recursive: true, force: true })
+const e2eCfg = normalizeConfig({ stateDir: e2eDir, appraiser: { kind: 'scripted' } })
+const e2eBinding = createBinding(e2eCfg)
+const e2eFish = e2eBinding.birth('端到端鱼', { kind: 'session', id: 'se1', workspace: 'D:\\ws-e2e' })
+let e2eHandler: any = null
+const e2eInjected: string[] = []
+const e2eAgent = { id: 'se1', session: { id: 'se1', header: { cwd: 'D:\\ws-e2e' } } }
+createCollector(null, e2eBinding, e2eCfg, {
+  onSessionEvent: (fn: any) => { e2eHandler = fn; return () => {} },
+  onAgentCreated: () => () => {},
+  agentFor: () => e2eAgent,
+  inject: async (_a: any, msg: any) => { e2eInjected.push(msg.content[0].text) },
+  wake: async () => {},
+  voice: () => {},
+  listAgents: () => [],
+  listScopes: () => ({ workspaces: [], sessions: [] }),
+  registerRoute: () => () => {},
+  guard: () => {},
+  preExecute: () => {},
+  titleOf: () => '',
+  nameScope: () => ({ ok: true }),
+  services: () => ({}),
+} as any)
+const e2eSession = { id: 'se1', header: { cwd: 'D:\\ws-e2e' } }
+e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u1', content: [{ type: 'text', text: '今天下雨了' }] } })
+e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '带伞了吗' }] } } })
+e2eHandler(e2eSession, { type: 'turn/end', data: {} })
+await new Promise((r) => setTimeout(r, 250))
+const e2eEvents = e2eFish.store.readEvents()
+check('一轮结束落了一条 turn（不再写 episode）', e2eEvents.some((e: any) => e.t === 'turn') && !e2eEvents.some((e: any) => e.t === 'episode'))
+check('turn 里存的是完整转录', String(e2eEvents.find((e: any) => e.t === 'turn')?.note ?? '').includes('带伞了吗'))
+check('注入用的是新渲染', e2eInjected.some((t) => t.startsWith('[fishbowl 状态]')))
+check('情绪跟着 turn 重放（valence 有变化）', Math.abs(e2eFish.fold().affect.valence) > 0)
+
+console.log('== M17.1：审批策略 never 时不问 ==')
+const askDec = verifyDecision({ thresholdVerify: 0.9 } as any, 'pwsh', cfg)
+check('高验证门槛 → 本该 ask', askDec?.kind === 'ask')
+check('策略 ask → 照问', askableDecision(askDec, 'ask')?.kind === 'ask')
+check('策略 never → 不问（否则会被自动拒、还写成「用户拒绝」）', askableDecision(askDec, 'never') === null)
+check('策略未知 → 照问（保守）', askableDecision(askDec, null)?.kind === 'ask')
+check('本来就没决定 → null', askableDecision(null, 'ask') === null)
+
+console.log('== M17：双写检测 ==')
+const lockDir = path.join(stateDir, 'lock-probe')
+fs.mkdirSync(lockDir, { recursive: true })
+check('没有锁文件 → 不算双写', otherWriter(lockDir) === null)
+fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: process.pid, at: Date.now() }))
+check('自己持有的锁不算别的写者', otherWriter(lockDir) === null)
+fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: 999999, at: Date.now() }))
+check('死进程的锁不算活着的写者', otherWriter(lockDir) === null)
+fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: process.ppid, at: Date.now() }))
+check('活着的别的进程会被报出来', otherWriter(lockDir)?.pid === process.ppid)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

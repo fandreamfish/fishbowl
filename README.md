@@ -2,44 +2,53 @@
 
 一个"把经历压成倾向"的系统：记忆是原料，人格是轨迹，情绪是决策的实时偏置。
 
+## 文档
+
 | 文件 | 内容 |
 |---|---|
-| [DESIGN.md](DESIGN.md) | 完整设计（公理、状态模型、评价器、情绪、记忆三层、成长率、关系原型、部署与搬迁） |
-| [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单（按本机安装的 0.2.1-rc.3 核实） |
-| [prototype/](prototype) | Python 原型：验证"情绪确实改变了行为"（8/8 通过，已冻结） |
-| [src/](src) | M0：TypeScript 内核移植（纯逻辑、零依赖、Node ≥22.18 直接跑 .ts） |
-| [packages/plugin/](packages/plugin) | M1：DSH 插件（事件收集、异步评价、状态注入、工具约束） |
-
-## 运行
-
-```sh
-node src/test.ts                       # 内核验收：数值与 Python 原型一致 + 可搬迁性验证
-node packages/plugin/test/unit.test.ts # 插件单元测试
-node src/demo.ts                       # 四组剧本演示（输出对齐 Python 原型）
-```
-
-或者双击 `run-test.cmd` / `run-demo.cmd`（自动找 node，找不到用 DSH 自带解释器）。
-
-要求 Node ≥ 22.18（原生类型剥离，无需构建步骤）。类型检查可选：`tsc --noEmit`。
+| [DESIGN.md](DESIGN.md) | 完整设计（公理、状态模型、评价器、情绪、记忆、成长率、关系原型、部署与搬迁） |
+| [docs/MEMORY.md](docs/MEMORY.md) | 记忆系统设计（账本、合并记忆、检索、注入） |
+| [docs/MEMORY-MODULE.md](docs/MEMORY-MODULE.md) | 把记忆抽成独立模块的决策、接口与迁移 |
+| [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
+| [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
+| [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
+| [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
+| [docs/DEPLOY.md](docs/DEPLOY.md) · [docs/CHANNELS.md](docs/CHANNELS.md) · [docs/INTEGRATION.md](docs/INTEGRATION.md) | 部署、通道、联调清单 |
 
 ## 结构
 
 ```
-src/
-  core/
-    types.ts       气质 / 评价 / 情绪 / 偏置 / 事件日志类型
-    engine.ts      评价 → 情绪 → 偏置（纯函数，数值=原型校准版）
-    creature.ts    个体：状态 = f(事件日志, 时间)，投影可重算
-    store.ts       creatures/<id>/ 目录：meta + log.ndjson + projection.json
-    scheduler.ts   清醒节律（时区显式）
-    contact.ts     主动联系限流（取交集）
-  scenarios.ts     脚本化评价（M1 起由异步 LLM 评价替换）
-  test.ts / demo.ts
+src/core/          认知内核：评价→情绪→偏置、事件日志、成长率、住处、节律（纯逻辑，零宿主）
+src/scenarios.ts   脚本化评价（测试/离线用）
+packages/memory/   记忆模块：只追加账本、合并记忆、检索、渲染（纯 TS，可独立使用）
+packages/plugin/   DSH 插件
+  host/dsh.js       唯一碰 DSH 的地方（事件流/注入/唤醒/工具钩子/标题/枚举/HTTP 路由）
+  memory/           记忆模块的进程内实例与 memory_search 工具
+  lib/              回合管道、注入渲染、绑定、声音、约束、设置页后端
+  client.js         设置页前端
+packages/bridge-qq/ QQ 桥（OneBot v11，独立进程，共享同一份个体状态）
+scripts/            CLI 与实验工具；dev/ 调试脚本；smoke/ 冒烟测试
+prototype/          Python 原型（已冻结，8/8 通过）
 ```
 
-## 两个可搬迁性验证（M0 已内置）
+## 运行
+
+```sh
+node src/test.ts                       # 内核验收
+node packages/memory/test/unit.test.ts # 记忆模块
+node packages/plugin/test/unit.test.ts # 插件
+node packages/bridge-qq/test/unit.test.ts
+node scripts/smoke/m7-apply-smoke.ts   # 插件激活冒烟（假宿主）
+node src/demo.ts                       # 四组剧本演示
+```
+
+`npm run test:all` 跑前四套。
+
+要求 Node ≥ 22.18（原生类型剥离，无需构建）。
+
+## 两条可搬迁性不变量
 
 1. 复制 `creatures/<id>/` 目录 → 重开 → 行为一致
-2. 删除 `projection.json` → 全量重放 → 结果一致
+2. 删除投影缓存 → 全量重放 → 结果一致
 
-情绪是纯投影，LLM 的结论（M2 的巩固产物）会落盘进日志——重算情绪、不重算结论。
+情绪是纯投影；记忆结论落盘进账本。重算情绪，不重算结论。

@@ -19,6 +19,8 @@ import { createCollector } from './lib/collector.js'
 import { createConstraints } from './lib/constraints.js'
 import { normalizeConfig } from './lib/config.js'
 import { createWakeLoop } from './lib/life.js'
+import { createMemoryStore } from './memory/store.js'
+import { createMemoryTool } from './memory/tool.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
 import { createDshHost } from './host/dsh.js'
 
@@ -55,12 +57,20 @@ export function apply(ctx, config = {}) {
     }
   }
 
+  // 记忆系统：一个进程内、一只鱼一份；收集器与 memory_search 工具共用
+  const memoryFor = createMemoryStore(cfg)
+
   if (ctx.tools && cfg.applyConstraints) {
     safe('constraints', () => createConstraints(ctx, binding, cfg, host))
   }
 
+  // M17：她自己翻记忆的工具（docs/MEMORY.md §7.4「查阅」通道）
+  if (ctx.tools && cfg.memory?.searchTool !== false) {
+    safe('memory-tool', () => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
+  }
+
   if (ctx.agents) {
-    safe('collector', () => createCollector(ctx, binding, cfg, host))
+    safe('collector', () => createCollector(ctx, binding, cfg, host, memoryFor))
     // M3.0：清醒节律与主动联系（默认关闭）
     safe('wake', () => createWakeLoop(ctx, binding, cfg, host))
   }
@@ -72,5 +82,6 @@ export function apply(ctx, config = {}) {
     for (const d of disposers) {
       try { d() } catch { /* 卸载时尽力清理 */ }
     }
+    try { memoryFor.closeAll?.() } catch { /* 放掉写锁 */ }
   }
 }

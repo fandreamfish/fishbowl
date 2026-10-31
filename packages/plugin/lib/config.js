@@ -1,6 +1,7 @@
 /** 配置归一化：全部带默认值，缺什么补什么。 */
 import os from 'node:os'
 import path from 'node:path'
+import { normalizeMemory } from '../../memory/src/config.ts'
 
 /** @returns {import('./types.js').FishbowlConfig} */
 export function normalizeConfig(raw = {}) {
@@ -39,8 +40,11 @@ export function normalizeConfig(raw = {}) {
 
     transcriptLimit: raw.transcriptLimit || 2400,
 
-    // M2：成长率（分层 g 在 core 里，这里先给全局；M2.3 再分层）
+    // 成长率（分层 g 在 core 里，这里给全局滑块）
     growth: typeof raw.growth === 'number' ? raw.growth : 1,
+
+    // M17：记忆系统（docs/MEMORY.md §7）。默认值与钳制在 packages/memory/src/config.ts，一处维护。
+    memory: normalizeMemory(raw.memory),
 
     // M2.4：关系原型（只影响语域与关系规则，不规定人格）
     relation: { kind: raw.relation?.kind || 'companion' },

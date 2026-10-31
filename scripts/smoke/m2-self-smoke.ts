@@ -4,14 +4,14 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../src/core/consolidation.ts'
-import { Creature } from '../src/core/creature.ts'
-import { salienceOf, toBias } from '../src/core/engine.ts'
-import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../src/core/selfmodel.ts'
-import { DEFAULT_TEMPERAMENT } from '../src/core/types.ts'
-import { createAppraiser } from '../packages/plugin/lib/appraiser.js'
-import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from '../packages/plugin/lib/identity.js'
-import { summaryText } from '../packages/plugin/lib/injector.js'
+import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../src/core/consolidation.ts'
+import { Creature } from '../../src/core/creature.ts'
+import { salienceOf, toBias } from '../../src/core/engine.ts'
+import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../src/core/selfmodel.ts'
+import { DEFAULT_TEMPERAMENT } from '../../src/core/types.ts'
+import { createAppraiser } from '../../packages/plugin/lib/appraiser.js'
+import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from '../../packages/plugin/lib/identity.js'
+import { summaryText } from '../../packages/plugin/lib/injector.js'
 import { chat } from './llm.ts'
 
 const TMP = path.join(process.cwd(), 'm2-tmp')

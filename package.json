@@ -3,12 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "fishbowl cognitive core: appraisal -> affect -> decision bias. Pure logic, zero dependencies.",
+  "description": "fishbowl: memory is the material, personality is the trajectory, emotion is the real-time bias.",
   "engines": { "node": ">=22.18" },
   "scripts": {
     "demo": "node src/demo.ts",
     "test": "node src/test.ts",
+    "test:memory": "node packages/memory/test/unit.test.ts",
     "test:plugin": "node packages/plugin/test/unit.test.ts",
-    "test:all": "node src/test.ts && node packages/plugin/test/unit.test.ts"
+    "test:bridge": "node packages/bridge-qq/test/unit.test.ts",
+    "test:all": "node src/test.ts && node packages/memory/test/unit.test.ts && node packages/plugin/test/unit.test.ts && node packages/bridge-qq/test/unit.test.ts",
+    "smoke": "node scripts/smoke/m7-apply-smoke.ts"
   }
 }

@@ -19,6 +19,8 @@ voice(agent, text)      // 注册该 agent 专属的系统提示段（声音规�
 // 工具（可选）
 guard(fn)               // 单调工具拦截：返回 undefined 放行，返回字符串拒绝
 preExecute(fn)          // 执行前询问：返回 { kind: 'ask', reason } 或 next()
+approvalPolicy(session) // 'ask' | 'never'。never 时 ask 会被直接判 rejected，别问
+registerTool(def)       // 注册模型可见的工具（传注册表认的 JSON Schema 形状）
 
 // 命名（可选）
 titleOf(scope)          // 当前标题（scope: {kind:'session'|'workspace', id}）

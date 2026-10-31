@@ -61,7 +61,8 @@ export class Creature {
   }
 
   private applyEvent(aff: Affect, e: CreatureEvent, t: Temperament): void {
-    if (e.t === 'episode') applyAppraisal(aff, e.appraisal, t)
+    // episode 与 turn 都带 appraisal：前者是旧格式，后者是记忆系统的记录
+    if ((e.t === 'episode' || e.t === 'turn') && e.appraisal) applyAppraisal(aff, e.appraisal, t)
     else if (e.t === 'absence') applyAbsence(aff, e.wakingHours)
     else if (e.t === 'contact') applyContact(aff, e.relief)
     else if (e.t === 'repair') applyRepair(aff, e.amount)
@@ -324,19 +325,19 @@ export class Creature {
 
   /** 最近说过的话（原文，按时间正序）：跨会话共享同一份。 */
   recentDialog(limit = 6): { ts: number; text: string }[] {
-    return this.store
-      .readEvents()
-      .filter((e): e is Extract<CreatureEvent, { t: 'episode' }> => e.t === 'episode' && typeof e.note === 'string')
-      .slice(-limit)
-      .map(e => ({ ts: e.ts, text: String(e.note) }))
+    const out: { ts: number; text: string }[] = []
+    for (const e of this.store.readEvents()) {
+      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') out.push({ ts: e.ts, text: e.note })
+    }
+    return out.slice(-limit)
   }
 
   /** 按话题翻原始对话（整个历史，不限时间）。 */
   episodeMatches(text: string, limit = 3): { ts: number; text: string; score: number }[] {
-    const items = this.store
-      .readEvents()
-      .filter((e): e is Extract<CreatureEvent, { t: 'episode' }> => e.t === 'episode' && typeof e.note === 'string')
-      .map(e => ({ ts: e.ts, text: String(e.note) }))
+    const items: { ts: number; text: string }[] = []
+    for (const e of this.store.readEvents()) {
+      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') items.push({ ts: e.ts, text: e.note })
+    }
     return matchTexts(items, text, limit)
   }
   /** 回忆（M6）：按重量翻出记忆，含已折叠的旧事。 */

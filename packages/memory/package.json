@@ -1,0 +1,24 @@
+{
+  "name": "@local/fishbowl-memory",
+  "version": "0.1.0",
+  "description": "fishbowl memory: append-only ledger, merged memories, retrieval and rendering. Pure TypeScript, no host dependency.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./config": "./src/config.ts",
+    "./memory": "./src/memory.ts",
+    "./records": "./src/records.ts",
+    "./render": "./src/render.ts",
+    "./recall": "./src/recall.ts",
+    "./embed": "./src/embed.ts"
+  },
+  "files": [
+    "src/**/*.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node test/unit.test.ts"
+  },
+  "engines": { "node": ">=22.18" }
+}
