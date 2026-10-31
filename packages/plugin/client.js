@@ -201,8 +201,20 @@ function makeFactory() {
           children: label,
         })
         const roomsOf = (w) => sessions.filter((s2) => (s2.workspace || '') === (w || ''))
-        const wsBlocked = (w) => !!(occupiedWs[w] || sessInWs[w])
-        const wsWhy = (w) => occupiedWs[w] ? '（' + occupiedWs[w] + ' 已住）' : sessInWs[w] ? '（有房间住着 ' + sessInWs[w][0] + '）' : ''
+        // 占用判定要把"自己"排除：这屋子只有她住时，她可以重新选这个屋子
+        const wsOthers = (w) => {
+          const owner = occupiedWs[w]
+          const rooms = (sessInWs[w] || []).filter((n) => n !== f.name)
+          return { owner: owner && owner !== f.name ? owner : null, rooms, mine: owner === f.name }
+        }
+        const wsBlocked = (w) => { const o = wsOthers(w); return !!(o.owner || o.rooms.length) }
+        const wsWhy = (w) => {
+          const o = wsOthers(w)
+          if (o.owner) return '（' + o.owner + ' 已住）'
+          if (o.rooms.length) return '（有房间住着 ' + o.rooms[0] + '）'
+          if (o.mine) return '（你现在住这）'
+          return ''
+        }
 
         const moveModal = moveOpen ? e('div', { style: overlay, onClick: () => { setMoveOpen(false); setPick(null); setPickWs(null); setMoveErr('') }, children: [
           e('div', { style: modal, onClick: (ev) => ev.stopPropagation(), children: [
