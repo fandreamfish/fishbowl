@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { CONSOLIDATION_SYSTEM_PROMPT, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { salienceOf, toBias } from '../../../src/core/engine.ts'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
@@ -40,15 +40,21 @@ export function createCollector(ctx, binding, cfg) {
     bufferFor(sessionId).items.push({ role, text })
   }
 
-  /** 巩固：把最近的转录压成语义与教训，落盘为事件。 */
+  /** 巩固：把最近的转录压成语义与教训，落盘为事件（带去重与冷却）。 */
   async function consolidate(sessionId, creature) {
     try {
       const events = creature.store.readEvents()
       const episodes = events.filter((e) => e.t === 'episode').slice(-8)
       if (episodes.length < 3) return
+      const existing = creature.memorySummary()
+      const known = [
+        '你已经记住的：',
+        ...existing.semantics.map((c) => `- 事实: ${c}`),
+        ...existing.procedures.map((c) => `- 教训: ${c}`),
+      ].join('\n')
       const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
-      const raw = await callLLM(cfg, CONSOLIDATION_SYSTEM_PROMPT, lines, { maxTokens: 600 })
-      const parsed = parseConsolidation(raw)
+      const raw = await callLLM(cfg, CONSOLIDATION_SYSTEM_PROMPT, `${known}\n\n最近对话：\n${lines}`, { maxTokens: 600 })
+      const parsed = dedupeConsolidation(parseConsolidation(raw), existing)
       const ts = Date.now()
       for (const s of parsed.semantics) creature.recordSemantic(s.claim, s.evidence, s.confidence, ts)
       for (const p of parsed.procedures) creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
@@ -100,13 +106,14 @@ export function createCollector(ctx, binding, cfg) {
       })
 
       // —— M2：巩固与身份（异步，失败不影响主流程） ——
-      const cnt = consolidating.get(session.id) ?? { episodesSince: 0, salienceSince: 0 }
+      const cnt = consolidating.get(session.id) ?? { episodesSince: 0, salienceSince: 0, sinceLast: 99 }
       cnt.episodesSince += 1
       cnt.salienceSince += salienceOf(a)
+      cnt.sinceLast += 1
       consolidating.set(session.id, cnt)
       if (cfg.appraiser.kind === 'deepseek') {
-        if (shouldConsolidate({ episodesSince: cnt.episodesSince, salienceSince: cnt.salienceSince, g: cfg.growth })) {
-          consolidating.set(session.id, { episodesSince: 0, salienceSince: 0 })
+        if (shouldConsolidate({ episodesSince: cnt.episodesSince, salienceSince: cnt.salienceSince, sinceLast: cnt.sinceLast, g: cfg.growth })) {
+          consolidating.set(session.id, { episodesSince: 0, salienceSince: 0, sinceLast: 0 })
           void consolidate(session.id, creature)
         }
         if (IDENTITY_RE.test(transcript)) {

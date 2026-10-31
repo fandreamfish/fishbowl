@@ -4,9 +4,10 @@
  * 设计原则：巩固产物必须落盘（重算会得到不同的东西），情绪才是重算的。
  */
 
-/** 触发规则：证据量达到阈值（g 越大越频繁）。 */
-export function shouldConsolidate(opts: { episodesSince: number; salienceSince: number; g: number }): boolean {
+/** 触发规则：证据量达到阈值（g 越大越频繁），且有冷却期（刚巩固过不重复触发）。 */
+export function shouldConsolidate(opts: { episodesSince: number; salienceSince: number; sinceLast: number; g: number }): boolean {
   const g = Math.max(opts.g, 0.1)
+  if (opts.sinceLast < 2) return false // 冷却：至少隔 2 轮
   return opts.episodesSince >= 5 / g || opts.salienceSince >= 0.6 / g
 }
 
@@ -21,6 +22,7 @@ export const CONSOLIDATION_SYSTEM_PROMPT = [
   '- claim 是关于"他（用户）"、"我（AI）"或"我们之间"的稳定事实、偏好或期待，不是流水账。',
   '- evidence 用行号指证；一条 claim 至少 2 个证据行，除非单一事件极其显著。',
   '- procedure 是"当 X 时，先做 Y"的可执行教训。',
+  '- 输入里会列出"你已经记住的"：已有的事实不要重复输出，只有新事实或需要修正的才输出。',
   '- 没有可靠材料就输出空数组，禁止编造。总数 semantics ≤ 3，procedures ≤ 2。',
   '- 不要输出 JSON 以外的任何内容。',
 ].join('\n')
@@ -59,5 +61,19 @@ export function parseConsolidation(text: string): { semantics: ParsedSemantic[];
     return { semantics, procedures }
   } catch {
     return { semantics: [], procedures: [] }
+  }
+}
+
+/**
+ * 本地去重（LLM 不听话时的第二道闸）：
+ * 与已有记忆完全相同的 claim / 教训不再落盘。
+ */
+export function dedupeConsolidation(
+  parsed: { semantics: ParsedSemantic[]; procedures: ParsedProcedure[] },
+  existing: { semantics: string[]; procedures: string[] },
+): { semantics: ParsedSemantic[]; procedures: ParsedProcedure[] } {
+  return {
+    semantics: parsed.semantics.filter(s => !existing.semantics.includes(s.claim)),
+    procedures: parsed.procedures.filter(p => !existing.procedures.includes(`${p.trigger} → ${p.action}`)),
   }
 }

@@ -12,6 +12,7 @@ __pycache__/
 test-tmp/
 demo-tmp/
 ab-tmp/
+m2-tmp/
 
 # A/B 实验数据（本地产物，不进仓库）
 ab-results/

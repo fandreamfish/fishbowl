@@ -1,7 +1,7 @@
 /** 插件单元测试：评价器、注入摘要、约束决策、会话↔个体绑定。 */
 import fs from 'node:fs'
 import path from 'node:path'
-import { parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
@@ -79,10 +79,16 @@ check('旋钮 0.1 级变化触发新指纹', stateKey({ ...baseBias, verbosity: 
 check('愧疚出现触发新指纹', stateKey(baseBias, { ...baseAff, guilt: 0.6 }) !== stateKey(baseBias, baseAff))
 
 console.log('== M2：巩固与身份 ==')
-check('g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, g: 1 }))
-check('g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, g: 1 }))
-check('g=2：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, g: 2 }))
-check('高显著度单轮触发', shouldConsolidate({ episodesSince: 1, salienceSince: 0.7, g: 1 }))
+check('g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, sinceLast: 99, g: 1 }))
+check('g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, sinceLast: 99, g: 1 }))
+check('g=2：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, sinceLast: 99, g: 2 }))
+check('高显著度单轮触发', shouldConsolidate({ episodesSince: 1, salienceSince: 0.7, sinceLast: 99, g: 1 }))
+check('冷却期：刚巩固过不触发', !shouldConsolidate({ episodesSince: 5, salienceSince: 1, sinceLast: 1, g: 1 }))
+const dc = dedupeConsolidation(
+  parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1"],"confidence":0.8}],"procedures":[]}'),
+  { semantics: ['他喜欢猫'], procedures: [] },
+)
+check('去重：已有事实不再落盘', dc.semantics.length === 0)
 const pc = parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1","2"],"confidence":0.8}],"procedures":[{"trigger":"他说不行","action":"先问清楚","evidence":["3"],"confidence":0.7}]}')
 check('巩固解析：语义与教训', pc.semantics.length === 1 && pc.procedures.length === 1 && pc.semantics[0].claim === '他喜欢猫')
 check('巩固解析：垃圾输入得空数组', parseConsolidation('垃圾').semantics.length === 0)

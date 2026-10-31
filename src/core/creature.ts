@@ -106,11 +106,13 @@ export class Creature {
     const events = this.store.readEvents()
     const semantics = events
       .filter((e): e is Extract<CreatureEvent, { t: 'semantic' }> => e.t === 'semantic' && e.status === 'active')
-      .slice(-2)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 2)
       .map(e => e.claim)
     const procedures = events
       .filter((e): e is Extract<CreatureEvent, { t: 'procedure' }> => e.t === 'procedure' && e.status === 'active')
-      .slice(-1)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 1)
       .map(e => `${e.trigger} → ${e.action}`)
     return { name, semantics, procedures }
   }
