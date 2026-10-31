@@ -19,60 +19,8 @@ import { createWakeLoop } from './lib/life.js'
 
 export const inject = ['tools', 'agents']
 
-/**
- * Config schema：设置页据此自动渲染配置编辑器。
- * 用动态 import + 失败降级：schemastery 解析不到时插件照常工作，
- * 只是没有配置编辑器（改用 cordis.patch.yml 手动配置）。
- */
-let Schema = null
-try {
-  ({ default: Schema } = await import('@deepseek-ai/schemastery'))
-} catch { /* 没有编辑器也不影响功能 */ }
-
-function buildConfig() {
-  return Schema.object({
-    timezone: Schema.string().description('时区（显式配置，不用系统时区）').default('Asia/Shanghai'),
-    model: Schema.string().description('绑定的模型（换脑必须显式）').default('deepseek-chat'),
-    growth: Schema.number().description('成长率滑块：越高学得越快、忘得越快').default(1),
-    control: Schema.boolean().description('A/B 对照组：只记录，不注入不约束').default(false),
-    injectBias: Schema.boolean().description('注入状态摘要').default(true),
-    applyConstraints: Schema.boolean().description('工具约束（ask/拒绝）').default(true),
-    transcriptLimit: Schema.number().description('转录长度上限').default(2400),
-    appraiser: Schema.object({
-      kind: Schema.union(['scripted', 'deepseek']).description('scripted=关键词版（离线）；deepseek=LLM 评价（推荐）').default('scripted'),
-      apiKey: Schema.string().description('DeepSeek API key（只在 deepseek 模式下需要）').default(''),
-      baseUrl: Schema.string().default('https://api.deepseek.com'),
-      model: Schema.string().default('deepseek-chat'),
-    }),
-    relation: Schema.object({
-      kind: Schema.union(['companion', 'friend']).description('关系原型（只影响语域，不规定人格）').default('companion'),
-    }),
-    wake: Schema.object({
-      enabled: Schema.boolean().description('清醒节律与主动联系（先观察后打开）').default(false),
-      activeWindow: Schema.array(Schema.string()).default(['08:00', '23:30']),
-      interval: Schema.object({
-        mode: Schema.union(['fixed', 'random']).default('fixed'),
-        min: Schema.string().default('60m'),
-        max: Schema.string().default(''),
-      }),
-      dwell: Schema.array(Schema.string()).default(['1m', '3m']),
-      idleSkip: Schema.boolean().default(true),
-      stateMultiplier: Schema.object({}).description('活跃/淡出/休眠的节律倍率'),
-    }),
-    contact: Schema.object({
-      window: Schema.array(Schema.string()).default(['09:00', '22:30']),
-      dailyMax: Schema.number().description('每天主动联系上限').default(2),
-      minGap: Schema.string().description('两次之间最短间隔').default('3h'),
-      burst: Schema.object({ max: Schema.number().default(1), per: Schema.string().default('2h') }),
-      requireReason: Schema.boolean().default(true),
-      unansweredStop: Schema.number().default(3),
-    }),
-  })
-}
-
-export const Config = Schema
-  ? (() => { try { return buildConfig() } catch { return undefined } })()
-  : undefined
+// 注意：暂不导出 Config schema（schemastery 在宿主侧连续两轮导致启用失败）。
+// 配置一律走 profile 的 cordis.patch.yml，见 packages/plugin/README.md。
 
 export function apply(ctx, config = {}) {
   const cfg = normalizeConfig(config)
