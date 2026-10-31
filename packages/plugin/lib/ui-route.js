@@ -249,6 +249,19 @@ export function createUiRoute(ctx, cfg, binding) {
                 return send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)
               }
             }
+            if (action === 'name' && req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              const name = String(body.name ?? '').trim()
+              if (!name) return send(res, { ok: false, error: '名字不能为空' }, 400)
+              // 只允许给还没名字的鱼（默认 fish-xxxx）起名一次
+              if (!/^fish-/.test(c.meta.name)) return send(res, { ok: false, error: '名字已经定过了' }, 409)
+              c.recordIdentity(name)
+              return send(res, { ok: true, fish: fishView(c) })
+            }
+            if (action === 'delete' && req.method === 'POST') {
+              binding.remove(parts[1])
+              return send(res, { ok: true })
+            }
             if (action === 'release' && req.method === 'POST') {
               binding.release(parts[1])
               return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })

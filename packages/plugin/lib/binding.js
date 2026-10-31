@@ -125,6 +125,15 @@ export function createBinding(cfg) {
     return c
   }
 
+  /** 放生：把这条鱼连目录一起删掉（不可恢复；调用方负责确认）。 */
+  function remove(creatureId) {
+    const dir = path.join(cfg.stateDir, creatureId)
+    if (!fs.existsSync(path.join(dir, 'meta.json'))) return false
+    cache.delete(creatureId)
+    fs.rmSync(dir, { recursive: true, force: true })
+    return true
+  }
+
   /** 出生：气质随机，不可指定。 */
   function randomTemperament() {
     const rng = mulberry32((Date.now() ^ (Math.random() * 2 ** 31)) >>> 0)
@@ -145,7 +154,7 @@ export function createBinding(cfg) {
     const meta = {
       schemaVersion: 1,
       creatureId: cid,
-      name: cfg.seed?.name || `fish-${cid.slice(0, 8)}`,
+      name: clean,
       bornAt: new Date().toISOString(),
       timezone: cfg.timezone,
       model: { id: cfg.model, pinned: true },
@@ -202,5 +211,5 @@ export function createBinding(cfg) {
   // 兼容：把旧的 bindings.json 迁移成个体自己的住处
   migrateLegacyBindings()
 
-  return { dir: cfg.stateDir, creatureFor: (sid) => occupantOf({ sessionId: sid }), resolve, occupantOf, listCreatures, assign, release, birth, get, conflictFor, biasFor, manages, scopes }
+  return { dir: cfg.stateDir, creatureFor: (sid) => occupantOf({ sessionId: sid }), resolve, occupantOf, listCreatures, assign, release, birth, get, remove, conflictFor, biasFor, manages, scopes }
 }

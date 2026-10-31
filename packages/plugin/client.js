@@ -77,6 +77,8 @@ function makeFactory() {
       const [newOpen, setNewOpen] = useState(false)
       const [newName, setNewName] = useState('')
       const [newErr, setNewErr] = useState('')
+      const [nameInput, setNameInput] = useState('')
+      const [delConfirm, setDelConfirm] = useState(false)
 
       const load = useCallback(async () => {
         try {
@@ -326,8 +328,19 @@ function makeFactory() {
               : e('div', { style: lab, children: '还没有小纸条' }),
           ] }, 'notes'),
         ] }, 'home-root')      } else if (page === 'persona') {
+        const isDefaultName = /^fish-/.test(f.name)
         body = e('div', { children: [
           born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
+          isDefaultName ? e('div', { style: box, children: [
+            e('div', { style: { ...lab, marginBottom: 6 }, children: '这条鱼还没有名字（创建时没写上）。现在给她起一个：' }, 'h'),
+            e('div', { style: { display: 'flex', gap: 8 }, children: [
+              e('input', { style: { ...inp, flex: 1 }, value: nameInput, placeholder: '例：大肥鱼', onInput: (ev) => setNameInput(ev.target.value) }, 'i'),
+              e('button', { style: { ...btnP, padding: '6px 14px', fontSize: 13 }, onClick: () => act(async () => {
+                await postJson(API + '/fish/' + f.id + '/name', { name: nameInput.trim() })
+                setNameInput('')
+              }, '名字定下了') , children: '改名' }, 'ok'),
+            ] }, 'row'),
+          ] }, 'namebox') : null,
           e('div', { style: box, children: [
 
             e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
@@ -347,6 +360,20 @@ function makeFactory() {
               await postJson(API + '/config', body2)
             }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
           ] }, 'act'),
+          e('div', { style: { ...box, marginTop: 4 }, children: [
+            e('div', { style: { ...lab, marginBottom: 6 }, children: '放生会删掉她的全部记忆和日记，不可恢复。' }, 'h'),
+            delConfirm
+              ? e('div', { style: { display: 'flex', gap: 8, alignItems: 'center' }, children: [
+                  e('span', { style: { ...lab, color: 'var(--dsw-alias-danger, #d33)' }, children: '确定？' }, 'q'),
+                  e('button', { style: { ...btnS, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => act(async () => {
+                    await postJson(API + '/fish/' + f.id + '/delete')
+                    setDelConfirm(false)
+                    setView({ level: 'list' })
+                  }, '放生了') , children: '确定放生' }, 'yes'),
+                  e('button', { style: btnS, onClick: () => setDelConfirm(false), children: '算了' }, 'no'),
+                ] }, 'confirm')
+              : e('button', { style: { ...btnS, fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => setDelConfirm(true), children: '放生这条鱼' }, 'del'),
+          ] }, 'danger'),
         ] }, 'persona')
       }
 
