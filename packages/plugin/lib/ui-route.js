@@ -15,7 +15,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { renameScopeAsync } from './rename.js'
+import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 
 const ROUTE = '/fishbowl-ui'
 
@@ -242,8 +242,11 @@ export function createUiRoute(ctx, cfg, binding) {
                 : { kind: 'session', id: String(body.id ?? ''), workspace: body.workspace ? String(body.workspace) : undefined }
               if (!occ.id) return send(res, { ok: false, error: '住处的 id 不能为空' }, 400)
               try {
+                const c0 = binding.get(parts[1])
+                const prev = c0.meta.occupancy
                 binding.assign(parts[1], occ)
-                renameScopeAsync(ctx, occ, binding.get(parts[1]).meta.name)
+                if (prev && (prev.kind !== occ.kind || prev.id !== occ.id)) restoreOriginalAsync(ctx, stateDir, prev)
+                renameScopeAsync(ctx, occ, c0.meta.name)
                 return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
               } catch (e) {
                 return send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)
@@ -259,11 +262,15 @@ export function createUiRoute(ctx, cfg, binding) {
               return send(res, { ok: true, fish: fishView(c) })
             }
             if (action === 'delete' && req.method === 'POST') {
+              const prev = c.meta.occupancy
               binding.remove(parts[1])
+              if (prev) restoreOriginalAsync(ctx, stateDir, prev)
               return send(res, { ok: true })
             }
             if (action === 'release' && req.method === 'POST') {
+              const prev = c.meta.occupancy
               binding.release(parts[1])
+              if (prev) restoreOriginalAsync(ctx, stateDir, prev)
               return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
             }
             if (action === 'diary' && req.method === 'GET') return send(res, { ok: true, diary: c.diaries(30) })

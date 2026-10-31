@@ -17,7 +17,7 @@ import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
 import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
-import { scopeTitle } from '../lib/rename.js'
+import { scopeKey, scopeTitle } from '../lib/rename.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
@@ -336,5 +336,7 @@ console.log('== M9：入住改名 ==')
 check('入住会话 → 名字的房间', scopeTitle('小肥鱼', { kind: 'session', id: 's' }) === '小肥鱼的房间')
 check('入住工作区 → 名字 的屋子', scopeTitle('小肥鱼', { kind: 'workspace', id: 'w' }) === '小肥鱼 的屋子')
 check('没住处 → 空标题', scopeTitle('小肥鱼', null) === '')
+check('住处键：会话', scopeKey({ kind: 'session', id: 's1' }) === 'session:s1')
+check('住处键：工作区', scopeKey({ kind: 'workspace', id: 'D:\\x' }) === 'workspace:D:\\x')
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

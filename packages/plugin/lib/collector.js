@@ -13,7 +13,7 @@ import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
-import { renameScopeAsync } from './rename.js'
+import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
@@ -351,7 +351,11 @@ export function createCollector(ctx, binding, cfg) {
       } catch { /* 声音注册失败不影响功能 */ }
 
       const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
-      if (!creature) return
+      if (!creature) {
+        // 之前住过又搬走了：会话打开时把名字改回原来的
+        restoreOriginalAsync(ctx, cfg.stateDir, { kind: 'session', id: sid })
+        return
+      }
       // 入住时如果会话没开着就改不了名，开房时补一次（「<名字>的房间」）
       if (creature.meta.occupancy) renameScopeAsync(ctx, creature.meta.occupancy, creature.meta.name)
 
