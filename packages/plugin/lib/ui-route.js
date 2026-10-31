@@ -81,10 +81,12 @@ export function createUiRoute(ctx, cfg, binding) {
     })
   }
 
-  const dispose = webServer.register({
-    kind: 'prefix',
-    path: ROUTE,
-    handler: async (req, res) => {
+  let dispose
+  try {
+    dispose = webServer.register({
+      kind: 'prefix',
+      path: ROUTE,
+      handler: async (req, res) => {
       try {
         const url = new URL(req.url ?? '/', 'http://localhost')
         const sub = url.pathname.slice(ROUTE.length)
@@ -109,7 +111,11 @@ export function createUiRoute(ctx, cfg, binding) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' })
         res.end(String(e?.message ?? e))
       }
-    },
-  })
+      },
+    })
+  } catch {
+    // 同一路由被另一个实例注册过（例如条目重复加载）：不影响功能，另一个实例会服务
+    return () => {}
+  }
   return typeof dispose === 'function' ? dispose : () => {}
 }
