@@ -10,7 +10,7 @@ import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
-import { guardVerdict, refuseReason, verifyDecision, askableDecision } from '../lib/constraints.js'
+import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerdict, createConstraints } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
@@ -486,8 +486,38 @@ check('策略 never → 不问（否则会被自动拒、还写成「用户拒�
 check('策略未知 → 照问（保守）', askableDecision(askDec, null)?.kind === 'ask')
 check('本来就没决定 → null', askableDecision(null, 'ask') === null)
 
+console.log('== M17.2：每轮工具预算 ==')
+check('预算内放行', budgetVerdict(1, 3) === null && budgetVerdict(3, 3) === null)
+check('超预算拒绝', typeof budgetVerdict(4, 3) === 'string')
+check('0 = 不限', budgetVerdict(99, 0) === null)
+
+const guardFns: any[] = []
+const limitCfg = normalizeConfig({ stateDir: path.join(stateDir, 'limit-probe'), maxToolCallsPerTurn: 2 })
+const limitBinding = createBinding(limitCfg)
+limitBinding.birth('限额鱼', { kind: 'session', id: 'sl1', workspace: 'D:\\ws-limit' })
+createConstraints(null, limitBinding, limitCfg, {
+  guard: (fn: any) => { guardFns.push(fn); return () => {} },
+  preExecute: () => () => {},
+  onSessionEvent: () => () => {},
+} as any)
+const limitGuard = guardFns[0]
+const limitExec = { agent: { session: { id: 'sl1', header: { cwd: 'D:\\ws-limit' } } }, toolName: 'glob' }
+check('第 1 次放行', limitGuard(limitExec) === undefined)
+check('第 2 次放行', limitGuard(limitExec) === undefined)
+const overBudget = limitGuard(limitExec)
+check('第 3 次被预算拦下', typeof overBudget === 'string' && overBudget.includes('这一轮'))
+check('理由不甩锅给他', !String(overBudget).includes('用户'))
+check('默认不限制（显示问题不该用行为去补）', normalizeConfig({}).maxToolCallsPerTurn === 0)
+check('要限制时按配置生效', normalizeConfig({ maxToolCallsPerTurn: 6 }).maxToolCallsPerTurn === 6)
+
+const freeExec = { agent: { session: { id: 'no-fish-session', header: { cwd: 'D:\\elsewhere' } } }, toolName: 'glob' }
+let freeAllowed = true
+for (let i = 0; i < 10; i++) if (limitGuard(freeExec) !== undefined) freeAllowed = false
+check('没有鱼住的会话不受预算限制', freeAllowed)
+
 console.log('== M17：双写检测 ==')
 const lockDir = path.join(stateDir, 'lock-probe')
+fs.rmSync(lockDir, { recursive: true, force: true })
 fs.mkdirSync(lockDir, { recursive: true })
 check('没有锁文件 → 不算双写', otherWriter(lockDir) === null)
 fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: process.pid, at: Date.now() }))

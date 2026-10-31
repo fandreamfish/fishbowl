@@ -57,18 +57,58 @@ export function askableDecision(decision, approvalPolicy) {
   return decision
 }
 
+/**
+ * 每轮工具预算：一个回合被工具拉成十几步，对话就散了。
+ * 超了直接拒——理由要写清楚：是她这一轮动手次数用完了，不是他拒绝。
+ */
+export function budgetVerdict(count, limit) {
+  if (!limit || limit <= 0) return null
+  if (count <= limit) return null
+  return `fishbowl: 这一轮已经调了 ${limit} 次工具，先把手上的结果说完；还要查就下一轮。`
+}
+
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createConstraints(ctx, binding, cfg, host) {
   host = host ?? createDshHost(ctx, cfg)
   const disposers = []
+  const perTurn = new Map() // sessionId -> 本轮已经调了几次
+
+  // 新的一轮开始，预算归零
+  const offTurn = typeof host.onSessionEvent === 'function'
+    ? host.onSessionEvent((session, event) => {
+      try {
+        if (session && event && event.type === 'turn/start') perTurn.delete(session.id)
+      } catch { /* 计数失败不该影响对话 */ }
+    })
+    : undefined
+  if (offTurn) disposers.push(offTurn)
 
   const guardOff = host.guard?.((exec) => {
       try {
         // rc.5：只有 undefined 是放行；null/false 都会被当成拒绝理由
-        if (cfg.control || cfg.refuseTools.length === 0) return undefined
+        if (cfg.control) return undefined
         const sid = sessionIdOf(exec)
         if (!sid || !binding.manages(sid)) return undefined
-        const reason = refuseReason(binding.biasFor(sid, 5000, workspaceOfExec(exec)), toolNameOf(exec), cfg)
+        const name = toolNameOf(exec)
+        const ws = workspaceOfExec(exec)
+
+        // 只有住着鱼的会话才谈得上「她的预算」——别人的会话一概别管。
+        // 预算默认关（0）：调用次数本身不是问题，嫌吵该改的是显示。
+        if (cfg.maxToolCallsPerTurn > 0) {
+          let occupant = null
+          try {
+            occupant = typeof binding.occupantOf === 'function' ? binding.occupantOf({ sessionId: sid, workspace: ws }) : null
+          } catch { occupant = null }
+          if (occupant) {
+            const n = (perTurn.get(sid) ?? 0) + 1
+            perTurn.set(sid, n)
+            const budget = budgetVerdict(n, cfg.maxToolCallsPerTurn)
+            if (budget) return budget
+          }
+        }
+
+        if (cfg.refuseTools.length === 0) return undefined
+        const reason = refuseReason(binding.biasFor(sid, 5000, ws), name, cfg)
         return guardVerdict(reason)
       } catch {
         return undefined

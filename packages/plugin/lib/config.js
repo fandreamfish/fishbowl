@@ -38,6 +38,12 @@ export function normalizeConfig(raw = {}) {
     refuseTools: Array.isArray(raw.refuseTools) ? raw.refuseTools : [],
     refuseThreshold: typeof raw.refuseThreshold === 'number' ? raw.refuseThreshold : 0.25,
 
+    // 每轮工具调用上限（0 = 不限，默认关）。想限制她一轮动手次数时才打开。
+    maxToolCallsPerTurn: (() => {
+      const n = Number(raw.maxToolCallsPerTurn)
+      return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0
+    })(),
+
     transcriptLimit: raw.transcriptLimit || 2400,
 
     // 成长率（分层 g 在 core 里，这里给全局滑块）
