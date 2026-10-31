@@ -38,7 +38,10 @@ export function uiConfigPath(stateDir) {
 }
 
 export function createUiRoute(ctx, cfg, binding) {
-  if (!ctx.webServer || typeof ctx.webServer.register !== 'function') return () => {}
+  // Cordis：未在 inject 里声明的服务不能直接访问 ctx.webServer；
+  // 用 ctx.get 取可选服务（dsh-pet 同款），没有 webServer 的 profile 也能正常激活。
+  const webServer = typeof ctx.get === 'function' ? ctx.get('webServer') : null
+  if (!webServer || typeof webServer.register !== 'function') return () => {}
   const stateDir = cfg.stateDir
 
   function buildState() {
@@ -78,7 +81,7 @@ export function createUiRoute(ctx, cfg, binding) {
     })
   }
 
-  const dispose = ctx.webServer.register({
+  const dispose = webServer.register({
     kind: 'prefix',
     path: ROUTE,
     handler: async (req, res) => {
