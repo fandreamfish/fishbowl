@@ -189,10 +189,15 @@ function makeFactory() {
               e('div', { style: col, children: [
                 e('div', { style: { ...lab, marginBottom: 6 }, children: '屋子（工作区）' }, 'lw'),
                 ...workspaces.map((w, i) => node(
-                  (pickWs === w ? '▾ ' : '▸ ') + base(w) + wsWhy(w),
+                  (pick && pick.kind === 'workspace' && pick.id === w ? '● ' : pickWs === w ? '▾ ' : '▸ ') + base(w) + wsWhy(w),
                   false,
-                  pickWs === w,
-                  () => { setPickWs(w); setPick(null); setMoveErr('') },
+                  pick && pick.kind === 'workspace' && pick.id === w,
+                  () => {
+                    setMoveErr('')
+                    setPickWs(w)
+                    if (wsBlocked(w)) setPick(null)
+                    else setPick({ kind: 'workspace', id: w })
+                  },
                   'w' + i)),
                 !workspaces.length ? e('div', { style: lab, children: '还没有见过工作区' }, 'nows') : null,
               ] }, 'left'),
@@ -200,11 +205,7 @@ function makeFactory() {
                 e('div', { style: { ...lab, marginBottom: 6 }, children: '房间（会话）' }, 'lr'),
                 pickWs
                   ? e('div', { children: [
-                      node('整个屋子（所有会话）' + (wsBlocked(pickWs) ? wsWhy(pickWs) : (pick && pick.kind === 'workspace' ? '（已选）' : '')),
-                        wsBlocked(pickWs),
-                        !!(pick && pick.kind === 'workspace' && pick.id === pickWs),
-                        () => { setPick({ kind: 'workspace', id: pickWs }); setMoveErr('') },
-                        'all'),
+
                       ...roomsOf(pickWs).map((s2, i) => {
                         const taken = occupiedSess[s2.id]
                         const disabled = !!taken && taken !== f.name
