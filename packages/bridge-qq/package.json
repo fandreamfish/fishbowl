@@ -1,0 +1,7 @@
+{
+  "name": "fishbowl-bridge-qq",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "fishbowl QQ bridge: OneBot v11 client sharing the creature store (single-writer lock)."
+}
