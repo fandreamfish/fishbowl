@@ -179,13 +179,15 @@ export function createBinding(cfg) {
    * 找不到住户时不出生（工具调用不该造鱼），返回中性偏置。
    */
   function biasFor(sessionId, maxAgeMs = 5000, workspace) {
+    // 先查缓存（会话级 key）：工具钩子每次调用都会进来，不能每次都扫目录/开个体
+    const key = `${sessionId}|${workspace ?? ''}`
+    const now = Date.now()
+    const hit = biasCache.get(key)
+    if (hit && now - hit.ts < maxAgeMs) return hit.bias
     const c = occupantOf({ sessionId, workspace })
     if (!c) return { verbosity: 0.5, thresholdRefuse: 0.5, thresholdVerify: 0.5, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
-    const hit = biasCache.get(c.meta.creatureId)
-    const now = Date.now()
-    if (hit && now - hit.ts < maxAgeMs) return hit.bias
     const bias = c.bias()
-    biasCache.set(c.meta.creatureId, { ts: now, bias })
+    biasCache.set(key, { ts: now, bias })
     return bias
   }
 

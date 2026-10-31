@@ -99,7 +99,7 @@ function makeFactory() {
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),
           e('div', { style: { ...rowS, marginTop: 8 }, children: [
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
-            e('button', { style: btnP, onClick: () => act(async () => { await postJson(API + '/fish', {}) }, '接回了一条新的') }, '带一条新的回家'),
+            e('button', { style: btnP, onClick: () => act(async () => { await postJson(API + '/fish', {}) }, '接回了一条新的') , children: '带一条新的回家' }),
           ] }, 'add'),
         ] }, 'root')
       }
@@ -144,7 +144,7 @@ function makeFactory() {
                 e('option', { value: '', children: '选择工作区…' }),
                 ...workspaces.map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
               ] }, 'sel'),
-              e('button', { style: btn, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/occupy', { kind: 'workspace', id: ws }) }, '搬进工作区了') }, '搬进去'),
+              e('button', { style: btn, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/occupy', { kind: 'workspace', id: ws }) }, '搬进工作区了'), children: '搬进去' }),
             ] }, 'w'),
             e('div', { style: { ...lab, marginBottom: 4 }, children: '或只住某个会话（同工作区的其他会话不受影响）' }, 'l2'),
             e('div', { style: { display: 'flex', gap: 8, marginBottom: 10 }, children: [
@@ -155,9 +155,9 @@ function makeFactory() {
               e('button', { style: btn, onClick: () => act(async () => {
                 const hit = sessions.find((s2) => s2.id === sess)
                 await postJson(API + '/fish/' + f.id + '/occupy', { kind: 'session', id: sess, workspace: hit?.workspace })
-              }, '搬进会话了') }, '搬进去'),
+              }, '搬进会话了'), children: '搬进去' }),
             ] }, 's'),
-            e('button', { style: { ...btn, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了，不归任何会话') }, '搬出来（不归任何会话）'),
+            e('button', { style: { ...btn, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了，不归任何会话') , children: '搬出来（不归任何会话）' }),
           ] }, 'home'),
           e('div', { style: { ...lab, fontSize: 12 }, children: '规则：一个工作区只能住一条鱼；住进工作区后，其他鱼进不了它的任何会话。' }, 'rule'),
         ] }, 'home-root')
@@ -181,8 +181,8 @@ function makeFactory() {
                 e('div', { style: { fontSize: 13 }, children: r.text }, 'tx'),
                 r.answer === null
                   ? e('div', { style: { display: 'flex', gap: 8, marginTop: 6 }, children: [
-                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'yes' }) }, '答应了') }, '同意'),
-                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'no' }) }, '拒绝了') }, '不同意'),
+                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'yes' }) }, '答应了') , children: '同意' }),
+                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'no' }) }, '拒绝了') , children: '不同意' }),
                     ] }, 'ans')
                   : e('div', { style: { ...lab, marginTop: 4 }, children: r.answer === 'yes' ? '已同意' : '已拒绝' }, 'done'),
               ] }, 'r'))
@@ -211,7 +211,7 @@ function makeFactory() {
             e('button', { style: btnP, onClick: () => act(async () => {
               const body2 = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
               await postJson(API + '/config', body2)
-            }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效') }, '保存'),
+            }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
           ] }, 'act'),
         ] }, 'persona')
       }
@@ -219,10 +219,10 @@ function makeFactory() {
       return e('div', { style: { fontSize: 13.5, lineHeight: 1.75 }, children: [
         e('div', { style: { ...rowS, marginBottom: 8 }, children: [
           e('div', { style: { fontWeight: 600, fontSize: 15 }, children: f.name }, 'n'),
-          e('button', { style: btnS, onClick: () => setView({ level: 'list' }) }, '← 所有鱼'),
+          e('button', { style: btnS, onClick: () => setView({ level: 'list' }) , children: '← 所有鱼' }),
         ] }, 'hdr'),
         e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }, children: tabs.map(([id, label]) =>
-          e('button', { key: id, style: id === page ? { ...btnS, background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.14))', fontWeight: 600 } : btnS, onClick: () => setPage(id) }, label)) }, 'tabs'),
+          e('button', { key: id, style: id === page ? { ...btnS, background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.14))', fontWeight: 600 } : btnS, onClick: () => setPage(id) , children: label })) }, 'tabs'),
         err ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', marginBottom: 8 }, children: err }, 'err') : null,
         body,
       ] }, 'root')
