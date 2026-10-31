@@ -23,3 +23,5 @@ creatures/
 # 日志与系统文件
 *.log
 .DS_Store
+
+.fish-ref/
