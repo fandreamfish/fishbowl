@@ -19,6 +19,9 @@ import { injectMessage, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
 
+/** 请求预筛：出现这些词才值得一次 LLM 调用。 */
+const REQUEST_CUE = /可以吗|行不行|能不能|要不要|同意|允许|准不准|我想(?:去|要|做|试)|帮我|拜托|征求/
+
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg, host) {
   host = host ?? createDshHost(ctx, cfg)
@@ -214,6 +217,8 @@ export function createCollector(ctx, binding, cfg, host) {
   /** 请求（M7）：一天最多一次、一周最多三次；配额在 journal.js。 */
   async function maybeRequest(sessionId, creature, transcript) {
     try {
+      // 便宜的预筛：没有"征求同意"的迹象就不值得一次 LLM 调用（每轮都调会拖慢主对话）
+      if (!REQUEST_CUE.test(transcript)) return
       const now = Date.now()
       const ask = canAsk(now, creature.requests().map(r => r.ts), cfg.timezone)
       if (!ask.ok) return
