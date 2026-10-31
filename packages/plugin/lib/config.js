@@ -41,6 +41,9 @@ export function normalizeConfig(raw = {}) {
 
     // M2：成长率（分层 g 在 core 里，这里先给全局；M2.3 再分层）
     growth: typeof raw.growth === 'number' ? raw.growth : 1,
+
+    // M2.4：关系原型（只影响语域与关系规则，不规定人格）
+    relation: { kind: raw.relation?.kind || 'companion' },
   }
   return c
 }

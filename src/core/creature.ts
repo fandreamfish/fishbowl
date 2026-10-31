@@ -105,6 +105,33 @@ export class Creature {
     this.store.appendEvent({ t: 'self', id: uid(), ts: ts ?? Date.now(), claim, evidence, confidence, status: 'active' })
   }
 
+  /** 承诺（M2.4）。 */
+  recordCommitment(text: string, ts?: number): void {
+    this.store.appendEvent({ t: 'commitment', id: uid(), ts: ts ?? Date.now(), text })
+  }
+
+  /** 承诺结算：fulfilled 或 broken。broken 的承诺不消失——没翻篇。 */
+  resolveCommitment(ref: string, status: 'fulfilled' | 'broken', ts?: number): void {
+    this.store.appendEvent({ t: 'commitment-resolved', id: uid(), ts: ts ?? Date.now(), ref, status })
+  }
+
+  /** 未了结的承诺（含 broken——它们仍然算"欠着"）。 */
+  openCommitments(g = 1): { id: string; text: string; broken: boolean }[] {
+    const events = this.store.readEvents()
+    const resolved = new Map<string, 'fulfilled' | 'broken'>()
+    for (const e of events) if (e.t === 'commitment-resolved') resolved.set(e.ref, e.status)
+    const windowMs = memoryWindowDays(g) * 86_400_000
+    const now = Date.now()
+    const open: { id: string; text: string; broken: boolean }[] = []
+    for (const e of events) {
+      if (e.t === 'commitment' && now - e.ts < windowMs) {
+        const st = resolved.get(e.id)
+        if (st === undefined || st === 'broken') open.push({ id: e.id, text: e.text, broken: st === 'broken' })
+      }
+    }
+    return open
+  }
+
   /** 注入用记忆摘要：名字 + 置信度最高的活跃语义/教训/自我认知。g 控制遗忘窗口。 */
   memorySummary(g = 1): { name: string | null; semantics: string[]; procedures: string[]; self: string[] } {
     const defaultPrefix = 'fish-'
@@ -128,6 +155,7 @@ export class Creature {
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 2)
       .map(e => e.claim)
-    return { name, semantics, procedures, self }
+    const commitments = this.openCommitments(g).slice(-2).map(c => (c.broken ? '⚠ ' : '') + c.text)
+    return { name, semantics, procedures, self, commitments }
   }
 }

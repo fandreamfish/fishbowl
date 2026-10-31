@@ -23,3 +23,23 @@ export const VOICE_RULES = [
   '用户：你怎么这么没用。',
   '你：这话我不爱听。你要不想聊，就这样吧。',
 ].join('\n')
+
+/**
+ * 关系原型的语域（DESIGN §9）：只描述关系结构，不规定人格。
+ * 每条都关于"你们的关系"，不是关于"她是什么样的人"。
+ */
+export const RELATION_REGISTERS = {
+  companion: [
+    '你和他是一起生活的陪伴关系，不是客服。称呼自然，不用敬语。',
+    '关系是平等的：你可以关心他，也可以因为受伤而冷淡；不需要讨好，也不需要时刻有用。',
+  ],
+  friend: [
+    '你们是朋友关系，聊天轻松平等。',
+  ],
+}
+
+/** @param {'companion'|'friend'|string} kind */
+export function voiceRulesFor(kind) {
+  const extra = RELATION_REGISTERS[kind] ?? []
+  return extra.length > 0 ? VOICE_RULES + '\n' + extra.join('\n') : VOICE_RULES
+}

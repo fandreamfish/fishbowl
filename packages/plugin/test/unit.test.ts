@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
@@ -11,7 +12,7 @@ import { refuseReason, verifyDecision } from '../lib/constraints.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
-import { VOICE_RULES } from '../lib/voice.js'
+import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
 let failures = 0
@@ -149,6 +150,27 @@ check('注入含自我认知区', selfSummary.includes('自我认知:'))
 check('无自我认知时引导说"还不确定"', summaryText(baseBias, baseAff).includes('还没有足够的经历'))
 check('自我认知变化触发新指纹', stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: ['x'] })
   !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: [] }))
+
+console.log('== M2.4：承诺与关系原型 ==')
+check('承诺预筛', COMMITMENT_RE.test('我明天帮你整理。') && COMMITMENT_RE.test('可以。') && COMMITMENT_RE.test('行。你笔记在哪儿？') && !COMMITMENT_RE.test('今天天气不错。'))
+check('请求预筛', REQUEST_RE.test('明天帮我整理一下可以吗？') && !REQUEST_RE.test('今天天气不错。'))
+check('承诺解析', parseCommitment('{"committed":true,"text":"明天整理笔记"}') === '明天整理笔记')
+check('承诺解析：未承诺 → null', parseCommitment('{"committed":false}') === null)
+check('违诺解析：越界拒绝', parseBroken('{"broken":true,"index":5}', 2) === null)
+check('违诺解析', parseBroken('{"broken":true,"index":0}', 2) === 0)
+check('声音：companion 有额外语域', voiceRulesFor('companion').length > VOICE_RULES.length)
+check('声音：未知原型回退', voiceRulesFor('nonsense') === VOICE_RULES)
+
+named.recordCommitment('明天整理你的笔记')
+const oc = named.openCommitments()
+check('未了结承诺可见', oc.some(c => c.text === '明天整理你的笔记'))
+const newest = oc.filter(c => c.text === '明天整理你的笔记').at(-1) ?? oc.at(-1)!
+named.resolveCommitment(newest.id, 'broken')
+const oc2 = named.openCommitments()
+check('broken 的承诺不消失（没翻篇）', oc2.some(c => c.broken))
+const ms3 = named.memorySummary()
+check('注入含未完成的承诺（⚠ 标记）', ms3.commitments.some(c => c.includes('⚠')))
+check('摘要含承诺区', summaryText(baseBias, baseAff, ms3).includes('未完成的承诺'))
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { salienceOf, toBias } from '../../../src/core/engine.ts'
 import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import { createAppraiser } from './appraiser.js'
@@ -12,7 +13,7 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
-import { VOICE_RULES } from './voice.js'
+import { voiceRulesFor } from './voice.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg) {
@@ -104,6 +105,37 @@ export function createCollector(ctx, binding, cfg) {
     }
   }
 
+  /** 承诺（M2.4）：她的话里出现"我会/我保证"类措辞 → LLM 提取 → 落盘。 */
+  async function detectCommitment(sessionId, creature, herText) {
+    try {
+      const raw = await callLLM(cfg, COMMITMENT_SYSTEM_PROMPT, herText.slice(-600), { maxTokens: 100 })
+      const text = parseCommitment(raw)
+      if (text) {
+        creature.recordCommitment(text)
+        trace({ ts: Date.now(), sessionId, event: 'committed', text })
+      }
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `commitment failed: ${String(err && err.message || err)}` })
+    }
+  }
+
+  /** 违诺检测（M2.4）：用户抱怨 + 评价器给出 norm_violation → 判定哪个承诺没兑现。 */
+  async function checkBroken(sessionId, creature, transcript) {
+    try {
+      const open = creature.openCommitments(cfg.growth).filter(c => !c.broken)
+      if (open.length === 0) return
+      const lines = open.map((c, i) => `${i}. ${c.text}`).join('\n')
+      const raw = await callLLM(cfg, BROKEN_SYSTEM_PROMPT, `未完成承诺：\n${lines}\n\n最近对话：\n${transcript.slice(-800)}`, { maxTokens: 60 })
+      const idx = parseBroken(raw, open.length)
+      if (idx !== null) {
+        creature.resolveCommitment(open[idx].id, 'broken')
+        trace({ ts: Date.now(), sessionId, event: 'commitment-broken', text: open[idx].text })
+      }
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `commitment-broken failed: ${String(err && err.message || err)}` })
+    }
+  }
+
   async function finishTurn(session) {
     try {
       const buf = buffers.get(session.id)
@@ -142,6 +174,15 @@ export function createCollector(ctx, binding, cfg) {
         }
         if (IDENTITY_RE.test(transcript)) {
           void detectIdentity(session.id, creature, transcript)
+        }
+        // —— M2.4：承诺与违诺 ——
+        const herText = buf.items.filter(i => i.role === 'assistant').map(i => i.text).join(' ')
+        const lastUserText = buf.items.filter(i => i.role === 'user').slice(-1).map(i => i.text).join(' ')
+        if (herText && COMMITMENT_RE.test(herText) && REQUEST_RE.test(lastUserText)) {
+          void detectCommitment(session.id, creature, herText)
+        }
+        if (a.normViolation >= 0.2) {
+          void checkBroken(session.id, creature, transcript)
         }
         // —— M2.2：自我认知（稀有触发 + 冷却） ——
         const scnt = selfCounters.get(session.id) ?? { episodesSinceSelf: 0, sinceLastSelf: 99 }
@@ -207,7 +248,7 @@ export function createCollector(ctx, binding, cfg) {
 
       // 声音：注册到 agent.ctx 只作用于这个 agent（dsh-system-prompt 的 scoped 贡献）
       try {
-        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: VOICE_RULES })
+        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) })
       } catch { /* 声音注册失败不影响功能 */ }
 
       if (cfg.control || !cfg.injectBias) return

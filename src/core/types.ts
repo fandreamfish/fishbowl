@@ -106,6 +106,9 @@ export type CreatureEvent =
   | { t: 'identity'; id: string; ts: number; name: string }
   // —— M2.2：自我认知（只读投影；证据门槛之外不许自述） ——
   | { t: 'self'; id: string; ts: number; claim: string; evidence: string[]; confidence: number; status: 'active' | 'retired' }
+  // —— M2.4：承诺（说出口的"我会做"；broken 不消失——没翻篇） ——
+  | { t: 'commitment'; id: string; ts: number; text: string }
+  | { t: 'commitment-resolved'; id: string; ts: number; ref: string; status: 'fulfilled' | 'broken' }
 
 /** 四条不变量随目录走：模型、时区、schema、气质。 */
 export interface CreatureMeta {
