@@ -64,6 +64,8 @@ function makeFactory() {
       const [seedBg, setSeedBg] = useState('')
       const [ws, setWs] = useState('')
       const [sess, setSess] = useState('')
+      const [moveOpen, setMoveOpen] = useState(false)
+      const [pick, setPick] = useState(null)
 
       const load = useCallback(async () => {
         try {
@@ -86,7 +88,7 @@ function makeFactory() {
         catch (x) { setErr(String((x && x.message) || x)); setMsg('') }
       }
 
-      const openFish = (id) => { setView({ level: 'fish', id, page: 'status' }); setWs(''); setSess(''); setMsg('') }
+      const openFish = (id) => { setView({ level: 'fish', id, page: 'home' }); setWs(''); setSess(''); setMsg(''); setMoveOpen(false); setPick(null) }
 
       // ---------- 列表 ----------
       if (view.level === 'list') {
@@ -110,7 +112,7 @@ function makeFactory() {
       const page = view.page || 'status'
       const setPage = (p) => setView({ ...view, page: p })
       const tabs = [
-        ['status', '状态'], ['home', '住处'], ['diary', '日记'], ['notes', '小纸条'], ['requests', '请求'], ['persona', '人设'],
+        ['status', '状态'], ['home', '住所'], ['persona', '人设'],
       ]
 
       let body = null
@@ -135,60 +137,102 @@ function makeFactory() {
       } else if (page === 'home') {
         const workspaces = (data.scopes && data.scopes.workspaces) || []
         const sessions = (data.scopes && data.scopes.sessions) || []
+        const occupiedWs = {}
+        const occupiedSess = {}
+        for (const g of fish) {
+          const o = g.occupancy
+          if (!o) continue
+          if (o.kind === 'workspace') occupiedWs[o.id] = g.name
+          else occupiedSess[o.id] = g.name
+        }
+        const roomLine = !f.occupancy
+          ? '还没有房间'
+          : f.occupancy.kind === 'workspace'
+            ? '屋子：' + f.occupancy.id
+            : '房间：' + f.occupancy.id.slice(0, 20) + (f.occupancy.workspace ? '（屋子：' + f.occupancy.workspace + '）' : '')
+        const pickItem = (label, disabled, selected, onPick, key) => e('button', {
+          key,
+          disabled,
+          style: {
+            ...btnS, margin: 2, textAlign: 'left',
+            opacity: disabled ? 0.45 : 1,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            fontWeight: selected ? 600 : 400,
+            background: selected ? 'var(--dsw-alias-bg-2, rgba(127,127,127,0.16))' : 'transparent',
+          },
+          onClick: () => { if (!disabled) onPick() },
+          children: label,
+        })
+
         body = e('div', { children: [
           e('div', { style: box, children: [
-            e('div', { style: { ...lab, marginBottom: 6 }, children: '当前住处：' + occText(f.occupancy) }, 'cur'),
-            e('div', { style: { ...lab, marginBottom: 4 }, children: '搬到某个工作区（工作区里所有会话都由她接待）' }, 'l1'),
-            e('div', { style: { display: 'flex', gap: 8, marginBottom: 10 }, children: [
-              e('select', { style: { ...inp, flex: 1 }, value: ws, onInput: (ev) => setWs(ev.target.value), children: [
-                e('option', { value: '', children: '选择工作区…' }),
-                ...workspaces.map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
-              ] }, 'sel'),
-              e('button', { style: btn, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/occupy', { kind: 'workspace', id: ws }) }, '搬进工作区了'), children: '搬进去' }),
-            ] }, 'w'),
-            e('div', { style: { ...lab, marginBottom: 4 }, children: '或只住某个会话（同工作区的其他会话不受影响）' }, 'l2'),
-            e('div', { style: { display: 'flex', gap: 8, marginBottom: 10 }, children: [
-              e('select', { style: { ...inp, flex: 1 }, value: sess, onInput: (ev) => setSess(ev.target.value), children: [
-                e('option', { value: '', children: '选择会话…' }),
-                ...sessions.map((s2, i) => e('option', { value: s2.id, children: s2.id.slice(0, 18) + (s2.workspace ? ' · ' + s2.workspace : '') }, 's' + i)),
-              ] }, 'sel2'),
-              e('button', { style: btn, onClick: () => act(async () => {
-                const hit = sessions.find((s2) => s2.id === sess)
-                await postJson(API + '/fish/' + f.id + '/occupy', { kind: 'session', id: sess, workspace: hit?.workspace })
-              }, '搬进会话了'), children: '搬进去' }),
-            ] }, 's'),
-            e('button', { style: { ...btn, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了，不归任何会话') , children: '搬出来（不归任何会话）' }),
-          ] }, 'home'),
-          e('div', { style: { ...lab, fontSize: 12 }, children: '规则：一个工作区只能住一条鱼；住进工作区后，其他鱼进不了它的任何会话。' }, 'rule'),
-        ] }, 'home-root')
-      } else if (page === 'diary') {
-        body = e('div', { style: box, children: (f.diary || []).length
-          ? f.diary.map((d, i) => e('div', { style: { marginBottom: 10 }, children: [
-              e('div', { style: { ...lab, marginBottom: 2 }, children: d.date }, 'dt'),
-              e('div', { style: { fontSize: 13, whiteSpace: 'pre-wrap' }, children: d.text }, 'tx'),
-            ] }, 'd' + i))
-          : e('div', { style: lab, children: '还没写过日记（每天最多一篇，聊过天之后会写）' }) }, 'diary')
-      } else if (page === 'notes') {
-        body = e('div', { style: box, children: (f.notes || []).length
-          ? f.notes.map((n, i) => e('div', { style: { marginBottom: 10, fontSize: 13 }, children: '「' + n.text + '」' }, 'n' + i))
-          : e('div', { style: lab, children: '还没有小纸条' }) }, 'notes')
-      } else if (page === 'requests') {
-        const list = f.requests || []
-        body = e('div', { style: box, children: [
-          e('div', { style: { ...lab, marginBottom: 8 }, children: '她有事想征求你同意时会提请求。没答的可以在这里补答。' }, 'hint'),
-          list.length
-            ? list.map((r, i) => e('div', { key: 'r' + i, style: { marginBottom: 10, paddingBottom: 8, borderBottom: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.12))' }, children: [
-                e('div', { style: { fontSize: 13 }, children: r.text }, 'tx'),
-                r.answer === null
-                  ? e('div', { style: { display: 'flex', gap: 8, marginTop: 6 }, children: [
-                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'yes' }) }, '答应了') , children: '同意' }),
-                      e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'no' }) }, '拒绝了') , children: '不同意' }),
-                    ] }, 'ans')
-                  : e('div', { style: { ...lab, marginTop: 4 }, children: r.answer === 'yes' ? '已同意' : '已拒绝' }, 'done'),
-              ] }, 'r'))
-            : e('div', { style: lab, children: '还没有请求' }),
-        ] }, 'req')
-      } else if (page === 'persona') {
+            e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 }, children: f.name + '的房间' }, 'rn'),
+            e('div', { style: { ...lab, marginBottom: 4 }, children: roomLine + ' · ' + f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'occ'),
+            e('div', { style: { display: 'flex', gap: 6, marginTop: 8 }, children: [
+              e('button', { style: btn, onClick: () => { setMoveOpen((v) => !v); setPick(null) }, children: moveOpen ? '收起' : '搬家' }),
+              f.occupancy ? e('button', { style: { ...btnS, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
+            ] }, 'btns'),
+            moveOpen ? e('div', { style: { marginTop: 10, borderTop: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.15))', paddingTop: 10 }, children: [
+              e('div', { style: { ...lab, marginBottom: 4 }, children: '屋子（整个工作区，所有会话都由她接待）' }, 'l1'),
+              ...workspaces.map((w, i) => {
+                const taken = occupiedWs[w]
+                const disabled = !!taken && taken !== f.name
+                const selected = pick && pick.kind === 'workspace' && pick.id === w
+                return pickItem(w + (disabled ? '（' + taken + ' 已住）' : selected ? '（选中）' : ''), disabled, selected, () => setPick({ kind: 'workspace', id: w }), 'w' + i)
+              }),
+              !workspaces.length ? e('div', { style: lab, children: '还没有见过工作区（打开一个项目会话就会被记录）' }, 'nows') : null,
+              e('div', { style: { ...lab, margin: '10px 0 4px' }, children: '房间（单个会话；同屋子的其他会话不受影响）' }, 'l2'),
+              ...sessions.map((s2, i) => {
+                const taken = occupiedSess[s2.id]
+                const wsTaken = s2.workspace ? occupiedWs[s2.workspace] : null
+                const disabled = (!!taken && taken !== f.name) || (!!wsTaken && wsTaken !== f.name)
+                const selected = pick && pick.kind === 'session' && pick.id === s2.id
+                const why = taken && taken !== f.name ? '（' + taken + ' 已住）' : wsTaken && wsTaken !== f.name ? '（屋子被 ' + wsTaken + ' 住了）' : selected ? '（选中）' : ''
+                return pickItem(s2.id.slice(0, 20) + (s2.workspace ? ' · ' + s2.workspace : '') + why, disabled, selected, () => setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }), 's' + i)
+              }),
+              e('div', { style: { display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }, children: [
+                e('button', { style: { ...btnP, opacity: pick ? 1 : 0.5, cursor: pick ? 'pointer' : 'not-allowed' }, onClick: () => act(async () => {
+                  if (!pick) return
+                  await postJson(API + '/fish/' + f.id + '/occupy', { kind: pick.kind, id: pick.id, workspace: pick.workspace })
+                  setMoveOpen(false); setPick(null)
+                }, '搬进去了'), children: '入住' }),
+                e('span', { style: { ...lab, fontSize: 12 }, children: pick ? '已选：' + (pick.kind === 'workspace' ? '屋子 ' : '房间 ') + pick.id : '先选一个屋子或房间' }, 'sel'),
+              ] }, 'go'),
+            ] }, 'picker') : null,
+          ] }, 'room'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '她的请求' }, 'reqh'),
+            e('div', { style: { ...lab, marginBottom: 8 }, children: '她有事想征求你同意时会提请求。一天最多一次，一周最多三次；没答的可以在这里补答。' }, 'reqhint'),
+            (f.requests || []).length
+              ? f.requests.map((r, i) => e('div', { key: 'r' + i, style: { marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.12))' }, children: [
+                  e('div', { style: { fontSize: 13 }, children: r.text }, 'tx'),
+                  r.answer === null
+                    ? e('div', { style: { display: 'flex', gap: 8, marginTop: 6 }, children: [
+                        e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'yes' }) }, '答应了'), children: '同意' }),
+                        e('button', { style: btnS, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/requests/' + r.id + '/answer', { answer: 'no' }) }, '拒绝了'), children: '不同意' }),
+                      ] }, 'ans')
+                    : e('div', { style: { ...lab, marginTop: 4 }, children: r.answer === 'yes' ? '已同意' : '已拒绝' }, 'done'),
+                ] }, 'r'))
+              : e('div', { style: lab, children: '现在没有等你答的' }),
+          ] }, 'req'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '日记' }, 'diaryh'),
+            e('div', { style: { ...lab, marginBottom: 8 }, children: '每天一篇，写下今天发生的事和心情。多天的日记会攒在这里。' }, 'diaryhint'),
+            (f.diary || []).length
+              ? f.diary.map((d, i) => e('div', { style: { marginBottom: 10 }, children: [
+                  e('div', { style: { ...lab, marginBottom: 2 }, children: d.date }, 'dt'),
+                  e('div', { style: { fontSize: 13, whiteSpace: 'pre-wrap' }, children: d.text }, 'tx'),
+                ] }, 'd' + i))
+              : e('div', { style: lab, children: '还没写过日记' }),
+          ] }, 'diary'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '小纸条' }, 'noteh'),
+            e('div', { style: { ...lab, marginBottom: 8 }, children: '特意留给你的话，代表她当前的状态，可能藏着关键信息。' }, 'notehint'),
+            (f.notes || []).length
+              ? f.notes.map((n, i) => e('div', { style: { marginBottom: 8, fontSize: 13 }, children: '「' + n.text + '」' }, 'n' + i))
+              : e('div', { style: lab, children: '还没有小纸条' }),
+          ] }, 'notes'),
+        ] }, 'home-root')      } else if (page === 'persona') {
         body = e('div', { children: [
           born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
           e('div', { style: box, children: [

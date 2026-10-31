@@ -79,6 +79,7 @@ export function createUiRoute(ctx, cfg, binding) {
       requests: c.requests().slice(-10).reverse(),
       notes: c.notes(5),
       diary: c.diaries(3),
+      metaBytes: JSON.stringify(c.meta).length,
       outbox: c.store.readOutbox().filter(o => !o.delivered).length,
       events: events.slice(-40).map(e => ({ t: e.t, ts: e.ts, ...summarizeEvent(e) })),
     }
