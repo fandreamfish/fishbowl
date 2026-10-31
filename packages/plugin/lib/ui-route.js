@@ -15,8 +15,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
+import { injectMessage } from './injector.js'
 import { normalizeConfig } from './config.js'
-import { createDshHost } from '../host/dsh.js'
+import { createDshHost, workspaceOf } from '../host/dsh.js'
+import { generateProactive, wakeStatePath } from './life.js'
 import { buildView } from '../../memory/src/records.ts'
 import { validateMemory } from '../../memory/src/config.ts'
 
@@ -386,6 +388,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
     return {
       born: fish.some(f => f.episodes > 0),
       scopes,
+      wakeState: (() => { try { return JSON.parse(fs.readFileSync(wakeStatePath(stateDir), 'utf8')) } catch { return null } })(),
       config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, memory: cfg.memory },
       fish,
     }
@@ -505,6 +508,28 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
             }
           }
 
+          // —— 现在叫一次（测试用，绕过配额） ——
+          if (sub === '/wake/now' && req.method === 'POST') {
+            let target = null
+            let creature = null
+            for (const a of host.listAgents?.() ?? []) {
+              const sid = a?.session?.id ?? a?.id
+              if (!sid) continue
+              const c = binding.resolve({ sessionId: sid, workspace: workspaceOf(a?.session) })
+              if (c) { target = a; creature = c; break }
+            }
+            if (!target || !creature) return send(res, { ok: false, error: '没有活着的会话' }, 400)
+            const reason = '你想主动找他（手动触发）'
+            const text = await generateProactive(cfg, creature, reason)
+            if (!text) return send(res, { ok: false, error: '生成失败' }, 500)
+            try {
+              await host.wake(target, injectMessage(text))
+              fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: Date.now(), event: 'wake-manual', creature: creature.meta.name, text }) + '\n')
+              return send(res, { ok: true, text })
+            } catch (e) {
+              return send(res, { ok: false, error: String(e?.message ?? e) }, 500)
+            }
+          }
           // —— 诊断：服务可用性（排查改名问题用） ——
           if (sub === '/debug/services' && req.method === 'GET') {
             const svc = host.services()

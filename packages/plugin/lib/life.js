@@ -60,6 +60,18 @@ export function shouldRecordAbsence(events, now, thresholdHours = 8) {
  * 启动唤醒循环。返回 cleanup。
  * @param {import('./types.js').FishbowlConfig} cfg
  */
+/** 唤醒状态文件：给设置页看「她现在为什么没开口」。 */
+export function wakeStatePath(stateDir) {
+  return path.join(stateDir, 'wake-state.json')
+}
+
+/** 用她的声音写一句开场白（循环和"现在叫一次"共用）。 */
+export async function generateProactive(cfg, creature, reason) {
+  const mem = creature.memorySummary(cfg.growth)
+  const stateLine = `名字：${mem.name ?? '（还没名字）'}；未完成的承诺：${mem.commitments.join('；') || '无'}`
+  const text = await callLLM(cfg, voiceRulesFor(cfg.relation?.kind), proactivePrompt(reason, stateLine), { json: false, maxTokens: 80 })
+  return String(text ?? '').trim().slice(0, 200)
+}
 export function createWakeLoop(ctx, binding, cfg, host) {
   host = host ?? createDshHost(ctx, cfg)
   if (!cfg.wake?.enabled) return () => {}
@@ -77,12 +89,6 @@ export function createWakeLoop(ctx, binding, cfg, host) {
       }) + '\n')
     } catch { /* 忽略 */ }
   }
-  async function generateProactive(creature, reason) {
-    const mem = creature.memorySummary(cfg.growth)
-    const stateLine = `名字：${mem.name ?? '（还没名字）'}；未完成的承诺：${mem.commitments.join('；') || '无'}`
-    const text = await callLLM(cfg, voiceRulesFor(cfg.relation?.kind), proactivePrompt(reason, stateLine), { json: false, maxTokens: 80 })
-    return String(text ?? '').trim().slice(0, 200)
-  }
 
   async function tick() {
     if (stopped) return
@@ -94,6 +100,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
       }
       // 按活着的 agent 走：一只鱼可能被多个会话共享（住整个工作区），同一次只处理一遍
       const seen = new Set()
+      const report = []
       for (const agent of host.listAgents?.() ?? []) {
         if (stopped) return
         const sid = agent?.session?.id ?? agent?.id
@@ -115,9 +122,10 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         const longing = creature.fold().affect.longing
         const { reason } = wakeReason({ openBroken: broken, longing })
         const decision = gate.can(now, reason !== null)
+        report.push({ creature: creature.meta.name, reason: reason ?? null, longing: Number(longing.toFixed(2)), broken, gate: decision, at: now })
         if (!decision.ok || reason === null) continue
 
-        const text = await generateProactive(creature, reason)
+        const text = await generateProactive(cfg, creature, reason)
         if (!text) continue
         if (!agent) {
           // 会话没开着——进投递队列，下次会话打开时补投
@@ -131,6 +139,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           traceWake(sid, cid, reason)
         } catch { /* 会话状态变化时可能失败，忽略 */ }
       }
+      try { fs.writeFileSync(wakeStatePath(cfg.stateDir), JSON.stringify({ ts: now, entries: report }, null, 2)) } catch { /* 忽略 */ }
     } catch {
       /* 唤醒循环绝不外抛 */
     }

@@ -15,7 +15,7 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/ext
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason } from '../lib/life.js'
-import { mergeUiConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
+import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
 import { createCollector } from '../lib/collector.js'
 import { Creature } from '../../../src/core/creature.ts'

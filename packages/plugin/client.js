@@ -694,6 +694,24 @@ function makeFactory() {
         const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
         const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
         const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
+        // 最近一次检查：她为什么没开口
+        const ws = (data && data.wakeState) || null
+        const entry = ws && Array.isArray(ws.entries) ? ws.entries[0] : null
+        const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回' }
+        const lastCheck = entry ? new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '—'
+        const statusLine = entry
+          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—')
+          : '还没有检查记录（节律没开或刚启动）'
+        const statusCard = e('div', { style: box, children: [
+          e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '现在的状态' }, 'h'),
+            e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
+              const r = await postJson(API + '/wake/now', {})
+              setMsg('她开口了：' + (r.text || ''))
+            }, '已叫她一次') , children: '现在叫一次（测试）' }, 'now'),
+          ] }, 'head'),
+          e('div', { style: { ...lab, fontSize: 12 }, children: statusLine }, 'line'),
+        ] }, 'wstatus')
         body = e('div', { children: [
           e('div', { style: box, children: [
             e('div', { style: { ...rowS, marginBottom: 4 }, children: [
@@ -755,6 +773,7 @@ function makeFactory() {
               ] }, 'v'),
             ] }, 'c4'),
           ] }, 'contact'),
+          statusCard,
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
