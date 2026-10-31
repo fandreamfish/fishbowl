@@ -43,4 +43,4 @@ DSH 插件（收集 → 异步评价 → 情绪 → 注入 + 工具约束）+ A/
 
 ## 每次阶段的固定流程
 
-实现 → 本地测试全绿 → commit + tag（mX.Y）→ push（走代理）→ 才开始下一阶段。
+实现 → 本地测试全绿 → commit + tag（mX.Y）→ push（走代理）→ **更新进度列表**（本文件 + GitHub 主页 fandreamfish README）→ 才开始下一阶段。
