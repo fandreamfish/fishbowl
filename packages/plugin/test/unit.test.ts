@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
+import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
@@ -40,7 +41,7 @@ check('包含六个旋钮数值', ['0.14', '0.23', '0.78', '0.83', '0.30', '0.17
 check('愧疚以事实形式出现', summary.includes('未平复的愧疚'))
 check('不含情绪台词', !summary.includes('难过') && !summary.includes('生气'))
 check('明示"影响怎么做"', summary.includes('怎么做，而不是怎么说'))
-check('声明快照≠人格（防自我叙事固化）', summary.includes('不是人格') && summary.includes('照实说还不确定'))
+check('声明快照≠人格（防自我叙事固化）', summary.includes('不是人格') && summary.includes('还没有足够的经历'))
 check('状态摘要不含声音规则（声音走独立机制）', !summary.includes('不表演认错'))
 
 console.log('== 声音规则（few-shot 语域） ==')
@@ -97,6 +98,15 @@ check('身份正则预筛', IDENTITY_RE.test('我给你起个名字叫大肥鱼'
 check('身份解析', parseIdentity('{"named":true,"name":"大肥鱼"}') === '大肥鱼')
 check('身份解析：未命名 → null', parseIdentity('{"named":false}') === null)
 
+console.log('== M2.2：自我认知（证据门槛） ==')
+check('自我巩固：12 轮触发', shouldSelfConsolidate({ episodesSince: 12, sinceLast: 99, g: 1 }))
+check('自我巩固：11 轮不触发', !shouldSelfConsolidate({ episodesSince: 11, sinceLast: 99, g: 1 }))
+check('自我巩固：冷却', !shouldSelfConsolidate({ episodesSince: 20, sinceLast: 2, g: 1 }))
+const ps = parseSelf('{"self":[{"claim":"被否定时先问清楚","evidence":["2","5","8"],"confidence":0.9},{"claim":"容易生气","evidence":["3"],"confidence":0.8}]}')
+check('证据门槛：单证据的自我描述被拒', ps.length === 1 && ps[0].claim === '被否定时先问清楚')
+check('置信度按证据数换算', Math.abs(ps[0].confidence - 1) < 1e-9)
+check('自我认知垃圾输入 → 空', parseSelf('垃圾').length === 0)
+
 const named = createBinding(cfg).creatureFor('session-m2-named')
 named.recordIdentity('大肥鱼')
 check('起名：meta 更新 + 事件落盘', named.meta.name === '大肥鱼'
@@ -112,6 +122,15 @@ check('注入含名字与记忆', namedSummary.includes('大肥鱼')
 check('未起名个体不含名字行', !summaryText(baseBias, baseAff, { name: null, semantics: [], procedures: [] }).includes('名字:'))
 check('记忆变化触发新指纹', stateKey(baseBias, baseAff, { name: '大肥鱼', semantics: ['x'], procedures: [] })
   !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [] }))
+
+named.recordSelf('被否定时先问清楚而不是辩解', ['2', '5'], 0.67, 0)
+const ms2 = named.memorySummary()
+check('memorySummary 含自我认知', ms2.self.includes('被否定时先问清楚而不是辩解'))
+const selfSummary = summaryText(baseBias, baseAff, ms2)
+check('注入含自我认知区', selfSummary.includes('自我认知:'))
+check('无自我认知时引导说"还不确定"', summaryText(baseBias, baseAff).includes('还没有足够的经历'))
+check('自我认知变化触发新指纹', stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: ['x'] })
+  !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: [] }))
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }

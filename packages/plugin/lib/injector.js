@@ -10,9 +10,9 @@ function q(x, lo, hi, loLabel, hiLabel) {
   return '中'
 }
 
-/** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect @param {{name?: string|null, semantics?: string[], procedures?: string[]}} [memory] */
+/** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect @param {{name?: string|null, semantics?: string[], procedures?: string[], self?: string[]}} [memory] */
 export function summaryText(bias, affect, memory) {
-  const mem = memory ?? { name: null, semantics: [], procedures: [] }
+  const mem = memory ?? { name: null, semantics: [], procedures: [], self: [] }
   const guilt = affect.guilt > 0.05
     ? ` / 未平复的愧疚 ${f(affect.guilt)}（有件事还没过去）`
     : ''
@@ -29,9 +29,10 @@ export function summaryText(bias, affect, memory) {
   )
   if (mem.semantics?.length) parts.push(`记得的事: ${mem.semantics.join('；')}`)
   if (mem.procedures?.length) parts.push(`教训: ${mem.procedures.join('；')}`)
+  if (mem.self?.length) parts.push(`自我认知: ${mem.self.join('；')}`)
   parts.push(
     '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
-      + '被问到你是什么样的人时，不要拿这些数字编造性格——你还没有长期经历，照实说还不确定。',
+      + '被问到你是什么样的人时：上面有"自我认知"就只按那些说，没有就照实说"我还没有足够的经历确定自己是什么样的人"，不要从情绪数字里编。',
   )
   return parts.join('\n')
 }
@@ -61,6 +62,6 @@ export function stateKey(bias, affect, memory) {
     .map(v => Math.round(v * 10)).join(',')
   const affectPart = [Math.round(affect.valence * 10), Math.round(affect.arousal * 10)].join(',')
   const guiltPart = affect.guilt > 0.05 ? 'g' : ''
-  const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}`
+  const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}:${memory?.self?.length ?? 0}`
   return `${knobs}|${affectPart}|${guiltPart}|${memPart}`
 }

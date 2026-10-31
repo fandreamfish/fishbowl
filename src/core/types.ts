@@ -104,6 +104,8 @@ export type CreatureEvent =
   | { t: 'procedure'; id: string; ts: number; trigger: string; action: string; evidence: string[]; confidence: number; status: 'active' | 'retired' }
   // —— M2：身份（接受名字是事件，meta.name 是权威） ——
   | { t: 'identity'; id: string; ts: number; name: string }
+  // —— M2.2：自我认知（只读投影；证据门槛之外不许自述） ——
+  | { t: 'self'; id: string; ts: number; claim: string; evidence: string[]; confidence: number; status: 'active' | 'retired' }
 
 /** 四条不变量随目录走：模型、时区、schema、气质。 */
 export interface CreatureMeta {

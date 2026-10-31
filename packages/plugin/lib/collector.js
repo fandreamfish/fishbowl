@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { salienceOf, toBias } from '../../../src/core/engine.ts'
+import { dedupeSelf, parseSelf, SELF_SYSTEM_PROMPT, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
@@ -18,7 +19,8 @@ export function createCollector(ctx, binding, cfg) {
   const appraise = createAppraiser(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
   const lastKey = new Map() // sessionId -> stateKey（肉眼可见的变化才注入）
-  const consolidating = new Map() // sessionId -> { episodesSince, salienceSince }
+  const consolidating = new Map() // sessionId -> { episodesSince, salienceSince, sinceLast }
+  const selfCounters = new Map() // sessionId -> { episodesSinceSelf, sinceLastSelf }
   const tracePath = path.join(binding.dir, 'trace.ndjson')
   const disposers = []
 
@@ -80,6 +82,28 @@ export function createCollector(ctx, binding, cfg) {
     }
   }
 
+  /** 自我认知：比巩固稀有得多；证据不足的部分直接丢弃。 */
+  async function selfConsolidate(sessionId, creature) {
+    try {
+      const events = creature.store.readEvents()
+      const episodes = events.filter((e) => e.t === 'episode').slice(-14)
+      if (episodes.length < 4) return
+      const existing = creature.memorySummary()
+      const known = [
+        '你已经认定的自我描述：',
+        ...existing.self.map((c) => `- ${c}`),
+      ].join('\n')
+      const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
+      const raw = await callLLM(cfg, SELF_SYSTEM_PROMPT, `${known}\n\n最近对话：\n${lines}`, { maxTokens: 500 })
+      const parsed = dedupeSelf(parseSelf(raw), existing.self)
+      const ts = Date.now()
+      for (const s of parsed) creature.recordSelf(s.claim, s.evidence, s.confidence, ts)
+      if (parsed.length) trace({ ts, sessionId, event: 'self-consolidated', self: parsed })
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId, warn: `self-consolidate failed: ${String(err && err.message || err)}` })
+    }
+  }
+
   async function finishTurn(session) {
     try {
       const buf = buffers.get(session.id)
@@ -118,6 +142,15 @@ export function createCollector(ctx, binding, cfg) {
         }
         if (IDENTITY_RE.test(transcript)) {
           void detectIdentity(session.id, creature, transcript)
+        }
+        // —— M2.2：自我认知（稀有触发 + 冷却） ——
+        const scnt = selfCounters.get(session.id) ?? { episodesSinceSelf: 0, sinceLastSelf: 99 }
+        scnt.episodesSinceSelf += 1
+        scnt.sinceLastSelf += 1
+        selfCounters.set(session.id, scnt)
+        if (shouldSelfConsolidate({ episodesSince: scnt.episodesSinceSelf, sinceLast: scnt.sinceLastSelf, g: cfg.growth })) {
+          selfCounters.set(session.id, { episodesSinceSelf: 0, sinceLastSelf: 0 })
+          void selfConsolidate(session.id, creature)
         }
       }
 

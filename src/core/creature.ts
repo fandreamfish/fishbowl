@@ -99,6 +99,11 @@ export class Creature {
     this.meta.name = name
   }
 
+  /** 自我认知（证据门槛在 parseSelf 里）。 */
+  recordSelf(claim: string, evidence: string[], confidence: number, ts?: number): void {
+    this.store.appendEvent({ t: 'self', id: uid(), ts: ts ?? Date.now(), claim, evidence, confidence, status: 'active' })
+  }
+
   /** 注入用记忆摘要：名字 + 最近几条活跃语义 + 教训。 */
   memorySummary(): { name: string | null; semantics: string[]; procedures: string[] } {
     const defaultPrefix = 'fish-'
@@ -114,6 +119,11 @@ export class Creature {
       .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 1)
       .map(e => `${e.trigger} → ${e.action}`)
-    return { name, semantics, procedures }
+    const self = events
+      .filter((e): e is Extract<CreatureEvent, { t: 'self' }> => e.t === 'self' && e.status === 'active' && e.confidence >= 0.5)
+      .sort((a, b) => b.confidence - a.confidence)
+      .slice(0, 2)
+      .map(e => e.claim)
+    return { name, semantics, procedures, self }
   }
 }
