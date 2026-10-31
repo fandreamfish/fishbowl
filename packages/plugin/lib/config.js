@@ -45,6 +45,11 @@ export function normalizeConfig(raw = {}) {
     // M2.4：关系原型（只影响语域与关系规则，不规定人格）
     relation: { kind: raw.relation?.kind || 'companion' },
 
+    // M5：设置页可写的初始状态（基础人设 / 名字）
+    seed: raw.seed
+      ? { name: String(raw.seed.name ?? ''), background: String(raw.seed.background ?? '') }
+      : null,
+
     // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
     wake: {
       enabled: raw.wake?.enabled === true,

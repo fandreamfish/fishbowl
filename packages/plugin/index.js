@@ -11,11 +11,15 @@
  *
  * A/B 对照组：config.control = true —— 只记录评价与偏置轨迹，不注入、不约束。
  */
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { createBinding } from './lib/binding.js'
 import { createCollector } from './lib/collector.js'
 import { createConstraints } from './lib/constraints.js'
 import { normalizeConfig } from './lib/config.js'
 import { createWakeLoop } from './lib/life.js'
+import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
 
 export const inject = ['tools', 'agents']
 
@@ -75,7 +79,15 @@ export const Config = Schema
   : undefined
 
 export function apply(ctx, config = {}) {
-  const cfg = normalizeConfig(config)
+  // 设置页保存的配置（ui-config.json）覆盖 patch 配置里的 growth / seed
+  const raw = { ...(config ?? {}) }
+  try {
+    const sd = raw.stateDir || path.join(os.homedir(), '.fishbowl', 'creatures')
+    const ui = JSON.parse(fs.readFileSync(uiConfigPath(sd), 'utf8'))
+    Object.assign(raw, mergeUiConfig(raw, ui))
+  } catch { /* 没有 UI 配置就用 patch 配置 */ }
+
+  const cfg = normalizeConfig(raw)
   const disposers = []
   const binding = createBinding(cfg)
 
@@ -92,6 +104,10 @@ export function apply(ctx, config = {}) {
     const offLife = createWakeLoop(ctx, binding, cfg)
     if (offLife) disposers.push(offLife)
   }
+
+  // M5：设置页后端（状态 / 配置）
+  const offUi = createUiRoute(ctx, cfg, binding)
+  if (offUi) disposers.push(offUi)
 
   return () => {
     for (const d of disposers) {

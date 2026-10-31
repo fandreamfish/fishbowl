@@ -68,7 +68,7 @@ export function createBinding(cfg) {
       const meta = {
         schemaVersion: 1,
         creatureId: cid,
-        name: `fish-${cid.slice(0, 8)}`,
+        name: cfg.seed?.name || `fish-${cid.slice(0, 8)}`,
         bornAt: new Date().toISOString(),
         timezone: cfg.timezone,
         model: { id: cfg.model, pinned: true },

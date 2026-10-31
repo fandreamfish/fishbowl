@@ -267,7 +267,8 @@ export function createCollector(ctx, binding, cfg) {
 
       // 声音：注册到 agent.ctx 只作用于这个 agent（dsh-system-prompt 的 scoped 贡献）
       try {
-        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) })
+        const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
+        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) + seedLine })
       } catch { /* 声音注册失败不影响功能 */ }
 
       const creature = binding.creatureFor(sid)

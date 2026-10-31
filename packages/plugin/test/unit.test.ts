@@ -15,6 +15,7 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/ext
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
+import { mergeUiConfig, summarizeEvent } from '../lib/ui-route.js'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
@@ -215,6 +216,15 @@ check('注入含活动行', summaryText(baseBias, baseAff, { ...ms3, activity: '
 const mp = mergePendingText([{ id: 'a', text: 'x1' }, { id: 'b', text: 'x2' }, { id: 'c', text: 'x3' }, { id: 'd', text: 'x4' }])
 check('积压 >3 合并成一条', mp.text !== null && mp.ids.length === 4 && (mp.text ?? '').includes('前阵子'))
 check('积压 ≤3 不合并', mergePendingText([{ id: 'a', text: 'x1' }]).text === null)
+
+console.log('== M5：设置页后端 ==')
+check('事件摘要：episode', summarizeEvent({ t: 'episode', note: '你好', appraisal: { goalCongruence: -0.4 } }).text === '你好')
+check('事件摘要：semantic', summarizeEvent({ t: 'semantic', claim: '他喜欢猫', confidence: 0.8 }).text === '他喜欢猫')
+check('UI 配置合并 growth', mergeUiConfig({ growth: 1 }, { growth: 2.5 }).growth === 2.5)
+check('UI 配置合并 seed', mergeUiConfig({}, { seed: { name: '大肥鱼', background: 'x' } }).seed.name === '大肥鱼')
+check('UI 配置非法值被忽略', mergeUiConfig({ growth: 1 }, { growth: 'x' }).growth === 1)
+check('seed 默认 null', normalizeConfig({}).seed === null)
+check('seed 可配置', normalizeConfig({ seed: { name: 'a', background: 'b' } }).seed.name === 'a')
 
 console.log('== 工具约束（纯决策函数） ==')
 const hot = { verbosity: 0.5, thresholdRefuse: 0.1, thresholdVerify: 0.78, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
