@@ -207,10 +207,15 @@ function makeFactory() {
                   ? e('div', { children: [
 
                       ...roomsOf(pickWs).map((s2, i) => {
-                        const taken = occupiedSess[s2.id]
-                        const disabled = !!taken && taken !== f.name
+                        const roomOwner = occupiedSess[s2.id]
+                        const wsOwner = s2.workspace ? occupiedWs[s2.workspace] : null
+                        const isCurrent = !!(f.occupancy && f.occupancy.kind === 'session' && f.occupancy.id === s2.id)
+                        const blockedByRoom = !!roomOwner && roomOwner !== f.name
+                        const blockedByWs = !!wsOwner && wsOwner !== f.name
+                        const disabled = blockedByRoom || blockedByWs || isCurrent
                         const active = !!(pick && pick.kind === 'session' && pick.id === s2.id)
-                        return node(shortId(s2.id) + (disabled ? '（' + taken + ' 已住）' : active ? '（已选）' : ''), disabled, active, () => { setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }); setMoveErr('') }, 'r' + i)
+                        const why = blockedByRoom ? '（' + roomOwner + ' 已住）' : blockedByWs ? '（屋子被 ' + wsOwner + ' 住了）' : isCurrent ? '（当前住这）' : active ? '（已选）' : ''
+                        return node(shortId(s2.id) + why, disabled, active, () => { setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }); setMoveErr('') }, 'r' + i)
                       }),
                       !roomsOf(pickWs).length ? e('div', { style: lab, children: '这个屋子还没有记录到的房间' }, 'norooms') : null,
                     ] }, 'rooms')
@@ -224,9 +229,17 @@ function makeFactory() {
                 e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: () => { setMoveOpen(false); setPick(null); setPickWs(null); setMoveErr('') }, children: '取消' }, 'c'),
                 e('button', { style: { ...btnP, opacity: pick ? 1 : 0.5, cursor: pick ? 'pointer' : 'not-allowed', fontSize: 13, padding: '6px 16px' }, onClick: async () => {
                   if (!pick) return
-                  if ((pick.kind === 'workspace' && wsBlocked(pick.id)) || (pick.kind === 'session' && occupiedSess[pick.id] && occupiedSess[pick.id] !== f.name)) {
-                    setMoveErr('这个住处已经住着「' + (pick.kind === 'workspace' ? (occupiedWs[pick.id] || (sessInWs[pick.id] || [])[0]) : occupiedSess[pick.id]) + '」了')
+                  if (pick.kind === 'workspace' && wsBlocked(pick.id)) {
+                    setMoveErr('这个住处已经住着「' + (occupiedWs[pick.id] || (sessInWs[pick.id] || [])[0]) + '」了')
                     return
+                  }
+                  if (pick.kind === 'session') {
+                    const roomOwner = occupiedSess[pick.id]
+                    const wsOwner = pick.workspace ? occupiedWs[pick.workspace] : null
+                    if ((roomOwner && roomOwner !== f.name) || (wsOwner && wsOwner !== f.name)) {
+                      setMoveErr('这个住处已经住着「' + (roomOwner && roomOwner !== f.name ? roomOwner : wsOwner) + '」了')
+                      return
+                    }
                   }
                   try {
                     await postJson(API + '/fish/' + f.id + '/occupy', { kind: pick.kind, id: pick.id, workspace: pick.workspace })
