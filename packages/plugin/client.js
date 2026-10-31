@@ -218,12 +218,15 @@ function makeFactory() {
 
         body = e('div', { children: [
           e('div', { style: box, children: [
-            e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 }, children: f.name + '的房间' }, 'rn'),
-            e('div', { style: { ...lab, marginBottom: 4 }, children: roomLine + ' · ' + f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'occ'),
-            e('div', { style: { display: 'flex', gap: 6, marginTop: 8 }, children: [
-              e('button', { style: btn, onClick: () => { setMoveOpen(true); setPick(null); setPickWs(null) }, children: '搬家' }),
-              f.occupancy ? e('button', { style: { ...btnS, fontSize: 12 }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
-            ] }, 'btns'),
+            e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 14 }, children: f.name + '的房间' }, 'rn'),
+              e('div', { style: { display: 'flex', gap: 6 }, children: [
+                e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 500 }, onClick: () => { setMoveOpen(true); setPick(null); setPickWs(null) }, children: '搬家' }),
+                f.occupancy ? e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
+              ] }, 'btns'),
+            ] }, 'head'),
+            e('div', { style: { ...lab, marginBottom: 4, fontSize: 12.5 }, children: roomLine }, 'occ'),
+            e('div', { style: { ...lab, fontSize: 12 }, children: f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'meta'),
           ] }, 'room'),
           moveModal,
           e('div', { style: box, children: [

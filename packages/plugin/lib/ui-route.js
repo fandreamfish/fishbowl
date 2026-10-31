@@ -13,9 +13,35 @@
  *   GET/POST /config               成长率与来历（来历出生后只读）
  */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 const ROUTE = '/fishbowl-ui'
+
+export function decodeWorkspace(dirName) {
+    let s = dirName.slice(2, -2).replace(/~([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    if (!s) return null
+    const drive = /^[A-Za-z]$/.test(s[0]) ? s[0].toUpperCase() + ':' : null
+    const rest = drive ? s.slice(1) : s
+    const memo = new Map()
+    function go(i, acc) {
+      if (i >= rest.length) return fs.existsSync(acc) ? acc : null
+      const key = i + '|' + acc
+      if (memo.has(key)) return memo.get(key)
+      let out = null
+      if (rest[i] === '-') {
+        out = go(i + 1, acc + '-') || go(i + 1, acc + '\\')
+      } else {
+        out = go(i + 1, acc + rest[i])
+      }
+      memo.set(key, out)
+      return out
+    }
+    const full = go(0, drive ?? '')
+    return full && fs.existsSync(full) ? full : null
+  }
+
+
 
 /** 事件 → 一行摘要（给时间线用）。 */
 export function summarizeEvent(e) {
@@ -85,11 +111,49 @@ export function createUiRoute(ctx, cfg, binding) {
     }
   }
 
+  /**
+   * 枚举 DSH 的全部工作区与会话（sessions/<编码路径>/session-<id>）。
+   * 工作区目录名是编码过的（`--C-Users-x-.dsh-fish-home--`），
+   * 用「把 - 当分隔符试遍所有切分 + 路径存在性校验」还原真实路径。
+   */
+  function enumerateScopes() {
+    const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+    const root = path.join(home, 'sessions')
+    const workspaces = []
+    const sessions = []
+    try {
+      for (const d of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!d.isDirectory() || !d.name.startsWith('--') || !d.name.endsWith('--')) continue
+        const ws = decodeWorkspace(d.name)
+        if (!ws) continue
+        if (!workspaces.includes(ws)) workspaces.push(ws)
+        let names = []
+        try { names = fs.readdirSync(path.join(root, d.name), { withFileTypes: true }) } catch { /* 读不到就跳过 */ }
+        for (const n of names) {
+          if (n.isDirectory() && n.name.startsWith('session-')) sessions.push({ id: n.name, workspace: ws })
+        }
+      }
+    } catch { /* 没有 sessions 目录就只用已记录的 */ }
+    return { workspaces, sessions }
+  }
+
+  /** 枚举结果 + 插件已记录的住处（主题目录不同时两边互补）。 */
+  function allScopes() {
+    const e = enumerateScopes()
+    const workspaces = [...e.workspaces]
+    for (const w of (binding.scopes?.workspaces ?? [])) if (!workspaces.includes(w)) workspaces.push(w)
+    const sessions = [...e.sessions]
+    for (const s of (binding.scopes?.sessions ?? [])) {
+      if (s && s.id && !sessions.some(x => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '' })
+    }
+    return { workspaces, sessions }
+  }
+
   function stateView() {
     const fish = binding.listCreatures().map(fishView)
     return {
       born: fish.some(f => f.episodes > 0),
-      scopes: binding.scopes,
+      scopes: allScopes(),
       config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
       fish,
     }

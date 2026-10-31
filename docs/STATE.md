@@ -117,7 +117,8 @@ Invoke-RestMethod -Uri 'https://api.github.com/repos/fandreamfish/fishbowl/conte
 - 插件：已启用（profile desktop，link 安装）
 - 配置：`appraiser=deepseek`、`relation=companion`、`wake.enabled=false`
 - 住处模型（M7）：鱼自带 `meta.occupancy`（工作区 / 会话），不再有会话→个体的绑定表；旧的 `bindings.json` 首次启动自动迁移成 `.legacy`
-- 设置页：鱼列表 → 单鱼详情（状态 / 住处 / 日记 / 小纸条 / 请求 / 人设）
+- 设置页：鱼列表 → 单鱼详情（状态 / 住所 / 人设）；住所页含房间卡、搬家弹框（左右树：屋子→房间）、请求、日记、小纸条
+- 工作区/会话枚举：读 ~/.dsh/sessions/<编码路径>/，用「路径存在性」还原真实工作区路径（9 个屋子 / 34 个房间）
 - 待办：
   1. 真机验证新设置页（列表、住处互斥、请求补答）
   2. 叫醒消息去祈使句 + 冷落事件化
