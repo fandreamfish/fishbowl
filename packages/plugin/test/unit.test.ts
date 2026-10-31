@@ -14,7 +14,7 @@ import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerd
 import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
-import { proactivePrompt, wakeReason } from '../lib/life.js'
+import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason } from '../lib/life.js'
 import { mergeUiConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
 import { createCollector } from '../lib/collector.js'
@@ -526,5 +526,14 @@ fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: 99999
 check('死进程的锁不算活着的写者', otherWriter(lockDir) === null)
 fs.writeFileSync(path.join(lockDir, '.writer.lock'), JSON.stringify({ pid: process.ppid, at: Date.now() }))
 check('活着的别的进程会被报出来', otherWriter(lockDir)?.pid === process.ppid)
+console.log('== M18：清醒与缺席 ==')
+const H = 3_600_000
+const evs = [{ t: 'episode', ts: 1_000_000 }]
+check('沉默时长算得对', Math.abs((absenceHours(evs, 1_000_000 + 5 * H) ?? 0) - 5) < 1e-9)
+check('没聊过 → null', absenceHours([], Date.now()) === null)
+check('超过阈值 → 该记缺席', shouldRecordAbsence(evs, 1_000_000 + 9 * H, 8) === true)
+check('没超过 → 不记', shouldRecordAbsence(evs, 1_000_000 + 7 * H, 8) === false)
+check('同一次冷落只记一次', shouldRecordAbsence([...evs, { t: 'absence', ts: 1_000_000 + 9 * H }], 1_000_000 + 10 * H, 8) === false)
+check('他回来后又冷落 → 重新记', shouldRecordAbsence([...evs, { t: 'episode', ts: 1_000_000 + 11 * H }, { t: 'absence', ts: 1_000_000 + 9 * H }], 1_000_000 + 20 * H, 8) === true)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

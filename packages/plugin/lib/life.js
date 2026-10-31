@@ -5,6 +5,8 @@
  */
 import { ContactGate } from '../../../src/core/contact.ts'
 import { Scheduler } from '../../../src/core/scheduler.ts'
+import fs from 'node:fs'
+import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createDshHost } from '../host/dsh.js'
 import { injectMessage } from './injector.js'
@@ -31,6 +33,29 @@ export function proactivePrompt(reason, stateLine) {
 }
 
 
+/** 距离最后一次"他来过"（episode/contact）过了多少小时。 */
+export function absenceHours(events, now) {
+  let lastSeen = 0
+  for (const e of events) {
+    if ((e.t === 'episode' || e.t === 'contact') && e.ts > lastSeen) lastSeen = e.ts
+  }
+  if (!lastSeen) return null
+  return Math.max(0, (now - lastSeen) / 3_600_000)
+}
+
+/** 这次冷落该不该记一条 absence（同一次冷落只记一次）。 */
+export function shouldRecordAbsence(events, now, thresholdHours = 8) {
+  let lastSeen = 0
+  let lastAbsence = 0
+  for (const e of events) {
+    if ((e.t === 'episode' || e.t === 'contact') && e.ts > lastSeen) lastSeen = e.ts
+    if (e.t === 'absence' && e.ts > lastAbsence) lastAbsence = e.ts
+  }
+  if (!lastSeen) return false
+  if (lastAbsence > lastSeen) return false
+  return (now - lastSeen) / 3_600_000 >= thresholdHours
+}
+
 /**
  * 启动唤醒循环。返回 cleanup。
  * @param {import('./types.js').FishbowlConfig} cfg
@@ -44,6 +69,14 @@ export function createWakeLoop(ctx, binding, cfg, host) {
   let timer = null
   let stopped = false
 
+  /** 记一笔"她主动开口了"，方便排查。 */
+  function traceWake(sessionId, creatureId, reason) {
+    try {
+      fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
+        ts: Date.now(), sessionId, creatureId, event: 'wake', reason,
+      }) + '\n')
+    } catch { /* 忽略 */ }
+  }
   async function generateProactive(creature, reason) {
     const mem = creature.memorySummary(cfg.growth)
     const stateLine = `名字：${mem.name ?? '（还没名字）'}；未完成的承诺：${mem.commitments.join('；') || '无'}`
@@ -59,21 +92,35 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         scheduleNext(now)
         return
       }
-      for (const sid of Object.keys(binding.bindings)) {
+      // 按活着的 agent 走：一只鱼可能被多个会话共享（住整个工作区），同一次只处理一遍
+      const seen = new Set()
+      for (const agent of host.listAgents?.() ?? []) {
         if (stopped) return
-        if (!binding.manages(sid)) continue
-        const creature = binding.creatureFor(sid)
+        const sid = agent?.session?.id ?? agent?.id
+        if (!sid || !binding.manages(sid)) continue
+        const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
+        if (!creature) continue
+        const cid = creature.meta.creatureId
+        if (seen.has(cid)) continue
+        seen.add(cid)
+
+        // 长时间没说话 → 记一条缺席（longing 就是这么来的）
+        const events = creature.store.readEvents()
+        if (shouldRecordAbsence(events, now, cfg.wake.absenceHours ?? 8)) {
+          const hours = absenceHours(events, now)
+          if (hours !== null) creature.recordAbsence(hours)
+        }
+
         const broken = creature.openCommitments(cfg.growth).filter(c => c.broken).length
         const longing = creature.fold().affect.longing
         const { reason } = wakeReason({ openBroken: broken, longing })
         const decision = gate.can(now, reason !== null)
         if (!decision.ok || reason === null) continue
 
-        const agent = host.agentFor(sid)
         const text = await generateProactive(creature, reason)
         if (!text) continue
         if (!agent) {
-          // M3.1：会话没开着——进投递队列，下次会话打开时补投
+          // 会话没开着——进投递队列，下次会话打开时补投
           creature.store.appendOutbox({ id: randomUUID(), ts: now, text, channel: 'dsm-session', delivered: false })
           gate.consume(now)
           continue
@@ -81,6 +128,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         gate.consume(now)
         try {
           await host.wake(agent, injectMessage(text))
+          traceWake(sid, cid, reason)
         } catch { /* 会话状态变化时可能失败，忽略 */ }
       }
     } catch {

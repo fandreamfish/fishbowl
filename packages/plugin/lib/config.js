@@ -63,6 +63,7 @@ export function normalizeConfig(raw = {}) {
     // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
     wake: {
       enabled: raw.wake?.enabled === true,
+      absenceHours: Number(raw.wake?.absenceHours) > 0 ? Number(raw.wake.absenceHours) : 8,
       activeWindow: raw.wake?.activeWindow ?? ['08:00', '23:30'],
       interval: raw.wake?.interval ?? { mode: 'fixed', min: '60m' },
       dwell: raw.wake?.dwell ?? ['1m', '3m'],
