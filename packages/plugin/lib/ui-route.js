@@ -88,7 +88,7 @@ export function createUiRoute(ctx, cfg, binding) {
   if (!webServer || typeof webServer.register !== 'function') return () => {}
   const stateDir = cfg.stateDir
 
-  function fishView(c) {
+  function fishView(c, sessions) {
     const affect = c.fold().affect
     const events = c.store.readEvents()
     const memory = c.memorySummary(cfg.growth)
@@ -97,7 +97,9 @@ export function createUiRoute(ctx, cfg, binding) {
       name: c.meta.name,
       bornAt: c.meta.bornAt,
       frozen: c.isFrozen(),
-      occupancy: c.meta.occupancy ?? null,
+      occupancy: c.meta.occupancy
+        ? { ...c.meta.occupancy, workspace: c.meta.occupancy.kind === 'session' ? (c.meta.occupancy.workspace || (sessions || []).find(s => s.id === c.meta.occupancy.id)?.workspace || '') : undefined }
+        : null,
       episodes: events.filter(e => e.t === 'episode').length,
       affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
       memory,
@@ -116,27 +118,50 @@ export function createUiRoute(ctx, cfg, binding) {
    * 工作区目录名是编码过的（`--C-Users-x-.dsh-fish-home--`），
    * 用「把 - 当分隔符试遍所有切分 + 路径存在性校验」还原真实路径。
    */
-  function enumerateScopes() {
-    const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
-    const root = path.join(home, 'sessions')
-    const workspaces = []
-    const sessions = []
-    try {
-      for (const d of fs.readdirSync(root, { withFileTypes: true })) {
-        if (!d.isDirectory() || !d.name.startsWith('--') || !d.name.endsWith('--')) continue
-        const ws = decodeWorkspace(d.name)
-        if (!ws) continue
-        if (!workspaces.includes(ws)) workspaces.push(ws)
-        let names = []
-        try { names = fs.readdirSync(path.join(root, d.name), { withFileTypes: true }) } catch { /* 读不到就跳过 */ }
-        for (const n of names) {
-          if (n.isDirectory() && n.name.startsWith('session-')) sessions.push({ id: n.name, workspace: ws })
-        }
-      }
-    } catch { /* 没有 sessions 目录就只用已记录的 */ }
-    return { workspaces, sessions }
+  function scopesRoots() {
+    const out = []
+    if (process.env.DSH_HOME) out.push(path.join(process.env.DSH_HOME, 'sessions'))
+    out.push(path.join(os.homedir(), '.dsh', 'sessions'))
+    return [...new Set(out)].filter((r) => r && fs.existsSync(r))
   }
 
+  function enumerateScopes() {
+    const workspaces = []
+    const sessions = []
+    const roots = scopesRoots()
+    let scanned = 0
+    let decoded = 0
+    for (const root of roots) {
+      try {
+        for (const d of fs.readdirSync(root, { withFileTypes: true })) {
+          if (!d.isDirectory() || !d.name.startsWith('--') || !d.name.endsWith('--')) continue
+          scanned += 1
+          const ws = decodeWorkspace(d.name)
+          if (!ws) continue
+          decoded += 1
+          if (!workspaces.includes(ws)) workspaces.push(ws)
+          let names = []
+          try { names = fs.readdirSync(path.join(root, d.name), { withFileTypes: true }) } catch { /* 读不到就跳过 */ }
+          for (const n of names) {
+            if (n.isDirectory() && n.name.startsWith('session-') && !sessions.some(x => x.id === n.name)) {
+              sessions.push({ id: n.name, workspace: ws })
+            }
+          }
+        }
+      } catch { /* 单个 root 失败不影响其他 */ }
+    }
+    const debug = {
+      homedir: os.homedir(),
+      dshHomeEnv: process.env.DSH_HOME ?? null,
+      roots,
+      scanned,
+      decoded,
+      workspaces: workspaces.length,
+      sessions: sessions.length,
+    }
+    try { fs.writeFileSync(path.join(cfg.stateDir, 'scopes-debug.json'), JSON.stringify(debug, null, 2)) } catch { /* 忽略 */ }
+    return { workspaces, sessions, debug }
+  }
   /** 枚举结果 + 插件已记录的住处（主题目录不同时两边互补）。 */
   function allScopes() {
     const e = enumerateScopes()
@@ -146,14 +171,15 @@ export function createUiRoute(ctx, cfg, binding) {
     for (const s of (binding.scopes?.sessions ?? [])) {
       if (s && s.id && !sessions.some(x => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '' })
     }
-    return { workspaces, sessions }
+    return { workspaces, sessions, debug: e.debug }
   }
 
   function stateView() {
-    const fish = binding.listCreatures().map(fishView)
+    const scopes = allScopes()
+    const fish = binding.listCreatures().map((c) => fishView(c, scopes.sessions))
     return {
       born: fish.some(f => f.episodes > 0),
-      scopes: allScopes(),
+      scopes,
       config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
       fish,
     }

@@ -30,10 +30,16 @@ function makeFactory() {
       return j
     }
     const fmt = (n) => Number(n ?? 0).toFixed(2)
+    const shortId = (id) => {
+      const s = String(id || '')
+      const m = s.match(/^session-([0-9a-f]{8})/i)
+      if (m) return 'session-' + m[1] + '…'
+      return s.length > 14 ? s.slice(0, 14) + '…' : s
+    }
     const occText = (occ) => {
       if (!occ) return '未分配（不归任何会话）'
       if (occ.kind === 'workspace') return '工作区 ' + occ.id
-      return '会话 ' + occ.id.slice(0, 14) + (occ.workspace ? '（' + occ.workspace + '）' : '')
+      return '会话 ' + shortId(occ.id) + (occ.workspace ? '（' + (occ.workspace.split(/[\\\\/]/).filter(Boolean).pop() || '') + '）' : '')
     }
 
     function FishCard(props) {
@@ -197,7 +203,7 @@ function makeFactory() {
                         const taken = occupiedSess[s2.id]
                         const disabled = !!taken && taken !== f.name
                         const active = !!(pick && pick.kind === 'session' && pick.id === s2.id)
-                        return node(s2.id + (disabled ? '（' + taken + ' 已住）' : ''), disabled, active, () => setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }), 'r' + i)
+                        return node(shortId(s2.id) + (disabled ? '（' + taken + ' 已住）' : ''), disabled, active, () => setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }), 'r' + i)
                       }),
                       !roomsOf(pickWs).length ? e('div', { style: lab, children: '这个屋子还没有记录到的房间' }, 'norooms') : null,
                     ] }, 'rooms')
@@ -205,7 +211,7 @@ function makeFactory() {
               ] }, 'right'),
             ] }, 'cols'),
             e('div', { style: { ...rowS, marginTop: 12 }, children: [
-              e('span', { style: { ...lab, fontSize: 12 }, children: pick ? '已选：' + (pick.kind === 'workspace' ? '整个屋子 ' + pick.id : '房间 ' + pick.id) : '还没选' }, 'sel'),
+              e('span', { style: { ...lab, fontSize: 12 }, children: pick ? '已选：' + (pick.kind === 'workspace' ? '整个屋子 ' + (pick.id.split(/[\\\\/]/).filter(Boolean).pop() || pick.id) : '房间 ' + shortId(pick.id)) : '还没选' }, 'sel'),
               e('div', { style: { display: 'flex', gap: 8 }, children: [
                 e('button', { style: btnS, onClick: () => { setMoveOpen(false); setPick(null) }, children: '取消' }, 'c'),
                 e('button', { style: { ...btnP, opacity: pick ? 1 : 0.5, cursor: pick ? 'pointer' : 'not-allowed', fontSize: 13, padding: '6px 14px' }, onClick: () => act(async () => {
@@ -231,7 +237,7 @@ function makeFactory() {
               e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '屋子' }, 'wl'),
               e('div', { style: { wordBreak: 'break-all' }, children: wsPath ? base(wsPath) : '—' }, 'wv'),
               e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '房间' }, 'rl'),
-              e('div', { style: { wordBreak: 'break-all' }, children: roomName }, 'rv'),
+              e('div', { style: { wordBreak: 'break-all' }, children: (roomName === '整个屋子（所有会话）' || roomName === '未分配') ? roomName : shortId(roomName) }, 'rv'),
             ] }, 'occ'),
             e('div', { style: { ...lab, fontSize: 12 }, children: f.episodes + ' 轮 · 身份文件 ' + (f.metaBytes || 0) + ' 字节' }, 'meta'),
           ] }, 'room'),
