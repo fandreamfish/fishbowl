@@ -51,6 +51,52 @@ export function mergeUiConfig(raw, ui) {
   if (typeof ui.growth === 'number' && Number.isFinite(ui.growth)) out.growth = ui.growth
   if (ui.seed && typeof ui.seed === 'object') out.seed = { name: String(ui.seed.name ?? ''), background: String(ui.seed.background ?? '') }
   if (ui.memory && typeof ui.memory === 'object') out.memory = { ...(raw.memory || {}), ...ui.memory }
+  if (ui.wake && typeof ui.wake === 'object') out.wake = pickRoutineConfig({ wake: ui.wake }).wake
+  if (ui.contact && typeof ui.contact === 'object') out.contact = pickRoutineConfig({ contact: ui.contact }).contact
+  if (ui.relation && typeof ui.relation === 'object' && typeof ui.relation.kind === 'string') {
+    out.relation = { kind: ['companion', 'friend'].includes(ui.relation.kind) ? ui.relation.kind : 'companion' }
+  }
+  return out
+}
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/**
+ * 只接受认识的作息配置键（防前端塞垃圾）。
+ * wake：清醒节律；contact：主动联系配额。纯函数，可测。
+ */
+export function pickRoutineConfig(x) {
+  const out = {}
+  const w = x?.wake
+  if (w && typeof w === 'object') {
+    const wake = {}
+    if (typeof w.enabled === 'boolean') wake.enabled = w.enabled
+    if (Number.isFinite(Number(w.absenceHours))) wake.absenceHours = Math.min(72, Math.max(1, Number(w.absenceHours)))
+    if (Array.isArray(w.activeWindow) && w.activeWindow.length === 2 && w.activeWindow.every((t) => HHMM.test(String(t)))) {
+      wake.activeWindow = [String(w.activeWindow[0]), String(w.activeWindow[1])]
+    }
+    if (w.interval && typeof w.interval === 'object') {
+      const mode = w.interval.mode === 'random' ? 'random' : 'fixed'
+      const iv = { mode }
+      if (typeof w.interval.min === 'string' && w.interval.min.trim()) iv.min = w.interval.min.trim()
+      if (mode === 'random' && typeof w.interval.max === 'string' && w.interval.max.trim()) iv.max = w.interval.max.trim()
+      wake.interval = iv
+    }
+    if (typeof w.idleSkip === 'boolean') wake.idleSkip = w.idleSkip
+    if (Object.keys(wake).length) out.wake = wake
+  }
+  const c = x?.contact
+  if (c && typeof c === 'object') {
+    const contact = {}
+    if (Array.isArray(c.window) && c.window.length === 2 && c.window.every((t) => HHMM.test(String(t)))) {
+      contact.window = [String(c.window[0]), String(c.window[1])]
+    }
+    if (Number.isFinite(Number(c.dailyMax))) contact.dailyMax = Math.min(10, Math.max(0, Math.round(Number(c.dailyMax))))
+    if (typeof c.minGap === 'string' && c.minGap.trim()) contact.minGap = c.minGap.trim()
+    if (Number.isFinite(Number(c.unansweredStop))) contact.unansweredStop = Math.min(10, Math.max(1, Math.round(Number(c.unansweredStop))))
+    if (typeof c.requireReason === 'boolean') contact.requireReason = c.requireReason
+    if (Object.keys(contact).length) out.contact = contact
+  }
   return out
 }
 
@@ -280,7 +326,7 @@ export function seedChanged(prev, next) {
   return !!next && (String(next.name ?? '') !== String(prev?.name ?? '') || String(next.background ?? '') !== String(prev?.background ?? ''))
 }
 
-export function createUiRoute(ctx, cfg, binding, host) {
+export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
   host = host ?? createDshHost(ctx, cfg)
   if (typeof host.registerRoute !== 'function') return () => {}
   const stateDir = cfg.stateDir
@@ -340,7 +386,7 @@ export function createUiRoute(ctx, cfg, binding, host) {
     return {
       born: fish.some(f => f.episodes > 0),
       scopes,
-      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled, memory: cfg.memory },
+      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, memory: cfg.memory },
       fish,
     }
   }
@@ -467,7 +513,7 @@ export function createUiRoute(ctx, cfg, binding, host) {
 
           // —— 兼容旧路径 ——
           if (sub === '/state' && req.method === 'GET') return send(res, stateView())
-          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory })
+          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, relation: cfg.relation })
           if (sub === '/config' && req.method === 'POST') {
             const body = JSON.parse(await readBody(req) || '{}')
             const ui = mergeUiConfig({}, body)
@@ -475,10 +521,22 @@ export function createUiRoute(ctx, cfg, binding, host) {
             if (stateView().born && seedChanged(cfg.seed, ui.seed)) {
               return send(res, { ok: false, error: '她已经出生了，来历不能再改（历史会被铭记，只能说服不能修改）' }, 409)
             }
-            saveUiConfig(stateDir, { growth: ui.growth, seed: ui.seed ?? null })
+            const routine = pickRoutineConfig(body)
+            saveUiConfig(stateDir, {
+              growth: ui.growth,
+              seed: ui.seed ?? null,
+              wake: { ...cfg.wake, ...(routine.wake ?? {}) },
+              contact: { ...cfg.contact, ...(routine.contact ?? {}) },
+              relation: ui.relation ?? cfg.relation,
+            })
             if (typeof ui.growth === 'number') cfg.growth = ui.growth
             if (ui.seed && !stateView().born) cfg.seed = ui.seed
-            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory })
+            if (routine.wake) cfg.wake = { ...cfg.wake, ...routine.wake }
+            if (routine.contact) cfg.contact = { ...cfg.contact, ...routine.contact }
+            if (ui.relation) cfg.relation = ui.relation
+            // 节律开关/时段是启动时读的：改了就重启唤醒循环
+            if (routine.wake) { try { opts.restartWake?.() } catch { /* 忽略 */ } }
+            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, relation: cfg.relation })
           }
 
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })

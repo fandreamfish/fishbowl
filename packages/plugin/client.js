@@ -420,6 +420,7 @@ function makeFactory() {
       const [newErr, setNewErr] = useState('')
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
+      const [routine, setRoutine] = useState(null)
 
       const load = useCallback(async (attempt = 0) => {
         try {
@@ -428,6 +429,7 @@ function makeFactory() {
           setGrowth(d.config.growth)
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
+          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {} })
           setErr('')
         } catch (x) {
           setErr(String((x && x.message) || x))
@@ -490,7 +492,7 @@ function makeFactory() {
       const page = view.page || 'status'
       const setPage = (p) => setView({ ...view, page: p })
       const tabs = [
-        ['status', '状态'], ['home', '住所'], ['persona', '人设'], ['memory', '记忆'],
+        ['status', '状态'], ['home', '住所'], ['routine', '作息'], ['persona', '人设'], ['memory', '记忆'],
       ]
 
       let body = null
@@ -684,7 +686,82 @@ function makeFactory() {
               ? f.notes.map((n, i) => e('div', { style: { marginBottom: 8, fontSize: 13 }, children: '「' + n.text + '」' }, 'n' + i))
               : e('div', { style: lab, children: '还没有小纸条' }),
           ] }, 'notes'),
-        ] }, 'home-root')      } else if (page === 'persona') {
+        ] }, 'home-root')      } else if (page === 'routine') {
+        const r = routine || { wake: {}, contact: {} }
+        const wake = r.wake || {}
+        const contact = r.contact || {}
+        const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
+        const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
+        const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
+        body = e('div', { children: [
+          e('div', { style: box, children: [
+            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '清醒节律' }, 'h'),
+              e('button', { style: wake.enabled ? { ...btnP, padding: '4px 12px', fontSize: 12 } : { ...btn, padding: '4px 12px', fontSize: 12 }, onClick: () => setWake('enabled', !wake.enabled), children: wake.enabled ? '已开启' : '已关闭' }, 'sw'),
+            ] }, 'head'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '活动时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((wake.activeWindow ?? [])[0], (v) => setWake('activeWindow', [v, (wake.activeWindow ?? [])[1] ?? '23:30']), 'a'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((wake.activeWindow ?? [])[1], (v) => setWake('activeWindow', [(wake.activeWindow ?? [])[0] ?? '08:00', v]), 'b'),
+              ] }, 'w'),
+            ] }, 'r1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '间隔' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                e('select', { style: { ...inp, width: 92 }, value: wake.interval?.mode ?? 'fixed', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), mode: ev.target.value }), children: [e('option', { value: 'fixed', children: '固定' }), e('option', { value: 'random', children: '随机' })] }, 'm'),
+                e('input', { style: { ...inp, width: 76 }, value: wake.interval?.min ?? '60m', placeholder: '60m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), min: ev.target.value }) }, 'min'),
+                (wake.interval?.mode === 'random') ? e('input', { style: { ...inp, width: 76 }, value: wake.interval?.max ?? '', placeholder: '120m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), max: ev.target.value }) }, 'max') : null,
+              ] }, 'v'),
+            ] }, 'r2'),
+            e('div', { style: rowS, children: [
+              e('span', { style: lab, children: '多久没说话就算想念' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(wake.absenceHours ?? 8, (v) => setWake('absenceHours', v), 'n', 1, 72),
+                e('span', { style: lab, children: '小时' }, 'u'),
+              ] }, 'v'),
+            ] }, 'r3'),
+          ] }, 'wake'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '主动联系' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '去敲你之前要过这几道闸；没必要的联系不如不联系。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((contact.window ?? [])[0], (v) => setContact('window', [v, (contact.window ?? [])[1] ?? '22:30']), 'a'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((contact.window ?? [])[1], (v) => setContact('window', [(contact.window ?? [])[0] ?? '09:00', v]), 'b'),
+              ] }, 'v'),
+            ] }, 'c1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '每天最多' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(contact.dailyMax ?? 2, (v) => setContact('dailyMax', v), 'n', 0, 10),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 'c2'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '最短间隔' }, 'l'),
+              e('input', { style: { ...inp, width: 90 }, value: contact.minGap ?? '3h', onInput: (ev) => setContact('minGap', ev.target.value) }, 'v'),
+            ] }, 'c3'),
+            e('div', { style: { ...rowS }, children: [
+              e('span', { style: lab, children: '连发没回就停' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(contact.unansweredStop ?? 3, (v) => setContact('unansweredStop', v), 'n', 1, 10),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 'c4'),
+          ] }, 'contact'),
+          e('div', { style: rowS, children: [
+            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
+            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
+              await postJson(API + '/config', { wake, contact })
+            }, '作息已保存'), children: '保存' }, 'save'),
+          ] }, 'act'),
+        ] }, 'routine')      } else if (page === 'persona') {
         const isDefaultName = /^fish-/.test(f.name)
         body = e('div', { children: [
           born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,

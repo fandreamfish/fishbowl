@@ -71,12 +71,36 @@ export function apply(ctx, config = {}) {
 
   if (ctx.agents) {
     safe('collector', () => createCollector(ctx, binding, cfg, host, memoryFor))
-    // M3.0：清醒节律与主动联系（默认关闭）
-    safe('wake', () => createWakeLoop(ctx, binding, cfg, host))
+
+    // M3.0：清醒节律与主动联系（默认关闭）。设置页改了作息要能重开循环。
+    let wakeOff = null
+    const startWake = () => {
+      try { wakeOff?.() } catch { /* 旧循环清理失败也继续 */ }
+      wakeOff = null
+      try {
+        const off = createWakeLoop(ctx, binding, cfg, host)
+        if (typeof off === 'function') wakeOff = off
+      } catch (err) {
+        traceWarn('wake', err)
+      }
+    }
+    startWake()
+    disposers.push(() => { try { wakeOff?.() } catch { /* 忽略 */ } })
+
+    // M5：设置页后端（状态 / 配置）；作息改动通过 restartWake 即时生效
+    safe('ui-route', () => createUiRoute(ctx, cfg, binding, host, { restartWake: startWake }))
+  } else {
+    safe('ui-route', () => createUiRoute(ctx, cfg, binding, host))
   }
 
-  // M5：设置页后端（状态 / 配置）
-  safe('ui-route', () => createUiRoute(ctx, cfg, binding, host))
+  /** 子系统失败只记一笔，绝不拖垮激活（宿主启动的底线）。 */
+  function traceWarn(name, err) {
+    try {
+      fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
+        ts: Date.now(), warn: `${name} init failed: ${String(err && err.message || err)}`,
+      }) + '\n')
+    } catch { /* 记不下来也只能算 */ }
+  }
 
   return () => {
     for (const d of disposers) {
