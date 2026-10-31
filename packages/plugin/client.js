@@ -80,7 +80,7 @@ function makeFactory() {
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
 
-      const load = useCallback(async () => {
+      const load = useCallback(async (attempt = 0) => {
         try {
           const d = await getJson(API + '/fish')
           setData(d)
@@ -88,7 +88,11 @@ function makeFactory() {
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
           setErr('')
-        } catch (x) { setErr(String((x && x.message) || x)) }
+        } catch (x) {
+          setErr(String((x && x.message) || x))
+          // 宿主的路由可能刚启动还没挂好：前几次自动重试
+          if (attempt < 4) setTimeout(() => { void load(attempt + 1) }, 1500)
+        }
       }, [])
       useEffect(() => { void load() }, [load])
 

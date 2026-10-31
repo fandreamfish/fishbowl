@@ -167,11 +167,52 @@ export function createDshHost(ctx, cfg) {
       }
     },
 
-    /** 注册 HTTP 路由（kind: 'prefix' | 'exact'）。 */
+    /**
+     * 注册 HTTP 路由（kind: 'prefix' | 'exact'）。
+     *
+     * 启动顺序问题：插件可能先于 webServer 服务激活，`get('webServer')` 这时是
+     * undefined。以前直接放弃 → 重启后设置页一直 404，只有手动停用再启用才恢复。
+     * 现在：服务没起来就等它起来再注册（ctx.inject 会在服务可用时回调）。
+     */
     registerRoute(route) {
-      const webServer = get('webServer')
-      if (!webServer || typeof webServer.register !== 'function') return undefined
-      return webServer.register(route)
+      const tryRegister = (webServer) => {
+        if (!webServer || typeof webServer.register !== 'function') return undefined
+        try { return webServer.register(route) } catch { return undefined }
+      }
+
+      const ready = tryRegister(get('webServer'))
+      if (ready) return ready
+
+      if (typeof ctx.inject === 'function') {
+        let dispose
+        try {
+          const off = ctx.inject(['webServer'], (scoped) => {
+            dispose = tryRegister(scoped?.webServer ?? get('webServer'))
+            if (dispose) return () => { try { dispose() } catch { /* 忽略 */ } }
+            return undefined
+          })
+          return () => { try { off?.() } catch { /* 忽略 */ } }
+        } catch { /* 退回轮询 */ }
+      }
+
+      // 兜底轮询（最多 30 秒，每秒一次）
+      let tries = 0
+      let timer = null
+      let disposed = false
+      let dispose
+      const poll = () => {
+        if (disposed) return
+        dispose = tryRegister(get('webServer'))
+        if (dispose) return
+        if (++tries >= 30) return
+        timer = setTimeout(poll, 1000)
+      }
+      timer = setTimeout(poll, 500)
+      return () => {
+        disposed = true
+        if (timer) clearTimeout(timer)
+        try { dispose?.() } catch { /* 忽略 */ }
+      }
     },
 
     inject(agent, message) {
