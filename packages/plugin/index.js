@@ -36,6 +36,7 @@ export function apply(ctx, config = {}) {
   } catch { /* 没有 UI 配置就用 patch 配置 */ }
 
   const cfg = normalizeConfig(raw)
+  ctx.__fishbowlStateDir = cfg.stateDir // 给 lib/rename.js 记 trace 用
   const disposers = []
   const binding = createBinding(cfg)
 

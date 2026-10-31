@@ -117,12 +117,12 @@ function makeFactory() {
             e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr('') }, children: '带一条新的回家' }, 'newbtn'),
           ] }, 'add'),
           newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
-            e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 12, padding: 18, width: 380, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
-              e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 10 }, children: '给新鱼起个名字' }, 'h'),
-              e('input', { style: inp, value: newName, placeholder: '例：大肥鱼', autofocus: true, onInput: (ev) => setNewName(ev.target.value) }, 'i'),
+            e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 400, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
+              e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 12 }, children: '给新鱼起个名字' }, 'h'),
+              e('input', { style: { ...inp, padding: '9px 12px', boxSizing: 'border-box' }, value: newName, placeholder: '例：大肥鱼', autofocus: true, onInput: (ev) => setNewName(ev.target.value) }, 'i'),
               e('div', { style: { ...lab, fontSize: 12, marginTop: 6 }, children: '名字是她的身份，之后只读（历史会被铭记）。' }, 'hint'),
               newErr ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 6 }, children: newErr }, 'e') : null,
-              e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }, children: [
+              e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }, children: [
                 e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: () => setNewOpen(false), children: '取消' }, 'c'),
                 e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: async () => {
                   const name = newName.trim()

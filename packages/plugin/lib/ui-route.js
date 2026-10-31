@@ -277,6 +277,22 @@ export function createUiRoute(ctx, cfg, binding) {
             }
           }
 
+          // —— 诊断：服务可用性（排查改名问题用） ——
+          if (sub === '/debug/services' && req.method === 'GET') {
+            const sessions = ctx.get?.('sessions')
+            const titles = ctx.get?.('sessionTitle')
+            const registry = ctx.get?.('workspaceRegistry')
+            let live = []
+            try { live = (sessions?.list?.() ?? []).map((s) => s?.id).filter(Boolean) } catch { live = [] }
+            return send(res, {
+              hasSessions: !!sessions,
+              hasSessionTitle: !!titles,
+              hasWorkspaceRegistry: !!registry,
+              liveSessions: live,
+              workspaces: (() => { try { return (registry?.list?.() ?? []).map((w) => ({ id: w.id, path: w.path, title: w.title })) } catch { return [] } })(),
+            })
+          }
+
           // —— 兼容旧路径 ——
           if (sub === '/state' && req.method === 'GET') return send(res, stateView())
           if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null })
