@@ -8,18 +8,20 @@ import { ContactGate } from '../../../src/core/contact.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
-import { appraiseScripted } from '../lib/appraiser.js'
+import { appraiseScripted, APPRAISER_SYSTEM_PROMPT } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
 import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerdict, createConstraints } from '../lib/constraints.js'
-import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/extract.js'
+import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
+import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/summarize.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
-import { createCollector } from '../lib/collector.js'
-import { Creature } from '../../../src/core/creature.ts'
+import { buildTranscript, createCollector } from '../lib/collector.js'
+import { Creature, dialogOnly } from '../../../src/core/creature.ts'
+import { recentDialog as signalRecentDialog } from '../../../src/core/signals.ts'
 import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
@@ -86,6 +88,24 @@ check('tool 名字回退 content 块', toolNameOf({ type: 'tool/result', data: {
 check('messageText 忽略空块', messageText({ content: [{ type: 'text', text: '' }, { type: 'text', text: 'hi' }] }) === 'hi')
 check('自己注入的状态块被识别', isFishbowlInjection({ type: 'user/message', data: { source: { kind: 'fishbowl' } } }) === true)
 check('普通用户消息不算注入', isFishbowlInjection(userEv) === false)
+
+console.log('== P0：唤醒回合的出处（situation） ==')
+const wakeMsg = injectMessage('（醒一醒。现在是 20:00。你很久没跟他说过话了。）', { mode: 'contact', reason: '很久没好好说话了' })
+check('唤醒消息带 wake 出处', wakeMsg.source?.wake?.mode === 'contact')
+check('普通注入不带 wake 出处', m1.source?.wake === undefined)
+const wakeEv = { type: 'user/message', data: wakeMsg }
+check('wakeOf 认出唤醒消息', wakeOf(wakeEv)?.mode === 'contact' && wakeOf(wakeEv)?.reason === '很久没好好说话了')
+check('wakeOf 对普通注入返回 null', wakeOf({ type: 'user/message', data: m1 }) === null)
+const wakeTranscript = buildTranscript([
+  { role: 'situation', text: '（醒一醒。现在是 20:00。）' },
+  { role: 'assistant', text: '嗯。' },
+], 2400)
+check('situation 进入转录', wakeTranscript.includes('situation:') && wakeTranscript.includes('assistant:'))
+check('评价器知道 situation 不是用户', APPRAISER_SYSTEM_PROMPT.includes('situation'))
+check('她的总结知道 situation 不是用户', HER_SYSTEM.includes('situation'))
+check('中性总结知道 situation 不是用户', NEUTRAL_SYSTEM.includes('situation'))
+check('dialogOnly 丢掉 situation，只留对话', dialogOnly('situation: xx\nassistant: 嗯') === 'assistant: 嗯')
+check('dialogOnly 保留旧 episode 的无前缀原文', dialogOnly('这个方案不行') === '这个方案不行')
 
 console.log('== 状态指纹（防每轮重复注入） ==')
 const baseBias = { verbosity: 0.5, thresholdRefuse: 0.5, thresholdVerify: 0.5, riskAppetite: 0.5, disclosure: 0.5, patience: 0.5 }
@@ -481,6 +501,27 @@ check('turn 里存的是完整转录', String(e2eEvents.find((e: any) => e.t ===
 check('注入用的是新渲染', e2eInjected.some((t) => t.startsWith('[fishbowl 状态]')))
 check('情绪跟着 turn 重放（valence 有变化）', Math.abs(e2eFish.fold().affect.valence) > 0)
 
+// P0 回归：唤醒回合也必须带出处；否则总结会替她编一个"对方"。
+const wakeEvent = { type: 'user/message', data: injectMessage('（醒一醒。现在是 20:07。你很久没跟他说过话了。）', { mode: 'contact', reason: '很久没好好说话了' }) }
+e2eHandler(e2eSession, wakeEvent)
+e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '嗯。' }] } } })
+e2eHandler(e2eSession, { type: 'turn/end', data: {} })
+await new Promise((r) => setTimeout(r, 250))
+const wakeTurn = e2eFish.store.readEvents().filter((e: any) => e.t === 'turn').slice(-1)[0]
+check('唤醒回合落了一条 turn', !!wakeTurn)
+check('唤醒回合的 note 有 situation', String(wakeTurn?.note ?? '').includes('situation:'))
+check('唤醒回合的 note 只有 situation + assistant', String(wakeTurn?.note ?? '').includes('assistant:') && !String(wakeTurn?.note ?? '').includes('user:'))
+check('recentDialog 不把 situation 当对话', !e2eFish.recentDialog(10).some((d) => d.text.includes('醒一醒')))
+check('signals.recentDialog 也不把 situation 当对话', !signalRecentDialog(e2eFish, 10).some((d) => d.text.includes('醒一醒')))
+
+// 「你没事可以刷刷 B 站」是许可：落 grant 事件，并进入下一轮注入。
+e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u-grant', content: [{ type: 'text', text: '你没事可以刷刷 B 站' }] } })
+e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '行。' }] } } })
+e2eHandler(e2eSession, { type: 'turn/end', data: {} })
+await new Promise((r) => setTimeout(r, 250))
+check('许可落成 grant 事件', e2eFish.activeGrants('browse').length === 1)
+check('许可进入注入（事实，不是命令）', e2eInjected.some((t) => t.includes('他允许你的事')))
+
 console.log('== M17.1：审批策略 never 时不问 ==')
 const askDec = verifyDecision({ thresholdVerify: 0.9 } as any, 'pwsh', cfg)
 check('高验证门槛 → 本该 ask', askDec?.kind === 'ask')
@@ -548,7 +589,15 @@ check('联系：每日上限被钳制', r2.contact.dailyMax === 10)
 check('联系：时段保留', r2.contact.window[1] === '22:30')
 const merged = mergeUiConfig({}, { wake: { enabled: true }, contact: { dailyMax: 1 } })
 check('UI 配置能合并进运行时配置', merged.wake.enabled === true && merged.contact.dailyMax === 1)
+const r3 = pickRoutineConfig({ selfTime: { enabled: true, dailyMax: 99, window: ['09:00', '23:00'], minGap: '90m' } })
+check('自处：上限被钳制', r3.selfTime.enabled === true && r3.selfTime.dailyMax === 6)
+const merged2 = mergeUiConfig({}, { selfTime: { enabled: true }, browse: { enabled: false, perDay: 99 } })
+check('自处/上网能合并进运行时配置', merged2.selfTime.enabled === true && merged2.browse.enabled === false && merged2.browse.perDay === 4)
+check('上网配置默认值', normalizeConfig({}).browse.enabled === true && normalizeConfig({}).browse.perDay === 1)
 console.log('== M20：主动联系跨重启 ==')
+const lateGate = new ContactGate({ window: ['20:00', '02:00'], dailyMax: 2, minGap: '1h', burst: { max: 1, per: '2h' } }, 'Asia/Shanghai')
+check('跨零点时段：凌晨 1 点在', lateGate.inWindow(new Date('2026-10-31T01:00:00+08:00').getTime()))
+check('跨零点时段：中午不在', !lateGate.inWindow(new Date('2026-10-31T12:00:00+08:00').getTime()))
 const gateT = new ContactGate({ window: ['00:00', '23:59'], dailyMax: 2, minGap: '3h', burst: { max: 1, per: '2h' } }, 'Asia/Shanghai')
 const t0 = new Date('2026-10-31T10:00:00+08:00').getTime()
 gateT.hydrate([t0 - 1000, t0 - 2000])

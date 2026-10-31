@@ -71,13 +71,26 @@ export function summaryText(bias, affect, memory) {
  * 注入消息的完整形状。
  * 事故教训：inject 的消息会被原样写进会话日志成为 user/message 表面事件，
  * 缺 role / id 会永久卡死该会话的 API 请求（422）。任何调用方都不要手拼。
+ *
+ * `wake` 是给收集器看的出处标记（不是给她看的）：
+ *   - 普通状态块 / 回忆 / 基线：不带 wake，收集器照旧跳过，不进记忆；
+ *   - 唤醒（联系型或自处型）：带 wake，收集器把这句话记成 `situation:`，
+ *     这样"她为什么醒"就能进账本，总结不会替她编一个不存在的对方。
+ *
+ * @param {string} text
+ * @param {{ mode?: 'contact'|'self', reason?: string|null }|null} [wake]
  */
-export function injectMessage(text) {
+export function injectMessage(text, wake = null) {
   return {
     role: 'user',
     id: randomUUID(),
     content: [{ type: 'text', text }],
-    source: { kind: 'fishbowl' },
+    source: {
+      kind: 'fishbowl',
+      ...(wake && typeof wake === 'object'
+        ? { wake: { mode: wake.mode === 'self' ? 'self' : 'contact', reason: wake.reason ?? null } }
+        : {}),
+    },
   }
 }
 

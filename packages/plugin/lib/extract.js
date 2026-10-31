@@ -53,6 +53,24 @@ export function isFishbowlInjection(event) {
   return event?.type === 'user/message' && event?.data?.source?.kind === 'fishbowl'
 }
 
+/**
+ * 唤醒消息的出处标记。
+ *
+ * 唤醒也是 fishbowl 注入的 user 消息，但它不是"状态块"：
+ * 它是她这次醒来的处境，必须进这一轮的记忆记录（`situation:`），
+ * 否则总结只看到 assistant，就会替她编一个不存在的对方。
+ *
+ * @returns {{mode:'contact'|'self', reason:string|null}|null}
+ */
+export function wakeOf(event) {
+  const s = event?.data?.source
+  if (!s || s.kind !== 'fishbowl' || !s.wake || typeof s.wake !== 'object') return null
+  return {
+    mode: s.wake.mode === 'self' ? 'self' : 'contact',
+    reason: typeof s.wake.reason === 'string' ? s.wake.reason : null,
+  }
+}
+
 /** 会话所在的工作区（绝对路径）；取不到返回 undefined。 */
 export function workspaceOf(session) {
   const cwd = session?.header?.cwd ?? session?.cwd ?? session?.meta?.cwd

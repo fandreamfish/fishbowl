@@ -2,6 +2,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import { normalizeMemory } from '../../memory/src/config.ts'
+import { normalizeBrowseConfig } from '../../../src/core/browse.ts'
 
 /** @returns {import('./types.js').FishbowlConfig} */
 export function normalizeConfig(raw = {}) {
@@ -77,6 +78,39 @@ export function normalizeConfig(raw = {}) {
       burst: raw.contact?.burst ?? { max: 1, per: '2h' },
       requireReason: raw.contact?.requireReason ?? true,
       unansweredStop: raw.contact?.unansweredStop ?? 3,
+    },
+
+    // M21：自处（醒来但不为了找他）。默认关；独立于联系配额。
+    selfTime: {
+      enabled: raw.selfTime?.enabled === true,
+      window: (() => {
+        const w = raw.selfTime?.window
+        return Array.isArray(w) && w.length === 2 && w.every((x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)))
+          ? [String(w[0]), String(w[1])]
+          : ['09:00', '23:00']
+      })(),
+      dailyMax: Number.isFinite(Number(raw.selfTime?.dailyMax)) ? Math.max(0, Math.min(6, Math.round(Number(raw.selfTime.dailyMax)))) : 1,
+      minGap: /^\d+(?:\.\d+)?\s*[smhd]$/.test(String(raw.selfTime?.minGap ?? '')) ? String(raw.selfTime.minGap) : '90m',
+      idleWaitMs: Number.isFinite(Number(raw.selfTime?.idleWaitMs)) ? Math.max(0, Math.min(120000, Number(raw.selfTime.idleWaitMs))) : 15000,
+    },
+
+    // M21：上网（B 站只读）。工具始终注册；开关只决定能不能联网。
+    browse: normalizeBrowseConfig(raw.browse),
+
+    // M21.2：在 B 站说话（写操作，默认关）。cookie 在 bili-auth.json，不在这里。
+    comment: {
+      enabled: raw.comment?.enabled === true,
+      perDay: Number.isFinite(Number(raw.comment?.perDay)) ? Math.max(0, Math.min(5, Math.round(Number(raw.comment.perDay)))) : 1,
+      replyPerDay: Number.isFinite(Number(raw.comment?.replyPerDay)) ? Math.max(0, Math.min(10, Math.round(Number(raw.comment.replyPerDay)))) : 2,
+      replyToReplies: raw.comment?.replyToReplies !== false,
+      scanEveryMin: Number.isFinite(Number(raw.comment?.scanEveryMin)) ? Math.max(5, Math.min(720, Math.round(Number(raw.comment.scanEveryMin)))) : 30,
+      window: (() => {
+        const w = raw.comment?.window
+        return Array.isArray(w) && w.length === 2 && w.every((x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)))
+          ? [String(w[0]), String(w[1])]
+          : ['20:00', '23:00']
+      })(),
+      atOwner: raw.comment?.atOwner !== false,
     },
   }
   return c

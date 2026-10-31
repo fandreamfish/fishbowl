@@ -22,8 +22,11 @@ export class ContactGate {
   }
 
   inWindow(epochMs: number): boolean {
+    const start = parseHm(this.cfg.window[0])
+    const end = parseHm(this.cfg.window[1])
+    if (start === end) return true
     const m = wallClockMinutes(epochMs, this.timezone)
-    return parseHm(this.cfg.window[0]) <= m && m < parseHm(this.cfg.window[1])
+    return start < end ? m >= start && m < end : m >= start || m < end
   }
 
   /** 从账本恢复历史（跨重启的配额）。 */

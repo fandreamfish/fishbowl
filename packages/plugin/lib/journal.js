@@ -49,8 +49,9 @@ export const DIARY_SYSTEM_PROMPT = [
   '只输出日记正文。',
 ].join('\n')
 
-export function buildDiaryPrompt(transcript, affectLine) {
-  return `今天你和他之间发生的事：\n${transcript.slice(-1200)}\n\n你现在的状态：${affectLine}\n\n写今天的日记。`
+export function buildDiaryPrompt(transcript, affectLine, seenLine = '') {
+  const seen = seenLine ? `\n\n${seenLine}` : ''
+  return `今天你和他之间发生的事：\n${transcript.slice(-1200)}${seen}\n\n你现在的状态：${affectLine}\n\n写今天的日记。`
 }
 
 /** 模型输出 → 日记正文；空或太长返回 null。 */

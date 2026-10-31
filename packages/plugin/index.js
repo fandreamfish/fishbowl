@@ -21,6 +21,9 @@ import { normalizeConfig } from './lib/config.js'
 import { createWakeLoop } from './lib/life.js'
 import { createMemoryStore } from './memory/store.js'
 import { createMemoryTool } from './memory/tool.js'
+import { createBrowseTool } from './lib/browse/tool.js'
+import { createSpeakTool } from './lib/browse/speak-tool.js'
+import { setPacing } from './lib/browse/client.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
 import { createDshHost } from './host/dsh.js'
 
@@ -67,6 +70,14 @@ export function apply(ctx, config = {}) {
   // M17：她自己翻记忆的工具（docs/MEMORY.md §7.4「查阅」通道）
   if (ctx.tools && cfg.memory?.searchTool !== false) {
     safe('memory-tool', () => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
+  }
+
+  // M21：她自己上网看（docs/BROWSE.md）。工具始终注册；开关只决定能不能联网。
+  if (ctx.tools) {
+    try { setPacing(cfg.browse?.pacing) } catch { /* 节奏坏值不影响激活 */ }
+    safe('browse-tool', () => host.registerTool(createBrowseTool(binding, cfg)))
+    // M21.2：在 B 站说话（写）。开关关着时工具在，但只会回「现在不方便说」。
+    safe('speak-tool', () => host.registerTool(createSpeakTool(binding, cfg)))
   }
 
   if (ctx.agents) {

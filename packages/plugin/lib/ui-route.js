@@ -18,7 +18,15 @@ import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { injectMessage } from './injector.js'
 import { normalizeConfig } from './config.js'
 import { createDshHost, workspaceOf } from '../host/dsh.js'
-import { wakeStatePath, wakeSituation, wakeTrigger } from './life.js'
+import { wakeStatePath, wakeSituation, wakeTrigger, selfSituation } from './life.js'
+import { browseStatus, lookForCreature, markSelfTime } from './browse/runtime.js'
+import { clearRisk, riskState } from './browse/risk.js'
+import { history as browseHistory } from './browse/store.js'
+import { readAuth, publicAuth, saveAuth, saveAccount, clearCookie } from './browse/auth.js'
+import { commentStatus, scanDueReplies } from './browse/comment.js'
+import { createClient } from './browse/client.js'
+import { normalizeBrowseConfig } from '../../../src/core/browse.ts'
+import { recordWake } from '../../../src/core/signals.ts'
 import { buildView } from '../../memory/src/records.ts'
 import { validateMemory } from '../../memory/src/config.ts'
 
@@ -39,6 +47,8 @@ export function summarizeEvent(e) {
     case 'note': return { text: e.text, meta: '小纸条' }
     case 'request': return { text: e.text, meta: '请求' }
     case 'request-answered': return { text: e.ref.slice(0, 8), meta: e.answer === 'yes' ? '同意' : '不同意' }
+    case 'grant': return { text: e.text, meta: e.allowed ? `允许：${e.topic}` : `撤销：${e.topic}` }
+    case 'wake': return { text: e.mode === 'self' ? '自己醒来' : '想找他', meta: e.reason ?? '' }
     case 'reinforce': return { text: e.ref.slice(0, 8), meta: '又提到' }
     case 'freeze': return { text: '封存', meta: '' }
     case 'unfreeze': return { text: '解封', meta: '' }
@@ -55,6 +65,9 @@ export function mergeUiConfig(raw, ui) {
   if (ui.memory && typeof ui.memory === 'object') out.memory = { ...(raw.memory || {}), ...ui.memory }
   if (ui.wake && typeof ui.wake === 'object') out.wake = pickRoutineConfig({ wake: ui.wake }).wake
   if (ui.contact && typeof ui.contact === 'object') out.contact = pickRoutineConfig({ contact: ui.contact }).contact
+  if (ui.selfTime && typeof ui.selfTime === 'object') out.selfTime = pickRoutineConfig({ selfTime: ui.selfTime }).selfTime
+  if (ui.browse && typeof ui.browse === 'object') out.browse = normalizeBrowseConfig(ui.browse)
+  if (ui.comment && typeof ui.comment === 'object') out.comment = pickCommentConfig(ui.comment)
   if (ui.relation && typeof ui.relation === 'object' && typeof ui.relation.kind === 'string') {
     out.relation = { kind: ['companion', 'friend'].includes(ui.relation.kind) ? ui.relation.kind : 'companion' }
   }
@@ -98,6 +111,33 @@ export function pickRoutineConfig(x) {
     if (Number.isFinite(Number(c.unansweredStop))) contact.unansweredStop = Math.min(10, Math.max(1, Math.round(Number(c.unansweredStop))))
     if (typeof c.requireReason === 'boolean') contact.requireReason = c.requireReason
     if (Object.keys(contact).length) out.contact = contact
+  }
+  const s = x?.selfTime
+  if (s && typeof s === 'object') {
+    const self = {}
+    if (typeof s.enabled === 'boolean') self.enabled = s.enabled
+    if (Array.isArray(s.window) && s.window.length === 2 && s.window.every((t) => HHMM.test(String(t)))) {
+      self.window = [String(s.window[0]), String(s.window[1])]
+    }
+    if (Number.isFinite(Number(s.dailyMax))) self.dailyMax = Math.min(6, Math.max(0, Math.round(Number(s.dailyMax))))
+    if (typeof s.minGap === 'string' && /^\d+(?:\.\d+)?\s*[smhd]$/.test(s.minGap.trim())) self.minGap = s.minGap.trim()
+    if (Object.keys(self).length) out.selfTime = self
+  }
+  return out
+}
+
+/** 只接受认识的「在 B 站说话」配置键（防前端塞垃圾）。 */
+export function pickCommentConfig(x) {
+  if (!x || typeof x !== 'object') return undefined
+  const out = {}
+  if (typeof x.enabled === 'boolean') out.enabled = x.enabled
+  if (Number.isFinite(Number(x.perDay))) out.perDay = Math.min(5, Math.max(0, Math.round(Number(x.perDay))))
+  if (Number.isFinite(Number(x.replyPerDay))) out.replyPerDay = Math.min(10, Math.max(0, Math.round(Number(x.replyPerDay))))
+  if (typeof x.replyToReplies === 'boolean') out.replyToReplies = x.replyToReplies
+  if (Number.isFinite(Number(x.scanEveryMin))) out.scanEveryMin = Math.min(720, Math.max(5, Math.round(Number(x.scanEveryMin))))
+  if (typeof x.atOwner === 'boolean') out.atOwner = x.atOwner
+  if (Array.isArray(x.window) && x.window.length === 2 && x.window.every((t) => HHMM.test(String(t)))) {
+    out.window = [String(x.window[0]), String(x.window[1])]
   }
   return out
 }
@@ -361,6 +401,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
       episodes: events.filter((e) => e.t === 'episode' || e.t === 'turn').length,
       affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
       memory,
+      browse: browseStatus(c, cfg),
       pendingRequests: c.pendingRequests(),
       requests: c.requests().slice(-10).reverse(),
       notes: c.notes(5),
@@ -389,7 +430,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
       born: fish.some(f => f.episodes > 0),
       scopes,
       wakeState: (() => { try { return JSON.parse(fs.readFileSync(wakeStatePath(stateDir), 'utf8')) } catch { return null } })(),
-      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, memory: cfg.memory },
+      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, selfTime: cfg.selfTime, browse: cfg.browse, comment: cfg.comment, memory: cfg.memory },
       fish,
     }
   }
@@ -484,6 +525,42 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
             if (action === 'diary' && req.method === 'GET') return send(res, { ok: true, diary: c.diaries(30) })
             if (action === 'notes' && req.method === 'GET') return send(res, { ok: true, notes: c.notes(30) })
             if (action === 'memory' && req.method === 'GET' && parts.length === 3) return send(res, { ok: true, ...memoryDetail(c, cfg) })
+            if (action === 'browse' && req.method === 'GET' && parts.length === 3) {
+              return send(res, { ok: true, ...browseStatus(c, cfg) })
+            }
+            if (action === 'browse' && parts[3] === 'history' && req.method === 'GET') {
+              const url = new URL(req.url ?? '/', 'http://localhost')
+              const days = Math.max(1, Math.min(365, Number(url.searchParams.get('days')) || 14))
+              const page = Math.max(0, Number(url.searchParams.get('page')) || 0)
+              const groups = browseHistory(c, days, Date.now(), cfg.timezone)
+              const pageSize = 10
+              const flat = groups.flatMap((g) => g.items.map((it) => ({ ...it, day: g.day })))
+              const total = flat.length
+              const pages = Math.max(1, Math.ceil(total / pageSize))
+              const items = flat.slice(page * pageSize, page * pageSize + pageSize)
+              return send(res, { ok: true, days, page, pages, total, items })
+            }
+            if (action === 'browse' && parts[3] === 'run' && req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              const r = await lookForCreature(c, cfg, {
+                what: body.what ?? 'home',
+                keyword: body.keyword,
+                bvid: body.bvid,
+                mode: 'manual',
+                force: true,
+                log: (tag, msg) => {
+                  try { fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: Date.now(), event: 'browse', tag, msg: String(msg ?? '') }) + '\n') } catch { /* 忽略 */ }
+                },
+              })
+              return send(res, { ok: !!r.ok, result: r, status: browseStatus(c, cfg) })
+            }
+            if (action === 'bili' && req.method === 'GET' && parts.length === 3) {
+              return send(res, { ok: true, ...commentStatus(c, cfg) })
+            }
+            if (action === 'bili' && parts[3] === 'scan' && req.method === 'POST') {
+              const r = await scanDueReplies(c, cfg, { force: true }).catch(() => ({ items: [], text: '' }))
+              return send(res, { ok: true, items: r.items ?? [], text: r.text ?? '', status: commentStatus(c, cfg) })
+            }
             if (action === 'requests' && req.method === 'GET') return send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
             if (action === 'requests' && parts.length >= 5 && parts[4] === 'answer' && req.method === 'POST') {
               const body = JSON.parse(await readBody(req) || '{}')
@@ -508,8 +585,69 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
             }
           }
 
+          // —— 上网：全局配置 / 风控 ——
+          if (sub === '/browse') {
+            if (req.method === 'GET') {
+              return send(res, { ok: true, config: cfg.browse, risk: riskState(stateDir), ffmpeg: false })
+            }
+            if (req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              cfg.browse = normalizeBrowseConfig(body.browse ?? body)
+              saveUiConfig(stateDir, { browse: cfg.browse })
+              return send(res, { ok: true, config: cfg.browse })
+            }
+          }
+          if (sub === '/browse/risk/reset' && req.method === 'POST') {
+            clearRisk(stateDir)
+            return send(res, { ok: true, risk: riskState(stateDir) })
+          }
+
+          // —— B 站登录 / 在评论区说话 ——
+          if (sub === '/bili') {
+            if (req.method === 'GET') {
+              return send(res, { ok: true, auth: publicAuth(readAuth(stateDir)), comment: cfg.comment })
+            }
+            if (req.method === 'POST') {
+              const body = JSON.parse(await readBody(req) || '{}')
+              if (body.comment && typeof body.comment === 'object') {
+                const picked = pickCommentConfig(body.comment) ?? {}
+                cfg.comment = { ...cfg.comment, ...picked }
+                saveUiConfig(stateDir, { comment: cfg.comment })
+              }
+              if (body.auth && typeof body.auth === 'object') {
+                saveAuth(stateDir, body.auth)
+              }
+              return send(res, { ok: true, auth: publicAuth(readAuth(stateDir)), comment: cfg.comment })
+            }
+          }
+          if (sub === '/bili/auth' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req) || '{}')
+            const r = saveAuth(stateDir, body)
+            return send(res, { ok: r.ok !== false, note: r.note, auth: r.auth, missing: r.missing ?? [] })
+          }
+          if (sub === '/bili/auth/test' && req.method === 'POST') {
+            const auth = readAuth(stateDir)
+            if (!auth?.cookie) return send(res, { ok: false, error: '还没存 cookie' }, 400)
+            try {
+              const client = createClient({ cookie: auth.cookie })
+              const me = await client.me()
+              if (me?.isLogin) {
+                saveAccount(stateDir, me)
+                return send(res, { ok: true, me: { mid: me.mid, name: me.uname, canWrite: me.canWrite }, auth: publicAuth(readAuth(stateDir)), note: me.canWrite ? '能说话。' : (me.why || '登录了，但不能写。') })
+              }
+              return send(res, { ok: false, error: me?.why || 'cookie 已失效' }, 400)
+            } catch (e) {
+              return send(res, { ok: false, error: String(e?.message ?? e) }, 500)
+            }
+          }
+          if (sub === '/bili/auth/clear' && req.method === 'POST') {
+            return send(res, { ok: true, auth: clearCookie(stateDir) })
+          }
+
           // —— 现在叫一次（测试用，绕过配额） ——
           if (sub === '/wake/now' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req) || '{}')
+            const mode = body.mode === 'self' ? 'self' : 'contact'
             let target = null
             let creature = null
             for (const a of host.listAgents?.() ?? []) {
@@ -519,14 +657,28 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
               if (c) { target = a; creature = c; break }
             }
             if (!target || !creature) return send(res, { ok: false, error: '没有活着的会话' }, 400)
+            const now = Date.now()
+            if (mode === 'self') {
+              const text = wakeTrigger(now, selfSituation(creature, cfg), 'self')
+              try {
+                await host.wake(target, injectMessage(text, { mode: 'self', reason: null }))
+                recordWake(creature, 'self', null, now)
+                markSelfTime(creature.meta.creatureId, now + 10 * 60_000)
+                fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: now, event: 'wake-manual', mode, creature: creature.meta.name, text }) + '\n')
+                return send(res, { ok: true, mode, text })
+              } catch (e) {
+                return send(res, { ok: false, error: String(e?.message ?? e) }, 500)
+              }
+            }
             const reason = '你想主动找他（手动触发）'
-            const text = wakeTrigger(Date.now(), wakeSituation(reason))
+            const text = wakeTrigger(now, wakeSituation(reason), 'contact')
             if (!text) return send(res, { ok: false, error: '生成失败' }, 500)
             try {
-              await host.wake(target, injectMessage(text))
-              creature.recordOutreach('manual', Date.now())
-              fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: Date.now(), event: 'wake-manual', creature: creature.meta.name, text }) + '\n')
-              return send(res, { ok: true, text })
+              await host.wake(target, injectMessage(text, { mode: 'contact', reason }))
+              creature.recordOutreach('manual', now)
+              recordWake(creature, 'contact', reason, now)
+              fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: now, event: 'wake-manual', mode, creature: creature.meta.name, text }) + '\n')
+              return send(res, { ok: true, mode, text })
             } catch (e) {
               return send(res, { ok: false, error: String(e?.message ?? e) }, 500)
             }
@@ -539,7 +691,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
 
           // —— 兼容旧路径 ——
           if (sub === '/state' && req.method === 'GET') return send(res, stateView())
-          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, relation: cfg.relation })
+          if (sub === '/config' && req.method === 'GET') return send(res, { growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, selfTime: cfg.selfTime, browse: cfg.browse, comment: cfg.comment, relation: cfg.relation })
           if (sub === '/config' && req.method === 'POST') {
             const body = JSON.parse(await readBody(req) || '{}')
             const ui = mergeUiConfig({}, body)
@@ -553,16 +705,22 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
               seed: ui.seed ?? null,
               wake: { ...cfg.wake, ...(routine.wake ?? {}) },
               contact: { ...cfg.contact, ...(routine.contact ?? {}) },
+              selfTime: { ...cfg.selfTime, ...(routine.selfTime ?? {}) },
+              ...(ui.browse ? { browse: ui.browse } : {}),
+              ...(ui.comment ? { comment: { ...cfg.comment, ...ui.comment } } : {}),
               relation: ui.relation ?? cfg.relation,
             })
             if (typeof ui.growth === 'number') cfg.growth = ui.growth
             if (ui.seed && !stateView().born) cfg.seed = ui.seed
             if (routine.wake) cfg.wake = { ...cfg.wake, ...routine.wake }
             if (routine.contact) cfg.contact = { ...cfg.contact, ...routine.contact }
+            if (routine.selfTime) cfg.selfTime = { ...cfg.selfTime, ...routine.selfTime }
+            if (ui.browse) cfg.browse = ui.browse
+            if (ui.comment) cfg.comment = { ...cfg.comment, ...ui.comment }
             if (ui.relation) cfg.relation = ui.relation
             // 节律开关/时段是启动时读的：改了就重启唤醒循环
-            if (routine.wake) { try { opts.restartWake?.() } catch { /* 忽略 */ } }
-            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, relation: cfg.relation })
+            if (routine.wake || routine.selfTime) { try { opts.restartWake?.() } catch { /* 忽略 */ } }
+            return send(res, { ok: true, growth: cfg.growth, seed: cfg.seed ?? null, memory: cfg.memory, wake: cfg.wake, contact: cfg.contact, selfTime: cfg.selfTime, browse: cfg.browse, comment: cfg.comment, relation: cfg.relation })
           }
 
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })

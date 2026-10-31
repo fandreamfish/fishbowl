@@ -14,13 +14,51 @@ function makeFactory() {
     const e = (type, props, key) => (key === undefined ? jsx(type, props) : jsx(type, props, key))
 
     const API = '/fishbowl-ui'
-    const box = { background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.07))', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }
+    const CSS_TAG = 'fishbowl/section.css'
+    const CSS = [
+      '.fb{color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.7;display:flex;flex-direction:column;gap:12px}',
+      '.fb .fb-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.fb .fb-title{font-size:18px;font-weight:600;line-height:1.3;letter-spacing:-.01em}',
+      '.fb .fb-sub{font-size:12.5px;line-height:1.65;color:var(--dsw-alias-label-tertiary);margin:0}',
+      '.fb .fb-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px;border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.28));border-radius:10px;background:rgba(128,128,128,.06)}',
+      '.fb .fb-page{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start}',
+      '.fb .fb-page>div{min-width:0}',
+      '.fb .fb-tab{height:30px;padding:0 12px;border:.5px solid transparent;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary,#666);font:inherit;font-size:12.5px;cursor:pointer;transition:background .15s,color .15s}',
+      '.fb .fb-tab:hover{color:var(--dsw-alias-label-primary);background:rgba(128,128,128,.12)}',
+      '.fb .fb-tab.on{background:rgba(128,128,128,.18);border-color:var(--dsw-alias-border-l3,rgba(127,127,127,.4));color:var(--dsw-alias-state-business-primary,#4d6bfe);font-weight:600}',
+      '.fb .fb-switch{position:relative;width:40px;height:22px;padding:0;border-radius:999px;border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.3));background:rgba(128,128,128,.18);cursor:pointer;transition:background .15s;flex:0 0 auto}',
+      '.fb .fb-switch.on{background:var(--dsw-alias-state-business-primary,#4d6bfe);border-color:var(--dsw-alias-state-business-primary,#4d6bfe)}',
+      '.fb .fb-knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}',
+      '.fb .fb-switch.on .fb-knob{left:20px}',
+      '.fb .fb-pre{white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.7;color:var(--dsw-alias-label-secondary,#555);font-family:ui-monospace,Consolas,monospace;max-height:320px;overflow:auto}',
+      '.fb .fb-fish{transition:border-color .15s,background .15s}',
+      '.fb .fb-fish:hover{border-color:var(--dsw-alias-border-l3,rgba(127,127,127,.45));background:rgba(128,128,128,.04)}',
+      '.fb .fb-empty{color:var(--dsw-alias-label-tertiary);font-size:12.5px}',
+      '.fb .fb-error{color:var(--dsw-alias-danger,#d33);font-size:12.5px;white-space:pre-wrap}',
+      '.fb .fb-ok{color:var(--dsw-alias-success,#30a46c);font-size:12.5px}',
+    ].join('\n')
+    function ensureStyle() {
+      try {
+        if (document.querySelector(`style[data-tag="${CSS_TAG}"]`)) return
+        const el = document.createElement('style')
+        el.setAttribute('data-tag', CSS_TAG)
+        el.textContent = CSS
+        document.head.appendChild(el)
+      } catch { /* 没有 document 就跳过（测试/SSR） */ }
+    }
+    const box = {
+      border: '.5px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.28))',
+      borderRadius: 10,
+      padding: '12px 14px',
+      marginBottom: 12,
+    }
     const rowS = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }
-    const lab = { fontSize: 12.5, color: 'var(--dsw-alias-text-2, #666)' }
-    const inp = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--dsw-alias-border, #ddd)', background: 'var(--dsw-alias-bg-1, transparent)', color: 'inherit', font: 'inherit', fontSize: 13 }
-    const btn = { padding: '6px 12px', borderRadius: 8, border: '1px solid var(--dsw-alias-border, #ddd)', background: 'var(--dsw-alias-bg-1, transparent)', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: 12.5 }
-    const btnP = { ...btn, background: 'var(--dsw-alias-brand, #4d6bfe)', borderColor: 'transparent', color: '#fff' }
-    const btnS = { ...btn, fontSize: 12, padding: '4px 10px' }
+    const lab = { fontSize: 12.5, color: 'var(--dsw-alias-label-tertiary, #666)' }
+    const inp = { width: '100%', minWidth: 0, boxSizing: 'border-box', padding: '6px 9px', borderRadius: 7, border: '.5px solid var(--dsw-alias-border-l2, #ddd)', background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 13, outline: 'none' }
+    const btn = { height: 28, boxSizing: 'border-box', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap', lineHeight: 1, padding: '0 12px', borderRadius: 7, border: '.5px solid var(--dsw-alias-border-l2, #ddd)', background: 'transparent', color: 'inherit', cursor: 'pointer', font: 'inherit', fontSize: 12.5 }
+    const btnP = { ...btn, background: 'var(--dsw-alias-state-business-primary, var(--dsw-alias-brand, #4d6bfe))', borderColor: 'transparent', color: 'var(--dsw-alias-label-primary-inverted, #fff)' }
+    const btnS = { ...btn, height: 26, padding: '0 10px', fontSize: 12 }
+    const chip = { fontSize: 11, padding: '1px 7px', borderRadius: 6, background: 'rgba(128,128,128,.14)', color: 'var(--dsw-alias-label-tertiary, #666)', whiteSpace: 'nowrap' }
 
     const getJson = async (u) => { const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() }
     const postJson = async (u, b) => {
@@ -61,7 +99,6 @@ function makeFactory() {
       if (s < 86400) return Math.floor(s / 3600) + ' 小时前'
       return Math.floor(s / 86400) + ' 天前'
     }
-    const chip = { fontSize: 11, padding: '1px 7px', borderRadius: 6, background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.14))', color: 'var(--dsw-alias-text-2, #666)', whiteSpace: 'nowrap' }
     const kvRow = (k, v, key) => e('div', {
       key,
       style: { display: 'flex', gap: 8, marginTop: 3, fontSize: 12, lineHeight: 1.6 },
@@ -70,11 +107,23 @@ function makeFactory() {
         e('span', { style: { wordBreak: 'break-all' }, children: v }, 'v'),
       ],
     })
+    /** dsh-fish 那种开关；样式在 .fb .fb-switch。 */
+    function Toggle(props) {
+      return e('button', {
+        type: 'button',
+        className: 'fb-switch' + (props.on ? ' on' : ''),
+        onClick: props.onChange,
+        title: props.title,
+        'aria-pressed': props.on ? 'true' : 'false',
+        children: e('span', { className: 'fb-knob' }, 'k'),
+      }, props.k)
+    }
 
     function FishCard(props) {
       const f = props.f
       return e('div', {
-        style: { ...box, cursor: 'pointer', border: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.18))' },
+        className: 'fb-fish',
+        style: { ...box, cursor: 'pointer', border: '.5px solid var(--dsw-alias-border-l2, rgba(127,127,127,0.28))' },
         onClick: props.onOpen,
         children: [
           e('div', { style: rowS, children: [
@@ -401,6 +450,321 @@ function makeFactory() {
       ] }, 'mdet')
     }
 
+    /**
+     * 上网（B 站只读）。所有字段都是环境参数，不是她的喜好。
+     * 设置全局生效；配额与历史按鱼算。
+     */
+    function BrowsePanel(props) {
+      const f = props.fish
+      const [cfg, setCfg] = useState(null)
+      const [status, setStatus] = useState(null)
+      const [hist, setHist] = useState({ items: [], total: 0, pages: 1, page: 0 })
+      const [auth, setAuth] = useState(null)
+      const [comment, setComment] = useState(null)
+      const [biliStatus, setBiliStatus] = useState(null)
+      const [cookieText, setCookieText] = useState('')
+      const [ownerMid, setOwnerMid] = useState('')
+      const [ownerName, setOwnerName] = useState('')
+      const [err, setErr] = useState('')
+      const [msg, setMsg] = useState('')
+      const [busy, setBusy] = useState('')
+      const [runText, setRunText] = useState('')
+      const [replyText, setReplyText] = useState('')
+
+      const loadAll = useCallback(async () => {
+        try {
+          const b = await getJson(API + '/browse')
+          setCfg(b.config)
+          setStatus(await getJson(API + '/fish/' + f.id + '/browse'))
+          const h = await getJson(API + '/fish/' + f.id + '/browse/history?days=14&page=0')
+          setHist(h)
+          const bl = await getJson(API + '/bili')
+          setAuth(bl.auth)
+          setComment(bl.comment)
+          setOwnerMid(bl.auth?.mid ?? '')
+          setOwnerName(bl.auth?.nickname ?? '')
+          setBiliStatus(await getJson(API + '/fish/' + f.id + '/bili'))
+          setErr('')
+        } catch (x) {
+          const m = String((x && x.message) || x)
+          setErr(m.includes('404')
+            ? '宿主后端还是旧版本（HTTP 404）：请完全退出 DSH 再启动，重新启用 fishbowl 后刷新本页。'
+            : m)
+        }
+      }, [f.id])
+      useEffect(() => { void loadAll() }, [loadAll])
+
+      if (!cfg) return e('div', { style: box, children: err || '上网配置读取中…' }, 'b-loading')
+      const set = (k, v) => setCfg(Object.assign({}, cfg, { [k]: v }))
+      const setAvoid = (k, v) => setCfg(Object.assign({}, cfg, { avoid: Object.assign({}, cfg.avoid || {}, { [k]: v }) }))
+      const setPace = (k, v) => setCfg(Object.assign({}, cfg, { pacing: Object.assign({}, cfg.pacing || {}, { [k]: v }) }))
+      const numInp = { ...inp, width: 88, padding: '4px 8px', boxSizing: 'border-box' }
+      const field = (label, control, hint, key) => e('div', { key, style: { marginBottom: 9 }, children: [
+        e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, children: [
+          e('span', { style: { fontSize: 13 }, children: label }, 'l'),
+          e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: control }, 'v'),
+        ] }, 'r'),
+        hint ? e('div', { style: { ...lab, fontSize: 11.5 }, children: hint }, 'h') : null,
+      ] })
+      const num = (k, lo, hi, val, onChange) => e('input', {
+        type: 'number', min: String(lo), max: String(hi), value: val, style: numInp,
+        onInput: (ev) => onChange(Number(ev.target.value)),
+      }, k)
+      const time = (val, onChange, key) => e('input', { key, type: 'time', value: val, style: { ...inp, width: 112 }, onInput: (ev) => onChange(ev.target.value) }, key)
+      const sourceBox = (id, label) => e('label', {
+        key: 'src-' + id,
+        style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, marginRight: 10, cursor: 'pointer' },
+        children: [
+          e('input', {
+            type: 'checkbox', checked: (cfg.sources || []).includes(id),
+            onChange: (ev) => {
+              const cur = new Set(cfg.sources || [])
+              if (ev.target.checked) cur.add(id); else cur.delete(id)
+              set('sources', [...cur])
+            },
+          }, 'c'),
+          label,
+        ],
+      })
+
+      const act = async (fn, okMsg) => {
+        setBusy('save'); setErr(''); setMsg('')
+        try { await fn(); setMsg(okMsg || ''); await loadAll() }
+        catch (x) { setErr(String((x && x.message) || x)) }
+        finally { setBusy('') }
+      }
+      const save = () => act(async () => {
+        const r = await postJson(API + '/browse', { browse: cfg })
+        setCfg(r.config)
+      }, '上网设置已保存')
+      const run = () => act(async () => {
+        setBusy('run'); setRunText('')
+        try {
+          const r = await postJson(API + '/fish/' + f.id + '/browse/run', {})
+          setRunText(r.result?.ok ? String(r.result.text || '') : ('这次没看到什么：' + String(r.result?.note || '')))
+          if (r.status) setStatus(r.status)
+          await loadAll()
+        } finally { setBusy('') }
+      }, '')
+
+      const cm = comment || { enabled: false, perDay: 1, replyPerDay: 2, replyToReplies: true, scanEveryMin: 30, window: ['20:00', '23:00'], atOwner: true }
+      const setCm = (k, v) => setComment(Object.assign({}, cm, { [k]: v }))
+      const saveBili = () => act(async () => {
+        await postJson(API + '/bili', { auth: { mid: ownerMid, nickname: ownerName }, comment: cm })
+      }, 'B 站设置已保存')
+      const saveCookie = () => act(async () => {
+        const r = await postJson(API + '/bili/auth', { cookie: cookieText })
+        setCookieText('')
+        setMsg(r.note || '存下了。')
+      }, 'cookie 已保存')
+      const testCookie = () => act(async () => {
+        const r = await postJson(API + '/bili/auth/test', {})
+        setMsg(r.note || '能说话。')
+      }, 'cookie 有效')
+      const clearCookie = () => act(async () => {
+        await postJson(API + '/bili/auth/clear', {})
+        setCookieText('')
+      }, 'cookie 已清除')
+      const scanNow = () => act(async () => {
+        setBusy('scan')
+        try {
+          const r = await postJson(API + '/fish/' + f.id + '/bili/scan', {})
+          setReplyText(r.text || (r.items?.length ? '' : '现在没人回她。'))
+        } finally { setBusy('') }
+      }, '')
+
+      const s = status || {}
+      const risk = s.risk || {}
+      const cards = [
+        e('div', { style: box, key: 'onoff', children: [
+          e('div', { style: rowS, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '能不能上网' }, 'h'),
+            e(Toggle, { on: cfg.enabled, onChange: () => set('enabled', !cfg.enabled), k: 'sw' }),
+          ] }, 'head'),
+          e('div', { style: { ...lab, marginBottom: 8 }, children: '这是硬开关：关掉后一次请求都不发，工具会说「现在打不开」。自处时她可以自己决定看不看。' }, 'hint'),
+          e('div', { style: rowS, children: [
+            e('span', { style: lab, children: '上网时段' }, 'l'),
+            e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+              time((cfg.window || [])[0] ?? '08:00', (v) => set('window', [v, (cfg.window || [])[1] ?? '23:00']), 'w1'),
+              e('span', { style: lab, children: '到' }, 'sep'),
+              time((cfg.window || [])[1] ?? '23:00', (v) => set('window', [(cfg.window || [])[0] ?? '08:00', v]), 'w2'),
+            ] }, 'w'),
+          ] }, 'win'),
+        ] }, 'b-onoff'),
+        e('div', { style: box, key: 'freq', children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 8 }, children: '频率' }, 'h'),
+          e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '这个次数主要管她自处时；你让她现在看时不受它限制。' }, 'fhint'),
+          field('每天最多几次', num('perDay', 0, 4, cfg.perDay, (v) => set('perDay', v)), '0 = 从不；一次 = 看一批。', 'b-perday'),
+          field('一次看几条', num('topN', 1, 10, cfg.topN, (v) => set('topN', v)), '挑几条进「打算看」的清单。', 'b-topn'),
+          field('每条深读几条热评', num('deepRead', 0, 20, cfg.deepRead, (v) => set('deepRead', v)), '0 = 只读简介。', 'b-deep'),
+          field('每条抽几条弹幕', num('danmaku', 0, 30, cfg.danmaku, (v) => set('danmaku', v)), '0 = 不抽。', 'b-dm'),
+        ] }, 'b-freq'),
+        e('div', { style: box, key: 'src', children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '从哪儿看' }, 'h'),
+          e('div', { style: { display: 'flex', flexWrap: 'wrap', marginBottom: 8 }, children: [
+            sourceBox('popular', '热门'), sourceBox('ranking', '排行'), sourceBox('precious', '入站必刷'),
+          ] }, 'sources'),
+          e('div', { style: { ...lab, marginBottom: 4 }, children: '额外的搜索词（逗号分隔，可空）' }, 'kl'),
+          e('input', { style: inp, value: (cfg.keywords || []).join('，'), placeholder: '例：纪录片，手工', onInput: (ev) => set('keywords', ev.target.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean)) }, 'kw'),
+        ] }, 'b-src'),
+        e('div', { style: box, key: 'avoid', children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '不想看的东西' }, 'h'),
+          e('div', { style: { ...lab, marginBottom: 4 }, children: '标题/UP/标签命中这些词就不点进去（逗号分隔）' }, 'al'),
+          e('input', { style: inp, value: (cfg.avoid?.keywords || []).join('，'), placeholder: '例：恐怖，血腥', onInput: (ev) => setAvoid('keywords', ev.target.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean)) }, 'ak'),
+          e('div', { style: { ...rowS, marginTop: 8 }, children: [
+            e('span', { style: lab, children: '太短的不看' }, 'l'),
+            e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+              num('minDuration', 0, 3600, cfg.avoid?.minDuration ?? 60, (v) => setAvoid('minDuration', v)),
+              e('span', { style: lab, children: '秒' }, 'u'),
+            ] }, 'v'),
+          ] }, 'md'),
+        ] }, 'b-avoid'),
+        e('div', { style: box, key: 'pace', children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 6 }, children: '请求节奏（网络环境）' }, 'h'),
+          e('div', { style: { ...lab, marginBottom: 8 }, children: '家宽 800ms 安全；机房 IP 建议 2000–3000ms。' }, 'ph'),
+          e('div', { style: rowS, children: [
+            e('span', { style: lab, children: '两次请求最少隔' }, 'l'),
+            e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+              num('minIntervalMs', 200, 120000, cfg.pacing?.minIntervalMs ?? 800, (v) => setPace('minIntervalMs', v)),
+              e('span', { style: lab, children: '毫秒' }, 'u'),
+            ] }, 'v'),
+          ] }, 'p1'),
+          e('div', { style: rowS, children: [
+            e('span', { style: lab, children: '每次再随机多等' }, 'l'),
+            e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+              num('jitterMs', 0, 60000, cfg.pacing?.jitterMs ?? 500, (v) => setPace('jitterMs', v)),
+              e('span', { style: lab, children: '毫秒' }, 'u'),
+            ] }, 'v'),
+          ] }, 'p2'),
+        ] }, 'b-pace'),
+      ]
+
+      const statusCard = e('div', { style: box, key: 'status', children: [
+        e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '今天' }, 'h'),
+        e('div', { style: { ...lab, fontSize: 12, lineHeight: 1.8 }, children: [
+          e('div', { children: `已用 ${s.usedToday ?? 0} / ${s.perDay ?? cfg.perDay} 次；今天翻到 ${s.todayCount ?? 0} 条。` }, 'u'),
+          e('div', { children: s.lastAt ? `上次上网：${fmtTime(s.lastAt)}` : '还没上过网。' }, 'last'),
+          e('div', { children: risk.cooling ? `风控冷却中，还要约 ${risk.remainMin} 分钟。` : '风控：没在冷却。' }, 'risk'),
+          e('div', { children: s.granted ? '他允许她没事时自己刷 B 站。' : '他还没说过「没事可以刷刷 B 站」。' }, 'grant'),
+          s.granted && !cfg.enabled ? e('div', { style: { color: 'var(--dsw-alias-warning, #b26a00)' }, children: '他允许了，但硬开关还关着——打开后才会生效。' }, 'warn') : null,
+        ] }, 'lines'),
+      ] }, 'b-status')
+
+      const historyCard = e('div', { style: box, key: 'history', children: [
+        e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '她翻到过什么' }, 'h'),
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '只记标题和 UP；标「只翻到过」的是没看画面的。' }, 'hint'),
+        (hist.items || []).length
+          ? (hist.items || []).map((it, i) => e('div', { key: 'h' + i, style: { fontSize: 12.5, marginBottom: 5, display: 'flex', gap: 8, alignItems: 'baseline' }, children: [
+            e('span', { style: { ...chip, flex: '0 0 auto' }, children: it.day?.slice(5) || '' }, 'd'),
+            e('a', { href: it.url, target: '_blank', rel: 'noreferrer', style: { color: 'inherit', textDecoration: 'underline' }, children: it.title || it.bvid }, 't'),
+            e('span', { style: { ...lab, fontSize: 11.5 }, children: it.how === 'watch' ? '看过画面' : '只翻到过' }, 'how'),
+          ] }, 'h' + i))
+          : e('div', { style: lab, children: '还没有记录。' }, 'none'),
+      ] }, 'b-history')
+
+      const au = auth || {}
+      const bs = biliStatus || {}
+      const numCm = (k, lo, hi, val) => e('input', {
+        type: 'number', min: String(lo), max: String(hi), value: val, style: numInp,
+        onInput: (ev) => setCm(k, Number(ev.target.value)),
+      }, 'cm-' + k)
+      const loginCard = e('div', { style: box, key: 'bili-auth', children: [
+        e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: 'B 站登录（cookie）' }, 'h'),
+        e('div', { style: { ...lab, fontSize: 12, marginBottom: 8, lineHeight: 1.8 }, children: [
+          e('div', { children: au.hasCookie
+            ? `已存${au.account?.name ? `，登录账号：${au.account.name}${au.account.mid ? `（uid ${au.account.mid}）` : ''}` : ''}${au.hasCsrf ? '' : '，但少了 bili_jct（不能说话）'}。`
+            : '还没存。没存也能看视频，只是不能在评论区说话。' }, 'st'),
+          e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '只落本机 bili-auth.json（0600）；存完不回显。建议用小号。' }, 'hint'),
+        ] }, 'status'),
+        e('textarea', {
+          rows: 3,
+          style: { ...inp, minHeight: 62, resize: 'vertical', boxSizing: 'border-box' },
+          value: cookieText,
+          placeholder: 'SESSDATA=...; bili_jct=...',
+          onInput: (ev) => setCookieText(ev.target.value),
+        }, 'cookie'),
+        e('div', { style: { ...rowS, marginTop: 8 }, children: [
+          e('span', { style: { ...lab, fontSize: 11.5 }, children: '从浏览器 DevTools 的 Cookie 头整段粘贴；也可以从 cookies.txt 粘。' }, 'h'),
+          e('span', { style: { display: 'flex', gap: 6 }, children: [
+            e('button', { style: btnS, disabled: busy === 'save' || !cookieText.trim(), onClick: saveCookie, children: '保存 cookie' }, 'saveck'),
+            e('button', { style: btnS, disabled: busy === 'save' || !au.hasCookie, onClick: testCookie, children: '测试能不能说话' }, 'testck'),
+            e('button', { style: btnS, disabled: busy === 'save' || !au.hasCookie, onClick: clearCookie, children: '清除' }, 'clrck'),
+          ] }, 'acts'),
+        ] }, 'row'),
+      ] }, 'bili-login')
+
+      const speakCard = e('div', { style: box, key: 'bili-speak', children: [
+        e('div', { style: rowS, children: [
+          e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '在 B 站说话' }, 'h'),
+          e(Toggle, { on: cm.enabled, onChange: () => setCm('enabled', !cm.enabled), k: 'sw' }),
+        ] }, 'head'),
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '这是唯一会动账号的功能：评论会公开留痕，别人看得见。默认关。她只评今天自己看过的视频；回复只回别人在她评论下面的楼。' }, 'hint'),
+        e('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginBottom: 8 }, children: [
+          e('div', { children: [e('div', { style: lab, children: '每天最多发几条评论' }, 'l'), numCm('perDay', 0, 5, cm.perDay ?? 1)] }, 'p'),
+          e('div', { children: [e('div', { style: lab, children: '每天最多回几条' }, 'l'), numCm('replyPerDay', 0, 10, cm.replyPerDay ?? 2)] }, 'r'),
+          e('div', { children: [e('div', { style: lab, children: '多久查一次有没有人回（分钟）' }, 'l'), numCm('scanEveryMin', 5, 720, cm.scanEveryMin ?? 30)] }, 's'),
+          e('div', { children: [
+            e('div', { style: lab, children: '允许说话的时间段' }, 'sl'),
+            e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+              time((cm.window || [])[0] ?? '20:00', (v) => setCm('window', [v, (cm.window || [])[1] ?? '23:00']), 'cw1'),
+              e('span', { style: lab, children: '到' }, 'sep'),
+              time((cm.window || [])[1] ?? '23:00', (v) => setCm('window', [(cm.window || [])[0] ?? '20:00', v]), 'cw2'),
+            ] }, 'w'),
+          ] }, 'w'),
+        ] }, 'grid'),
+        e('div', { style: rowS, children: [
+          e('span', { style: lab, children: '有人回她时允许她回一句' }, 'l'),
+          e(Toggle, { on: cm.replyToReplies !== false, onChange: () => setCm('replyToReplies', cm.replyToReplies === false), k: 'rt' }),
+        ] }, 'reply'),
+        e('div', { style: { borderTop: '1px solid var(--dsw-alias-border, rgba(127,127,127,0.15))', paddingTop: 8, marginTop: 8 }, children: [
+          e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 4 }, children: '评论最前面 @ 的人（一般是你自己；需要昵称，不是登录账号）' }, 'oh'),
+          e('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }, children: [
+            e('input', { style: inp, value: ownerMid, placeholder: 'B 站 uid（数字）', onInput: (ev) => setOwnerMid(ev.target.value) }, 'om'),
+            e('input', { style: inp, value: ownerName, placeholder: 'B 站昵称（@ 用）', onInput: (ev) => setOwnerName(ev.target.value) }, 'on'),
+          ] }, 'owner'),
+          e('div', { style: rowS, children: [
+            e('span', { style: lab, children: '发评论时在最前面 @ 你' }, 'l'),
+            e(Toggle, { on: cm.atOwner !== false, onChange: () => setCm('atOwner', cm.atOwner === false), k: 'at' }),
+          ] }, 'at'),
+        ] }, 'ownerbox'),
+        e('div', { style: { ...rowS, marginTop: 8 }, children: [
+          e('span', { style: { ...lab, fontSize: 11.5 }, children: '说出去的话会过秘密/隐私闸；公开场合，不该带你们之间的私事。' }, 'h'),
+          e('button', { style: { ...btnP, padding: '5px 14px', fontSize: 12.5 }, disabled: busy === 'save', onClick: saveBili, children: '保存说话设置' }, 'save'),
+        ] }, 'acts'),
+      ] }, 'bili-speak')
+
+      const replyCard = e('div', { style: box, key: 'bili-reply', children: [
+        e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '她的评论区' }, 'h'),
+        e('div', { style: { ...lab, fontSize: 12, lineHeight: 1.8 }, children: [
+          e('div', { children: `今天说了 ${bs.commentToday ?? 0} 条评论、回了 ${bs.replyToday ?? 0} 条。` }, 'c'),
+          e('div', { children: bs.lastScanAt ? `上次查看：${fmtTime(bs.lastScanAt)}；当时有 ${bs.waiting ?? 0} 条没回。` : '还没查过有没有人回。' }, 's'),
+        ] }, 'st'),
+        e('div', { style: { ...rowS, marginTop: 8 }, children: [
+          e('span', { style: { ...lab, fontSize: 11.5 }, children: '她醒着的时候会自动查；也可以现在查一下。' }, 'h'),
+          e('button', { style: btnS, disabled: busy === 'scan', onClick: scanNow, children: busy === 'scan' ? '查着…' : '查一下有没有人回' }, 'scan'),
+        ] }, 'row'),
+        replyText ? e('div', { style: { marginTop: 8, fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }, children: replyText }, 'replytext') : null,
+      ] }, 'bili-replies')
+
+      return e('div', { children: [
+        e('div', { style: { ...lab, marginBottom: 8, fontSize: 12 }, children: '这些是环境参数，不是她的喜好。设置对所有鱼生效；配额与历史按鱼算。' }, 'top'),
+        e('div', { className: 'fb-page', children: cards }, 'cards'),
+        statusCard,
+        historyCard,
+        loginCard,
+        speakCard,
+        replyCard,
+        runText ? e('div', { style: { ...box, fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 260, overflow: 'auto' }, children: runText }, 'run') : null,
+        e('div', { style: rowS, children: [
+          e('span', { style: { ...lab, fontSize: 12 }, children: msg || err }, 'm'),
+          e('span', { style: { display: 'flex', gap: 8 }, children: [
+            e('button', { style: { ...btnS, padding: '6px 14px' }, disabled: busy === 'run' || !cfg.enabled, onClick: run, children: busy === 'run' ? '出门中…' : '让她现在去刷一次' }, 'runbtn'),
+            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, disabled: busy === 'save', onClick: save, children: busy === 'save' ? '保存中…' : '保存' }, 'save'),
+          ] }, 'acts'),
+        ] }, 'acts'),
+      ] }, 'browse-panel')
+    }
+
     function Section() {
       const [data, setData] = useState(null)
       const [view, setView] = useState({ level: 'list' })
@@ -421,6 +785,7 @@ function makeFactory() {
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
       const [routine, setRoutine] = useState(null)
+      useEffect(() => { ensureStyle() }, [])
 
       const load = useCallback(async (attempt = 0) => {
         try {
@@ -429,7 +794,7 @@ function makeFactory() {
           setGrowth(d.config.growth)
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
-          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {} })
+          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {} })
           setErr('')
         } catch (x) {
           setErr(String((x && x.message) || x))
@@ -452,10 +817,12 @@ function makeFactory() {
 
       // ---------- 列表 ----------
       if (view.level === 'list') {
-        return e('div', { style: { fontSize: 13.5, lineHeight: 1.75 }, children: [
-          e('div', { style: { fontWeight: 600, fontSize: 15, marginBottom: 4 }, children: 'fishbowl · 养的鱼' }, 't'),
-          e('div', { style: { ...lab, marginBottom: 12 }, children: '每条鱼一个住处：一个工作区，或工作区里的某个会话。一个工作区只能住一条鱼。' }, 'd'),
-          err ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', marginBottom: 8 }, children: err }, 'err') : null,
+        return e('div', { className: 'fb', children: [
+          e('div', { children: [
+            e('div', { className: 'fb-title', children: 'fishbowl · 养的鱼' }, 't'),
+            e('div', { className: 'fb-sub', children: '每条鱼一个住处：一个工作区，或工作区里的某个会话。一个工作区只能住一条鱼。' }, 'd'),
+          ] }, 'head'),
+          err ? e('div', { className: 'fb-error', children: err }, 'err') : null,
           fish.length
             ? fish.map((f, i) => e(FishCard, { f, k: 'f' + i, onOpen: () => openFish(f.id) }))
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),
@@ -492,7 +859,7 @@ function makeFactory() {
       const page = view.page || 'status'
       const setPage = (p) => setView({ ...view, page: p })
       const tabs = [
-        ['status', '状态'], ['home', '住所'], ['routine', '作息'], ['persona', '人设'], ['memory', '记忆'],
+        ['status', '状态'], ['home', '住所'], ['routine', '作息'], ['browse', '上网'], ['persona', '人设'], ['memory', '记忆'],
       ]
 
       let body = null
@@ -687,28 +1054,39 @@ function makeFactory() {
               : e('div', { style: lab, children: '还没有小纸条' }),
           ] }, 'notes'),
         ] }, 'home-root')      } else if (page === 'routine') {
-        const r = routine || { wake: {}, contact: {} }
+        const r = routine || { wake: {}, contact: {}, selfTime: {} }
         const wake = r.wake || {}
         const contact = r.contact || {}
+        const selfTime = r.selfTime || {}
         const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
         const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
         const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
         const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
         // 最近一次检查：她为什么没开口
         const ws = (data && data.wakeState) || null
         const entry = ws && Array.isArray(ws.entries) ? ws.entries[0] : null
-        const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回' }
+        const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回', disabled: '自处没开', browse_quota: '今天上网次数用完', busy: '正在说话' }
         const lastCheck = entry ? new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '—'
+        const selfLine = entry?.self
+          ? ' · 自处：' + (entry.self.enabled ? (gateLabel[entry.self.gate?.reason] || entry.self.gate?.reason || '—') + `（今天上网 ${entry.self.usedToday}/${entry.self.perDay}）` : '没开')
+          : ''
         const statusLine = entry
-          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—')
+          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—') + selfLine
           : '还没有检查记录（节律没开或刚启动）'
         const statusCard = e('div', { style: box, children: [
           e('div', { style: { ...rowS, marginBottom: 4 }, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '现在的状态' }, 'h'),
-            e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
-              const r = await postJson(API + '/wake/now', {})
-              setMsg('她开口了：' + (r.text || ''))
-            }, '已叫她一次') , children: '现在叫一次（测试）' }, 'now'),
+            e('span', { style: { display: 'flex', gap: 6 }, children: [
+              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
+                const r = await postJson(API + '/wake/now', {})
+                setMsg('她开口了：' + (r.text || ''))
+              }, '已叫她一次'), children: '叫一次（联系）' }, 'now'),
+              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
+                const r = await postJson(API + '/wake/now', { mode: 'self' })
+                setMsg('她醒了：' + (r.text || ''))
+              }, '让她自己待了一会儿'), children: '自己待一会儿（测试）' }, 'selfnow'),
+            ] }, 'btns'),
           ] }, 'head'),
           e('div', { style: { ...lab, fontSize: 12 }, children: statusLine }, 'line'),
         ] }, 'wstatus')
@@ -716,7 +1094,7 @@ function makeFactory() {
           e('div', { style: box, children: [
             e('div', { style: { ...rowS, marginBottom: 4 }, children: [
               e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '清醒节律' }, 'h'),
-              e('button', { style: wake.enabled ? { ...btnP, padding: '4px 12px', fontSize: 12 } : { ...btn, padding: '4px 12px', fontSize: 12 }, onClick: () => setWake('enabled', !wake.enabled), children: wake.enabled ? '已开启' : '已关闭' }, 'sw'),
+              e(Toggle, { on: wake.enabled, onChange: () => setWake('enabled', !wake.enabled), k: 'sw' }),
             ] }, 'head'),
             e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。' }, 'hint'),
             e('div', { style: { ...rowS, marginBottom: 6 }, children: [
@@ -743,6 +1121,32 @@ function makeFactory() {
               ] }, 'v'),
             ] }, 'r3'),
           ] }, 'wake'),
+          e('div', { style: box, children: [
+            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '自己待一会儿' }, 'h'),
+              e(Toggle, { on: selfTime.enabled, onChange: () => setSelf('enabled', !selfTime.enabled), k: 'sw' }),
+            ] }, 'head'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '醒来但不为了找你。她可以上网、写日记，也可以什么都不做；不算主动联系配额。他若说过「没事可以刷刷 B 站」，且上网开关开着，即使这里关着，也会为这条许可醒一次。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((selfTime.window ?? [])[0], (v) => setSelf('window', [v, (selfTime.window ?? [])[1] ?? '23:00']), 'sa'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((selfTime.window ?? [])[1], (v) => setSelf('window', [(selfTime.window ?? [])[0] ?? '09:00', v]), 'sb'),
+              ] }, 'v'),
+            ] }, 's1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '每天最多' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(selfTime.dailyMax ?? 1, (v) => setSelf('dailyMax', v), 'n', 0, 6),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 's2'),
+            e('div', { style: rowS, children: [
+              e('span', { style: lab, children: '最短间隔' }, 'l'),
+              e('input', { style: { ...inp, width: 90 }, value: selfTime.minGap ?? '90m', onInput: (ev) => setSelf('minGap', ev.target.value) }, 'v'),
+            ] }, 's3'),
+          ] }, 'self'),
           e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '主动联系' }, 'h'),
             e('div', { style: { ...lab, marginBottom: 10 }, children: '去敲你之前要过这几道闸；没必要的联系不如不联系。' }, 'hint'),
@@ -777,10 +1181,12 @@ function makeFactory() {
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/config', { wake, contact })
+              await postJson(API + '/config', { wake, contact, selfTime })
             }, '作息已保存'), children: '保存' }, 'save'),
           ] }, 'act'),
-        ] }, 'routine')      } else if (page === 'persona') {
+        ] }, 'routine')      } else if (page === 'browse') {
+        body = e(BrowsePanel, { fish: f }, 'browse-panel')
+      } else if (page === 'persona') {
         const isDefaultName = /^fish-/.test(f.name)
         body = e('div', { children: [
           born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
@@ -836,14 +1242,17 @@ function makeFactory() {
         ] }, 'memory')
       }
 
-      return e('div', { style: { fontSize: 13.5, lineHeight: 1.75 }, children: [
-        e('div', { style: { ...rowS, marginBottom: 8 }, children: [
-          e('div', { style: { fontWeight: 600, fontSize: 15 }, children: f.name }, 'n'),
+      return e('div', { className: 'fb', children: [
+        e('div', { className: 'fb-head', children: [
+          e('div', { children: [
+            e('div', { className: 'fb-title', children: f.name }, 'n'),
+            e('div', { className: 'fb-sub', children: (f.occupancy ? occText(f.occupancy) : '还没安排住处') + ' · ' + f.episodes + ' 轮' }, 's'),
+          ] }, 'title'),
           e('button', { style: btnS, onClick: () => setView({ level: 'list' }) , children: '← 所有鱼' }),
         ] }, 'hdr'),
-        e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }, children: tabs.map(([id, label]) =>
-          e('button', { key: id, style: id === page ? { ...btnS, background: 'var(--dsw-alias-bg-2, rgba(127,127,127,0.14))', fontWeight: 600 } : btnS, onClick: () => setPage(id) , children: label })) }, 'tabs'),
-        err ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', marginBottom: 8 }, children: err }, 'err') : null,
+        e('div', { className: 'fb-tabs', children: tabs.map(([id, label]) =>
+          e('button', { key: id, type: 'button', className: 'fb-tab' + (id === page ? ' on' : ''), onClick: () => setPage(id), children: label })) }, 'tabs'),
+        err ? e('div', { className: 'fb-error', children: err }, 'err') : null,
         body,
       ] }, 'root')
     }
@@ -852,6 +1261,7 @@ function makeFactory() {
     const inject = ['slots', 'locale']
 
     function apply(ctx) {
+      ensureStyle()
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register({
           name: 'settings.section',

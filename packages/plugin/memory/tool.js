@@ -7,6 +7,7 @@
  *   - 返回纯文本：她说得出口的东西，不是 JSON。
  */
 import { workspaceOf } from '../lib/extract.js'
+import { dialogOnly } from '../../../src/core/signals.ts'
 
 function fmtTime(ts) {
   try {
@@ -29,7 +30,7 @@ export function formatHit(hit, i) {
   }
   const when = fmtTime(r.ts)
   const neutral = String(r.neutral || '').trim()
-  const raw = String(r.note || '').replace(/\s+/g, ' ').trim()
+  const raw = dialogOnly(r.note ? String(r.note) : '').replace(/\s+/g, ' ').trim()
   const tail = raw && raw !== neutral ? `\n   原话：${raw.slice(0, 160)}` : ''
   return `${i + 1}. [对话 ${when}] ${neutral || raw.slice(0, 100)}${tail}`
 }

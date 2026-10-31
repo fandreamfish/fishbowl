@@ -1,17 +1,27 @@
 /**
- * M3.0：清醒节律与主动联系。
- * 纯决策函数（可测）+ 宿主侧定时器（在插件上下文里跑）。
- * 默认关闭（cfg.wake.enabled），先观察、后打开。
+ * 清醒节律：联系型（想找他）与自处型（自己待着）。
+ *
+ * 一次 tick 只做一个决定：
+ *   有联系由头 + 联系闸通过 → 联系型唤醒
+ *   否则 自处到点 + 自处闸通过 → 自处型唤醒
+ *   否则 → 继续睡
+ *
+ * 自处型不记 outreach、不吃联系配额；提示只给处境，不写祈使句。
+ * 上网不在这里预取素材：她醒着，自己决定要不要调用 fish_bili_look。
  */
 import { ContactGate } from '../../../src/core/contact.ts'
 import { Scheduler } from '../../../src/core/scheduler.ts'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { createDshHost } from '../host/dsh.js'
+import { createDshHost, workspaceOf } from '../host/dsh.js'
 import { injectMessage } from './injector.js'
-import { callLLM } from './llm.js'
-import { voiceRulesFor } from './voice.js'
+import { browseGrant, grantLine } from './grant.js'
+import { browseDayKey } from '../../../src/core/browse.ts'
+import { recordWake, selfWakeTimes } from '../../../src/core/signals.ts'
+import { countToday } from './browse/store.js'
+import { markReplySeen, scanDueReplies } from './browse/comment.js'
+import { markSelfTime } from './browse/runtime.js'
 
 /**
  * 唤醒决策：醒了之后有没有话要说。
@@ -23,7 +33,7 @@ export function wakeReason(state) {
   return { reason: null }
 }
 
-/** 主动开口的生成提示。 */
+/** 主动开口的生成提示（保留：L1 之前的外部调用方可能还在用）。 */
 export function proactivePrompt(reason, stateLine) {
   return [
     '你现在想主动联系用户。原因：' + reason + '。',
@@ -31,7 +41,6 @@ export function proactivePrompt(reason, stateLine) {
     '用你的声音，说一句不超过 60 字的开场白。不要道歉、不要解释，像真人一样自然开口。',
   ].join('\n')
 }
-
 
 /** 距离最后一次"他来过"（episode/contact）过了多少小时。 */
 export function absenceHours(events, now) {
@@ -56,10 +65,6 @@ export function shouldRecordAbsence(events, now, thresholdHours = 8) {
   return (now - lastSeen) / 3_600_000 >= thresholdHours
 }
 
-/**
- * 启动唤醒循环。返回 cleanup。
- * @param {import('./types.js').FishbowlConfig} cfg
- */
 /** 唤醒状态文件：给设置页看「她现在为什么没开口」。 */
 export function wakeStatePath(stateDir) {
   return path.join(stateDir, 'wake-state.json')
@@ -67,12 +72,12 @@ export function wakeStatePath(stateDir) {
 
 /**
  * 唤醒用的"舞台提示"：只给处境，不替她说话。
- * 她看到这句会自己开口，回复才是她的话（assistant 角色）。
- * 不写祈使句——祈使句会被当成任务清单逐条执行。
+ * contact 与 self 都只写事实；self 不写「你可以去看看」这种祈使句。
  */
-export function wakeTrigger(now, reason) {
+export function wakeTrigger(now, situation, mode = 'contact') {
   const t = new Date(now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  return `（醒一醒。现在是 ${t}。${reason}）`
+  void mode
+  return `（醒一醒。现在是 ${t}。${situation}）`
 }
 
 /** 由头 → 一句处境描述（给 wakeTrigger 用）。 */
@@ -81,17 +86,56 @@ export function wakeSituation(reason) {
   if (/很久没/.test(reason)) return '你很久没跟他说过话了。'
   return reason
 }
+
+/** 自处时的处境：许可是一条事实，不是命令。硬开关关着时不提它。 */
+export function selfSituation(creature, cfg) {
+  const g = cfg?.browse?.enabled === false ? '' : grantLine(creature)
+  return g ? `没什么事。他之前说过，${g}` : '没什么事。'
+}
+
+/**
+ * 自处是否开启。
+ * 配置是总开关；他说的「没事可以刷刷 B 站」是许可——有许可时，
+ * 即使自处总开关关着，也允许为这条许可醒一次。撤销后回到总开关。
+ */
+export function selfTimeEnabled(cfg, creature) {
+  // 硬开关关着时，许可也不该让她为一个打不开的门醒来；自处总开关仍然可以为写日记等打开。
+  return cfg.selfTime?.enabled === true || (cfg.browse?.enabled !== false && !!browseGrant(creature))
+}
+
+/** 自处配额：从账本恢复，重启不重复。 */
+function selfGateFor(creature, cfg, now) {
+  const g = new ContactGate({
+    window: cfg.selfTime?.window ?? ['09:00', '23:00'],
+    dailyMax: Number(cfg.selfTime?.dailyMax ?? 1),
+    minGap: cfg.selfTime?.minGap ?? '90m',
+    burst: { max: 1, per: '2h' },
+    requireReason: false,
+    unansweredStop: 999,
+  }, cfg.timezone)
+  g.hydrate(selfWakeTimes(creature, now - 7 * 86_400_000))
+  return g
+}
+
+/** 等它空闲；等不到就跳过这一轮（自处不能打断对话）。 */
+async function waitIdle(agent, ms) {
+  if (!agent || typeof agent.whenIdle !== 'function') return true
+  if (!(ms > 0)) return false
+  let done = false
+  const p = Promise.resolve(agent.whenIdle()).then(() => { done = true }).catch(() => {})
+  await Promise.race([p, new Promise((r) => setTimeout(r, ms))])
+  return done
+}
+
 export function createWakeLoop(ctx, binding, cfg, host) {
   host = host ?? createDshHost(ctx, cfg)
   if (!cfg.wake?.enabled) return () => {}
 
   const scheduler = new Scheduler(cfg.wake, cfg.timezone)
-  const gates = new Map() // creatureId -> ContactGate（配额按鱼算，且从账本恢复）
+  const gates = new Map() // creatureId -> ContactGate（联系）
   let timer = null
   let stopped = false
 
-  /** 记一笔"她主动开口了"，方便排查。 */
-  /** 每只鱼一把闸；历史从账本恢复（重启不重复轰炸）。 */
   function gateFor(creature, now) {
     const cid = creature.meta.creatureId
     let g = gates.get(cid)
@@ -102,10 +146,11 @@ export function createWakeLoop(ctx, binding, cfg, host) {
     g.hydrate(creature.outreachTimes(now - 7 * 86_400_000))
     return g
   }
-  function traceWake(sessionId, creatureId, reason) {
+
+  function traceWake(sessionId, creatureId, mode, reason) {
     try {
       fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
-        ts: Date.now(), sessionId, creatureId, event: 'wake', reason,
+        ts: Date.now(), sessionId, creatureId, event: 'wake', mode, reason,
       }) + '\n')
     } catch { /* 忽略 */ }
   }
@@ -118,7 +163,6 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         scheduleNext(now)
         return
       }
-      // 按活着的 agent 走：一只鱼可能被多个会话共享（住整个工作区），同一次只处理一遍
       const seen = new Set()
       const report = []
       for (const agent of host.listAgents?.() ?? []) {
@@ -138,28 +182,94 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           if (hours !== null) creature.recordAbsence(hours)
         }
 
-        const broken = creature.openCommitments(cfg.growth).filter(c => c.broken).length
+        const broken = creature.openCommitments(cfg.growth).filter((c) => c.broken).length
         const longing = creature.fold().affect.longing
         const { reason } = wakeReason({ openBroken: broken, longing })
         const gate = gateFor(creature, now)
-        const decision = gate.can(now, reason !== null)
-        report.push({ creature: creature.meta.name, reason: reason ?? null, longing: Number(longing.toFixed(2)), broken, gate: decision, at: now })
-        if (!decision.ok || reason === null) continue
+        const contactDecision = gate.can(now, reason !== null)
 
-        const text = wakeTrigger(now, wakeSituation(reason))
+        // 自处闸：独立配额；没开就不看
+        const selfEnabled = selfTimeEnabled(cfg, creature)
+        const selfGate = selfEnabled ? selfGateFor(creature, cfg, now) : null
+        const selfDecision = selfGate ? selfGate.can(now, true) : { ok: false, reason: 'disabled' }
+        const browseToday = countToday(creature, browseDayKey(now, cfg.timezone))
+
+        report.push({
+          creature: creature.meta.name,
+          reason: reason ?? null,
+          longing: Number(longing.toFixed(2)),
+          broken,
+          gate: contactDecision,
+          self: { enabled: selfEnabled, gate: selfDecision, usedToday: browseToday, perDay: cfg.browse?.perDay ?? 0 },
+          at: now,
+        })
+
+        let mode = null
+        let situation = ''
+        if (reason !== null && contactDecision.ok) {
+          mode = 'contact'
+          situation = wakeSituation(reason)
+        } else if (selfEnabled && selfDecision.ok) {
+          // 自处不等于上网：她可以只是醒着、写日记、什么都不做。
+          // 上网配额在工具入口按「自处回合」收紧，不在这里把整次自处砍掉。
+          mode = 'self'
+          situation = selfSituation(creature, cfg)
+        }
+
+        if (!mode) continue
+
+        // 自处不能打断对话：等不到空闲就跳过，不消耗配额。
+        if (mode === 'self') {
+          const idle = await waitIdle(agent, Number(cfg.selfTime?.idleWaitMs ?? 15000))
+          if (!idle) {
+            report[report.length - 1].self.gate = { ok: false, reason: 'busy' }
+            continue
+          }
+        }
+
+        // 醒来前看一眼：她最近发过的评论下面有没有人回她。
+        // 有就作为素材放进这次处境（不是用户的话）；等真的叫醒成功后再记成「看过了」。
+        let wakeSituation = situation
+        let pendingReplies = []
+        try {
+          const r = await scanDueReplies(creature, cfg, { now })
+          if (r?.text) {
+            wakeSituation += '\n\n' + r.text
+            pendingReplies = r.items ?? []
+          }
+        } catch { /* 扫不到就算了，不影响醒 */ }
+
+        const text = wakeTrigger(now, wakeSituation, mode)
         if (!text) continue
+
         if (!agent) {
-          // 会话没开着——进投递队列，下次会话打开时补投
-          creature.store.appendOutbox({ id: randomUUID(), ts: now, text, channel: 'dsm-session', delivered: false })
-          creature.recordOutreach(reason, now)
-          gate.consume(now)
+          // 会话没开着：联系型进 outbox；自处型不补投（没有活着的会话就不自处）
+          if (mode === 'contact') {
+            creature.store.appendOutbox({
+              id: randomUUID(), ts: now, text, channel: 'dsm-session', delivered: false,
+              wake: { mode: 'contact', reason },
+            })
+            creature.recordOutreach(reason, now)
+            recordWake(creature, 'contact', reason, now)
+            gate.consume(now)
+          }
           continue
         }
-        gate.consume(now)
-        creature.recordOutreach(reason, now)
+
+        if (mode === 'contact') {
+          gate.consume(now)
+          creature.recordOutreach(reason, now)
+          recordWake(creature, 'contact', reason, now)
+        } else {
+          selfGate?.consume(now)
+          recordWake(creature, 'self', null, now)
+          // 这一轮是自处：工具入口按本轮收紧上网配额（10 分钟内有效）
+          markSelfTime(cid, now + 10 * 60_000)
+        }
         try {
-          await host.wake(agent, injectMessage(text))
-          traceWake(sid, cid, reason)
+          await host.wake(agent, injectMessage(text, { mode, reason: mode === 'contact' ? reason : null }))
+          traceWake(sid, cid, mode, mode === 'contact' ? reason : null)
+          for (const it of pendingReplies) markReplySeen(creature, it.rpid, browseDayKey(now, cfg.timezone))
         } catch { /* 会话状态变化时可能失败，忽略 */ }
       }
       try { fs.writeFileSync(wakeStatePath(cfg.stateDir), JSON.stringify({ ts: now, entries: report }, null, 2)) } catch { /* 忽略 */ }

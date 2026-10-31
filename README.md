@@ -8,6 +8,7 @@
 |---|---|
 | [DESIGN.md](DESIGN.md) | 完整设计（公理、状态模型、评价器、情绪、记忆、成长率、关系原型、部署与搬迁） |
 | [docs/MEMORY.md](docs/MEMORY.md) | 记忆系统设计（账本、合并记忆、检索、注入） |
+| [docs/BROWSE.md](docs/BROWSE.md) | 上网与说话设计（B 站、自处、许可、登录/@/评论/回复、风控与设置） |
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
@@ -18,12 +19,14 @@
 
 ```
 src/core/          认知内核：评价→情绪→偏置、事件日志、成长率、住处、节律（纯逻辑，零宿主）
+                   另有 browse.ts：上网的时段/配额/过滤/排序/素材渲染（纯逻辑）
 src/scenarios.ts   脚本化评价（测试/离线用）
 packages/memory/   记忆模块：只追加账本、合并记忆、检索、渲染（纯 TS，可独立使用）
 packages/plugin/   DSH 插件
   host/dsh.js       唯一碰 DSH 的地方（事件流/注入/唤醒/工具钩子/标题/枚举/HTTP 路由）
   memory/           记忆模块的进程内实例与 memory_search 工具
   lib/              回合管道、注入渲染、绑定、声音、约束、设置页后端
+  lib/browse/       上网与说话：B 站客户端、素材、seen、登录、评论/回复、工具、风控
   client.js         设置页前端
 packages/bridge-qq/ QQ 桥（OneBot v11，独立进程，共享同一份个体状态）
 scripts/            CLI 与实验工具；dev/ 调试脚本；smoke/ 冒烟测试
@@ -33,15 +36,17 @@ prototype/          Python 原型（已冻结，8/8 通过）
 ## 运行
 
 ```sh
-node src/test.ts                       # 内核验收
-node packages/memory/test/unit.test.ts # 记忆模块
-node packages/plugin/test/unit.test.ts # 插件
+node src/test.ts                        # 内核验收
+node packages/memory/test/unit.test.ts  # 记忆模块
+node packages/plugin/test/unit.test.ts  # 插件
+node packages/plugin/test/browse.test.ts # 上网（纯逻辑 + 假 fetch）
+node packages/plugin/test/bili.test.ts   # 登录 / 评论 / 回复（假 fetch）
 node packages/bridge-qq/test/unit.test.ts
-node scripts/smoke/m7-apply-smoke.ts   # 插件激活冒烟（假宿主）
-node src/demo.ts                       # 四组剧本演示
+node scripts/smoke/m7-apply-smoke.ts    # 插件激活冒烟（假宿主）
+node src/demo.ts                        # 四组剧本演示
 ```
 
-`npm run test:all` 跑前四套。
+`npm run test:all` 跑前六套。
 
 要求 Node ≥ 22.18（原生类型剥离，无需构建）。
 

@@ -1,6 +1,6 @@
 # fishbowl 项目状态与开发要点
 
-> 最后更新：记忆模块抽出之后（M16 + `packages/memory`）。
+> 最后更新：M21 清醒与上网（B 站只读）落地之后。
 > 密钥不在本文件，见 `SECRETS.local.md`（已 gitignore）。
 
 ## 1. 项目一句话
@@ -34,6 +34,8 @@ $node = "C:\Users\24358\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\node\
 & $node D:\fish-memory\src\test.ts                        # 内核
 & $node D:\fish-memory\packages\memory\test\unit.test.ts  # 记忆模块
 & $node D:\fish-memory\packages\plugin\test\unit.test.ts  # 插件
+& $node D:\fish-memory\packages\plugin\test\browse.test.ts # 上网（纯逻辑 + 假 fetch）
+& $node D:\fish-memory\packages\plugin\test\bili.test.ts   # 登录/评论/回复（假 fetch）
 & $node D:\fish-memory\packages\bridge-qq\test\unit.test.ts
 & $node D:\fish-memory\scripts\smoke\m7-apply-smoke.ts    # 激活冒烟（假宿主）
 
@@ -68,6 +70,7 @@ packages/plugin/
   memory/store.js    进程内记忆实例（一只鱼一个）
   memory/tool.js     memory_search 工具
   lib/               collector injector binding constraints life config appraiser llm voice journal identity extract ui-route rename
+  lib/browse/        B 站客户端、素材、seen、fish_bili_look、登录/评论/回复、风控
   client.js          设置页前端
 packages/bridge-qq/  QQ 桥（OneBot v11）
 scripts/             fishbowl-cli llm ab-run memory-eval；dev/ 调试；smoke/ 冒烟
@@ -79,12 +82,17 @@ prototype/           Python 原型（冻结）
 ```
 creatures/
   scopes.json            见过的住处（工作区路径 / 会话）
-  ui-config.json         设置页保存的成长率与来历
-  trace.ndjson           评价轨迹 + 注入/改名记录
+  ui-config.json         设置页保存的成长率/作息/自处/上网配置
+  trace.ndjson           评价轨迹 + 注入/改名/唤醒/许可记录
   .titles.json           改名前的原标题（搬走时恢复用）
+  browse-risk.json       全局风控冷却（同一 IP 多鱼共享）
+  bili-auth.json         B 站 cookie / @ 的人（0600；默认在 ~/.fishbowl/）
   <id>/meta.json         四条不变量 + occupancy（住处）
-  <id>/log.ndjson        账本：turn/summary/merged/retire/revise/revisit/hit/config
+  <id>/log.ndjson        账本：turn/summary/merged/retire/revise/revisit/hit/config/wake/grant
                          + 旧情绪事件 episode/semantic/commitment/activity/diary/note/request
+  <id>/browse/seen.ndjson 上网记录（原始素材不进账本；可搬迁，不进 git）
+  <id>/browse/actions.ndjson 评论/回复/看过回复
+  <id>/browse/scan.json  上次扫评论楼的时间与待回素材
   <id>/projection.json   情绪投影缓存（可删可重算）
   <id>/outbox.json       会话关着时攒着的话
 ```
@@ -105,16 +113,19 @@ creatures/
 10. 会话标题只能改**活着的**会话；工作区标题按路径匹配（id 是内部的）
 11. 升级 DSH 后先看 `dsh.profile.bundles` 里有没有 `@local/fishbowl`（没有则插件根本不加载）
 12. 每个阶段：测试全绿 → commit → tag → push → 更新进度列表
+13. 改了 `src/core/*.ts`（尤其是加类方法/新导出）后要**重启 DSH**再启用插件；插件热启用不会重新加载进程里已缓存的 core 模块，症状是 `does not provide an export named ...` 或新方法不存在。插件侧已把 wake/grant/日志过滤收进 `src/core/signals.ts`，避免再撞同一个坑。
 
 ## 8. 当前状态
 
-- 阶段：M0–M16 完成；记忆已抽成 `packages/memory`，插件通过 `packages/plugin/memory/` 接入
-- 标签：`m0` … `m16.1`（记忆模块的提交在其后）
+- 阶段：M0–M21.2 代码完成；记忆在 `packages/memory`，插件通过 `packages/plugin/memory/` 接入；M21 加了清醒拆分、上网（B 站只读）、登录/评论/回复
+- 标签：`m0` … `m16.1`（M17 之后的提交尚未打 tag）
 - 待办：
   1. 真机验证记忆模块（合并记忆、检索、注入）
-  2. 叫醒消息去祈使句 + 冷落事件化
-  3. 成长瓶颈制（g 降级为环境参数）
-  4. QQ 桥真机联调、B 站通道
+  2. 真机验证上网：许可 → 自处 → `fish_bili_look` → 日记；检查设置页历史与风控
+  3. 真机验证登录/评论/回复（用小号）：cookie 测试、@ 前缀、扫回复、配额
+  4. 抽帧看画面（本机没 ffmpeg）、B 站消息中心的 @ 通知（当前只扫自己的评论楼）
+  5. 成长瓶颈制（g 降级为环境参数）
+  6. QQ 桥真机联调
 - 用户待办：联调完删 DeepSeek key、轮换 GitHub PAT
 
 ## 9. 回滚

@@ -116,4 +116,6 @@ export interface OutboxItem {
   text: string
   channel: string
   delivered: boolean
+  /** 唤醒出处；补投时也要带上，否则这一轮又只剩 assistant。 */
+  wake?: { mode: 'contact' | 'self'; reason: string | null }
 }

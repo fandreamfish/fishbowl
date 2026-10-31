@@ -70,6 +70,9 @@ export function appraiseScripted(transcript) {
 
 const SYSTEM_PROMPT = [
   '你是事件评价器。给你一段"用户与 AI 的对话转录"（user: / assistant: 格式），',
+  '转录里还可能出现两种非对话行：',
+  '  situation: 是 AI 自己醒来时的处境（没有人对她说话），不是用户说的话；',
+  '  tool: 是工具返回的结果，也不是用户说的话。',
   '评价刚刚结束的这一轮**事件**，而不是给 AI 打分。站在 AI 的视角，但如实评估发生了什么：',
   '只输出一个 JSON 对象，字段：',
   'goal_congruence: 数值 [-1,1]。这一轮里用户的目标是否达成：用户满意、任务完成 = 正；用户否定、说"不对/不行"、催你 = 负。',
@@ -81,8 +84,11 @@ const SYSTEM_PROMPT = [
   'attribution: 字符串 "self" | "other" | "circumstance"，结果主要归因于谁。',
   '注意：用户说"不行、重做、快点、怎么还没做"时，goal_congruence 和 relational_impact 都必须是负数。',
   '如果用户的话羞辱、贬低或伤害了你，relational_impact 必须是强负（接近 -1），attribution 为 "other"。',
+  '没有 user: 行的轮次（只有 situation / assistant / tool）是它自己醒着的一轮：不要编造一个用户，按它自己的行为和处境评。',
   '不要输出 JSON 以外的任何内容。',
 ].join('\n')
+
+export const APPRAISER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 function num(x, lo, hi, dflt) {
   const n = Number(x)

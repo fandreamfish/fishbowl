@@ -1,5 +1,7 @@
 # 交接：给 fishbowl 实现「刷 B 站」
 
+> 状态：**已实现（2026-10-31，M21）**。现行设计见 [BROWSE.md](BROWSE.md)；本文保留为早期交接记录。
+>
 > 给接手会话看的。先读 `README.md`、`docs/STATE.md`、`docs/MEMORY.md`、`docs/HOST.md`。
 > 这次只讨论实现方案与落地步骤，不要求你先把代码写完。
 

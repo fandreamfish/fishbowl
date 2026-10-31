@@ -121,6 +121,10 @@ export type CreatureEvent =
   | { t: 'reinforce'; id: string; ts: number; ref: string }
   // —— M20：主动联系记账（配额跨重启，重启不重复轰炸） ——
   | { t: 'outreach'; id: string; ts: number; reason?: string }
+  // —— M21：清醒记账（联系型 / 自处型；联系配额不吃自处） ——
+  | { t: 'wake'; id: string; ts: number; mode: 'contact' | 'self'; reason?: string | null }
+  // —— M21：许可（他说的「没事可以刷刷 B 站」；不是命令，是允许） ——
+  | { t: 'grant'; id: string; ts: number; topic: string; text: string; allowed: boolean }
   // —— M7：日记 / 小纸条 / 请求 ——
   | { t: 'diary'; id: string; ts: number; date: string; text: string }
   | { t: 'note'; id: string; ts: number; text: string }

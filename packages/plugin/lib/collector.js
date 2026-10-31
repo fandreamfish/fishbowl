@@ -9,17 +9,42 @@ import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBro
 import { applyAppraisal, salienceOf, toBias } from '../../../src/core/engine.ts'
 import { createMemoryStore } from '../memory/store.js'
 import { createAppraiser } from './appraiser.js'
-import { isFishbowlInjection, messageText, textOf, toolNameOf, workspaceOf } from './extract.js'
+import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
+import { todayItems } from './browse/store.js'
+import { browseDayKey } from '../../../src/core/browse.ts'
+import { activeGrants, recordGrant, recentDialog } from '../../../src/core/signals.ts'
 import { createDshHost } from '../host/dsh.js'
 import { injectMessage, recallBlock, recentBlock } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
+import { detectGrant, grantLine } from './grant.js'
 
 /** 请求预筛：出现这些词才值得一次 LLM 调用。 */
 const REQUEST_CUE = /可以吗|行不行|能不能|要不要|同意|允许|准不准|我想(?:去|要|做|试)|帮我|拜托|征求/
+
+/**
+ * 把这一轮缓存拼成转录。
+ *
+ * role 只有四种：
+ *   user       他说的话
+ *   assistant  她说的话（含 her reasoning，宿主把它一起给出来了）
+ *   tool       工具结果
+ *   situation  她刚醒来时的处境（来自唤醒消息；不是他说的话）
+ *
+ * `situation` 必须进转录：以前唤醒消息被整条跳过，只剩 assistant，
+ * 记忆总结就会替她编一个"对方说……"——这是实际发生过的污染。
+ */
+export function buildTranscript(items, limit = 2400) {
+  const list = Array.isArray(items) ? items : []
+  return list
+    .slice(-Math.max(1, Math.ceil(Number(limit || 2400) / 60)))
+    .map((i) => `${i?.role ?? 'user'}: ${i?.text ?? ''}`)
+    .join('\n')
+    .slice(-Number(limit || 2400))
+}
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createCollector(ctx, binding, cfg, host, memorySource) {
@@ -68,6 +93,24 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
     } catch {
       return false
     }
+  }
+
+  /**
+   * 「你没事可以刷刷 B 站」是许可，不是命令。
+   * 只在用户消息里识别；重复说同一句不重复落盘。
+   */
+  function maybeGrant(session, text) {
+    try {
+      if (!cfg.browse?.grantDetect) return
+      const g = detectGrant(text)
+      if (!g) return
+      const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
+      if (!creature) return
+      const active = activeGrants(creature, 'browse').length > 0
+      if (g.allowed === active) return
+      recordGrant(creature, g.topic, g.text, g.allowed)
+      trace({ ts: Date.now(), sessionId: session.id, creatureId: creature.meta.creatureId, event: g.allowed ? 'grant' : 'grant-revoked', topic: g.topic, text: g.text })
+    } catch { /* 许可识别失败不影响对话 */ }
   }
 
   /** 用户这句话让她想起什么 → 注入一小段（同一条 10 分钟内不重复）。 */
@@ -163,7 +206,11 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const today = localDate(now, cfg.timezone)
       if (creature.hasDiary(today)) return
       const affectLine = `效价 ${affect.valence.toFixed(2)}，唤醒 ${affect.arousal.toFixed(2)}${affect.guilt > 0.05 ? `，愧疚 ${affect.guilt.toFixed(2)}` : ''}`
-      const raw = await callLLM(cfg, DIARY_SYSTEM_PROMPT, buildDiaryPrompt(transcript, affectLine), { json: false, maxTokens: 400 })
+      const seen = todayItems(creature, browseDayKey(now, cfg.timezone)).slice(0, 6)
+      const seenLine = seen.length
+        ? '今天你自己在网上翻到过（只有标题和 UP，没有画面）：\n' + seen.map((x) => `- ${x.title}${x.up ? `（UP：${x.up}）` : ''}`).join('\n')
+        : ''
+      const raw = await callLLM(cfg, DIARY_SYSTEM_PROMPT, buildDiaryPrompt(transcript, affectLine, seenLine), { json: false, maxTokens: 400 })
       const text = parseDiary(raw)
       if (!text) return
       creature.recordDiary(today, text, now)
@@ -214,11 +261,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
     try {
       const buf = buffers.get(session.id)
       if (!buf || buf.items.length === 0) return
-      const transcript = buf.items
-        .slice(-Math.ceil(cfg.transcriptLimit / 60))
-        .map(i => `${i.role}: ${i.text}`)
-        .join('\n')
-        .slice(-cfg.transcriptLimit)
+      const transcript = buildTranscript(buf.items, cfg.transcriptLimit)
 
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) { buffers.delete(session.id); return }
@@ -244,6 +287,10 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const bias = toBias(affect, creature.temperament)
       const commitments = creature.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
+      // 许可是一条稳定事实：他允许她没事时自己刷 B 站。不是命令，也不翻硬开关。
+      const grant = grantLine(creature)
+      const snapText = grant ? `${snap.text}\n他允许你的事: ${grant}` : snap.text
+      const snapFingerprint = grant ? `${snap.fingerprint}|g:${grant}` : snap.fingerprint
       // 这一轮注入过哪些记忆 → 下一轮她的总结用来判定「真用到了没有」
       injectedBy.set(session.id, snap.picked)
 
@@ -289,19 +336,19 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
             if (!osid || osid === session.id) continue
             const oc = binding.resolve({ sessionId: osid, workspace: workspaceOf(a?.session) })
             if (!oc || oc.meta.creatureId !== creature.meta.creatureId) continue
-            if (lastKey.get(osid) === snap.fingerprint) continue
-            lastKey.set(osid, snap.fingerprint)
-            await host.inject(a, injectMessage(snap.text))
+            if (lastKey.get(osid) === snapFingerprint) continue
+            lastKey.set(osid, snapFingerprint)
+            await host.inject(a, injectMessage(snapText))
           }
         } catch { /* 同步失败不影响主流程 */ await Promise.resolve() }
         // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
         // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
-        if (snap.fingerprint !== lastKey.get(session.id)) {
-          lastKey.set(session.id, snap.fingerprint)
+        if (snapFingerprint !== lastKey.get(session.id)) {
+          lastKey.set(session.id, snapFingerprint)
           const agent = host.agentFor(session.id)
           if (agent) {
             try {
-              await host.inject(agent, injectMessage(snap.text))
+              await host.inject(agent, injectMessage(snapText))
             } catch (err) {
               trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
             }
@@ -321,9 +368,16 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       if (!binding.manages(session.id)) return
       const t = event.type
       if (t === 'user/message') {
-        if (isFishbowlInjection(event)) return // 自己注入的状态块不算对话内容
+        // 唤醒消息不是"状态块"：它带着 wake 出处，要把处境记成 situation。
+        // 其余 fishbowl 注入（基线 / 回忆 / 状态摘要）照旧跳过。
+        if (isFishbowlInjection(event)) {
+          const wake = wakeOf(event)
+          if (wake) pushItem(session.id, 'situation', textOf(event))
+          return
+        }
         const userText = textOf(event)
         pushItem(session.id, 'user', userText)
+        maybeGrant(session, userText)
         maybeRecall(session, userText)
       } else if (t === 'assistant/message') {
         pushItem(session.id, 'assistant', textOf(event))
@@ -371,14 +425,14 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
           const merged = mergePendingText(pending)
           if (merged.text !== null) {
             try {
-              await host.wake(agent, injectMessage(merged.text))
+              await host.wake(agent, injectMessage(merged.text, { mode: 'contact', reason: '补投攒着的话' }))
               for (const id of merged.ids) creature.store.markOutboxDelivered(id)
             } catch { /* 下轮再试 */ }
             return
           }
           for (const item of pending) {
             try {
-              await host.wake(agent, injectMessage(item.text))
+              await host.wake(agent, injectMessage(item.text, item.wake ?? { mode: 'contact', reason: '补投攒着的话' }))
               creature.store.markOutboxDelivered(item.id)
             } catch { /* 单条失败不影响其余 */ }
           }
@@ -393,8 +447,9 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments })
       injectedBy.set(sid, snap.picked)
       // 基线里带上"你们之前说过的话"，新会话打开也能接上
-      const recent = recentBlock(creature.recentDialog(6))
-      const text = snap.text + (recent ? '\n' + recent : '')
+      const recent = recentBlock(recentDialog(creature, 6))
+      const grant = grantLine(creature)
+      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + (recent ? '\n' + recent : '')
       Promise.resolve()
         .then(() => {
           if (isEmptyShell(creature, snap.view)) return

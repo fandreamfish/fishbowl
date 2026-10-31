@@ -10,6 +10,13 @@ import {
 } from './engine.ts'
 import { memoryWindowDays } from './growth.ts'
 import { Store } from './store.ts'
+import {
+  activeGrants as activeGrantsOf,
+  dialogOnly,
+  recordGrant as recordGrantOf,
+  recordWake as recordWakeOf,
+  selfWakeTimes as selfWakeTimesOf,
+} from './signals.ts'
 import { matchClaims, matchTexts } from './recall.ts'
 import { uid } from './util.ts'
 
@@ -135,6 +142,32 @@ export class Creature {
       .map(e => e.ts)
       .sort((a, b) => a - b)
   }
+
+  /** 一次醒来（联系型或自处型）。 */
+  recordWake(mode: 'contact' | 'self', reason?: string | null, ts?: number): void {
+    recordWakeOf(this, mode, reason, ts)
+  }
+
+  /** 自处型醒来的时间（配额跨重启）。 */
+  selfWakeTimes(since = 0): number[] {
+    return selfWakeTimesOf(this, since)
+  }
+
+  /**
+   * 他说了一句「允许/不允许」。
+   *
+   * 这是许可，不是命令：`allowed=false` 表示撤销。
+   * 硬开关（设置页的 browse.enabled）仍然决定工具能不能联网。
+   */
+  recordGrant(topic: string, text: string, allowed = true, ts?: number): void {
+    recordGrantOf(this, topic, text, allowed, ts)
+  }
+
+  /** 当前有效的许可（同一 topic 以最后一条为准）。 */
+  activeGrants(topic?: string): { topic: string; text: string; ts: number }[] {
+    return activeGrantsOf(this, topic)
+  }
+
   /** 封存（M4）：停止时间。 */
   recordFreeze(ts?: number): void {
     this.store.appendEvent({ t: 'freeze', id: uid(), ts: ts ?? Date.now() })
@@ -340,7 +373,10 @@ export class Creature {
   recentDialog(limit = 6): { ts: number; text: string }[] {
     const out: { ts: number; text: string }[] = []
     for (const e of this.store.readEvents()) {
-      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') out.push({ ts: e.ts, text: e.note })
+      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') {
+        const text = dialogOnly(e.note)
+        if (text) out.push({ ts: e.ts, text })
+      }
     }
     return out.slice(-limit)
   }
@@ -349,7 +385,10 @@ export class Creature {
   episodeMatches(text: string, limit = 3): { ts: number; text: string; score: number }[] {
     const items: { ts: number; text: string }[] = []
     for (const e of this.store.readEvents()) {
-      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') items.push({ ts: e.ts, text: e.note })
+      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') {
+        const line = dialogOnly(e.note)
+        if (line) items.push({ ts: e.ts, text: line })
+      }
     }
     return matchTexts(items, text, limit)
   }
@@ -401,3 +440,9 @@ export interface MemoryClaim {
   weight: number
   folded: boolean
 }
+
+/**
+ * 只要对话行（实现见 signals.ts）。
+ * 这里保留 re-export，旧的调用方（测试/脚本）仍然能从 creature.ts 取到。
+ */
+export { dialogOnly }

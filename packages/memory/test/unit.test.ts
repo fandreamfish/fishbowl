@@ -5,7 +5,7 @@ import { Ledger } from '../src/ledger.ts'
 import { buildView } from '../src/records.ts'
 import { normalizeMemory, validateMemory } from '../src/config.ts'
 import { gateMemories, dedupeAgainst, similarity, parseMerge } from '../src/consolidate.ts'
-import { splitSegments, locateQuote, parseNeutral, parseHer } from '../src/summarize.ts'
+import { splitSegments, locateQuote, parseNeutral, parseHer, HER_SYSTEM, NEUTRAL_SYSTEM } from '../src/summarize.ts'
 import { RecallIndex, tokenize } from '../src/recall.ts'
 import { renderText, pickMemories, fingerprint } from '../src/render.ts'
 import { acquireWriterLock } from '../src/lock.ts'
@@ -108,6 +108,8 @@ const seg = splitSegments('第一件事。第二件事。', [{ text: 'A', quote:
 check('拆成两段并按位置排序', seg.length === 2 && seg[0].chars[0] < seg[1].chars[0])
 const badseg = splitSegments('原文', [{ text: 'A', quote: '编的' }, { text: 'B', quote: '也是编的' }])
 check('定位失败整轮退回一段', badseg.length === 1)
+check('她的总结提示词认 situation', HER_SYSTEM.includes('situation'))
+check('中性总结提示词认 situation', NEUTRAL_SYSTEM.includes('situation'))
 
 // ---------------------------------------------------------------- 检索
 console.log('== 检索（BM25） ==')
