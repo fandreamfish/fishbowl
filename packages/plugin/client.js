@@ -33,7 +33,7 @@ function makeFactory() {
     const shortId = (id) => {
       const s = String(id || '')
       const m = s.match(/^session-([0-9a-f]{8})/i)
-      if (m) return 'session-' + m[1] + '…'
+      if (m) return 's-' + m[1] + '…'
       return s.length > 14 ? s.slice(0, 14) + '…' : s
     }
     const occText = (occ) => {
