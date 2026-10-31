@@ -76,10 +76,13 @@ function makeFactory() {
         return () => clearInterval(t)
       }, [showLive, load])
 
+      const born = !!(state && state.born)
       const save = async () => {
         try {
-          await postJson(API + '/config', { growth, seed: { name: seedName, background: seedBg } })
-          setMsg('已保存：成长率即时生效；基础人设从下一次会话开始生效')
+          // 出生后来历只读（公理 A1）：只保存成长率
+          const body = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
+          await postJson(API + '/config', body)
+          setMsg(born ? '已保存：成长率即时生效' : '已保存：成长率即时生效；来历从新出生的个体开始生效')
           await load()
         } catch (x) { setErr(String((x && x.message) || x)) }
       }
@@ -108,13 +111,14 @@ function makeFactory() {
               : e('div', { style: lab, children: '还没有事件' }) }, 'timeline')
           : null,
         e('div', { style: { fontWeight: 600, margin: '16px 0 8px' }, children: '初始状态 / 基础人设' }, 's2'),
+        born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。想重新开始请新建会话。' }, 'bornhint') : null,
         e('div', { style: box, children: [
           e('div', { style: rowS, children: [
             e('span', { style: lab, children: '名字（新个体出生时使用）' }, 'l'),
-            e('input', { style: { ...inp, width: 200 }, value: seedName, placeholder: '例：大肥鱼', onInput: (ev) => setSeedName(ev.target.value) }, 'i'),
+            e('input', { style: { ...inp, width: 200, opacity: born ? 0.5 : 1 }, value: seedName, placeholder: '例：大肥鱼', disabled: born, onInput: (ev) => setSeedName(ev.target.value) }, 'i'),
           ] }, 'n'),
           e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
-          e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical' }, value: seedBg, placeholder: '例：从水族馆来的鱼，喜欢猫和安静。', onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
+          e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, placeholder: '例：从水族馆来的鱼，喜欢猫和安静。', disabled: born, onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
         ] }, 'f1'),
         e('div', { style: box, children: [
           e('div', { style: { ...rowS, marginBottom: 4 }, children: [

@@ -169,31 +169,107 @@ export class Creature {
     return open
   }
 
-  /** 注入用记忆摘要：名字 + 置信度最高的活跃语义/教训/自我认知。g 控制遗忘窗口。 */
-  memorySummary(g = 1): { name: string | null; semantics: string[]; procedures: string[]; self: string[] } {
-    const defaultPrefix = 'fish-'
-    const name = this.meta.name && !this.meta.name.startsWith(defaultPrefix) ? this.meta.name : null
-    const windowMs = memoryWindowDays(g) * 86_400_000
-    const now = Date.now()
-    const recent = (e: CreatureEvent) => now - e.ts < windowMs
+  /** 记忆强化（M6）：同一件事被再次提到 → 重量上升，不是重复落盘。 */
+  recordReinforce(ref: string, ts?: number): void {
+    this.store.appendEvent({ t: 'reinforce', id: uid(), ts: ts ?? Date.now(), ref })
+  }
+
+  /** 某类认知的原文（去重用，含已折叠的旧记忆——旧事不会被重新记一遍）。 */
+  claimTexts(kind: 'semantic' | 'procedure' | 'self'): string[] {
     const events = this.store.readEvents()
-    const semantics = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'semantic' }> => e.t === 'semantic' && e.status === 'active' && recent(e))
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 2)
-      .map(e => e.claim)
-    const procedures = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'procedure' }> => e.t === 'procedure' && e.status === 'active' && recent(e))
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 1)
-      .map(e => `${e.trigger} → ${e.action}`)
-    const self = events
-      .filter((e): e is Extract<CreatureEvent, { t: 'self' }> => e.t === 'self' && e.status === 'active' && e.confidence >= 0.5 && recent(e))
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 2)
-      .map(e => e.claim)
+    const out: string[] = []
+    for (const e of events) {
+      if (e.t !== kind || e.status !== 'active') continue
+      out.push(e.t === 'procedure' ? `${e.trigger} → ${e.action}` : e.claim)
+    }
+    return out
+  }
+
+  /** 按原文找认知的事件 id（去重命中 → 强化）。 */
+  findClaim(text: string): string | null {
+    const events = this.store.readEvents()
+    for (const e of events) {
+      if (e.t === 'semantic' && e.status === 'active' && e.claim === text) return e.id
+      if (e.t === 'procedure' && e.status === 'active' && `${e.trigger} → ${e.action}` === text) return e.id
+      if (e.t === 'self' && e.status === 'active' && e.claim === text) return e.id
+    }
+    return null
+  }
+
+  /**
+   * 记忆重量（M6）：
+   *   重量 = 置信度 × (1 + 0.4·ln(1+强化次数)) × 0.5^(ageDays / 半衰期)
+   * 半衰期 = 记忆窗口/3；超过窗口的不再逐个显示，折叠成"记不清了"，
+   * 但事件原文永远在账本里——recall 能翻回去（遗忘是折叠，不是删除）。
+   */
+  claimsWithWeight(g = 1, now = Date.now()): MemoryClaim[] {
+    const events = this.store.readEvents()
+    const hits = new Map<string, number>()
+    const lastHit = new Map<string, number>()
+    for (const e of events) {
+      if (e.t !== 'reinforce') continue
+      hits.set(e.ref, (hits.get(e.ref) ?? 0) + 1)
+      lastHit.set(e.ref, Math.max(lastHit.get(e.ref) ?? 0, e.ts))
+    }
+    const windowMs = memoryWindowDays(g) * 86_400_000
+    const halfLifeDays = Math.max(1, memoryWindowDays(g) / 3)
+    const out: MemoryClaim[] = []
+    for (const e of events) {
+      if ((e.t !== 'semantic' && e.t !== 'procedure' && e.t !== 'self') || e.status !== 'active') continue
+      const text = e.t === 'procedure' ? `${e.trigger} → ${e.action}` : e.claim
+      const confidence = e.confidence ?? 0.5
+      const n = hits.get(e.id) ?? 0
+      const lastSeen = Math.max(e.ts, lastHit.get(e.id) ?? 0)
+      const ageDays = Math.max(0, (now - lastSeen) / 86_400_000)
+      const weight = confidence * (1 + 0.4 * Math.log(1 + n)) * Math.pow(0.5, ageDays / halfLifeDays)
+      out.push({ id: e.id, kind: e.t, text, confidence, hits: n, lastSeen, weight, folded: now - lastSeen > windowMs })
+    }
+    return out.sort((a, b) => b.weight - a.weight)
+  }
+
+  /** 回忆（M6）：按重量翻出记忆，含已折叠的旧事。 */
+  recall(g = 1, limit = 8): MemoryClaim[] {
+    return this.claimsWithWeight(g).slice(0, limit)
+  }
+
+  /** 注入用记忆摘要：名字 + 重量最高的活跃语义/教训/自我认知 + 折叠计数。 */
+  memorySummary(g = 1): {
+    name: string | null
+    semantics: string[]
+    procedures: string[]
+    self: string[]
+    commitments: string[]
+    activity: string | null
+    folded: number
+  } {
+    const name = this.meta.name && !this.meta.name.startsWith('fish-') ? this.meta.name : null
+    const claims = this.claimsWithWeight(g)
+    const active = (kind: MemoryClaim['kind'], limit: number, minConf = 0) =>
+      claims
+        .filter(c => c.kind === kind && !c.folded && c.confidence >= minConf)
+        .slice(0, limit)
+        .map(c => c.text)
     const commitments = this.openCommitments(g).slice(-2).map(c => (c.broken ? '⚠ ' : '') + c.text)
     const activity = this.currentActivity(g)
-    return { name, semantics, procedures, self, commitments, activity }
+    return {
+      name,
+      semantics: active('semantic', 2),
+      procedures: active('procedure', 1),
+      self: active('self', 2, 0.5),
+      commitments,
+      activity,
+      folded: claims.filter(c => c.folded).length,
+    }
   }
+}
+
+export interface MemoryClaim {
+  id: string
+  kind: 'semantic' | 'procedure' | 'self'
+  text: string
+  confidence: number
+  hits: number
+  lastSeen: number
+  weight: number
+  folded: boolean
 }

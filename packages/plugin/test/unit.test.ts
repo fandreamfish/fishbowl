@@ -15,7 +15,7 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf } from '../lib/ext
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { proactivePrompt, wakeReason } from '../lib/life.js'
-import { mergeUiConfig, summarizeEvent } from '../lib/ui-route.js'
+import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
 
@@ -259,6 +259,35 @@ const d = normalizeConfig({})
 check('默认时区 Asia/Shanghai', d.timezone === 'Asia/Shanghai')
 check('默认评价器 scripted（离线可用）', d.appraiser.kind === 'scripted')
 check('默认状态目录在用户目录下（不进仓库）', d.stateDir.includes('.fishbowl'))
+
+console.log('== M6：记忆重量、折叠与回忆 ==')
+const m6 = binding.creatureFor('session-m6-memory-' + Date.now())
+const nowMs = Date.now()
+const dayMs = 86_400_000
+m6.recordSemantic('他喜欢猫', ['e1', 'e2'], 0.6, nowMs - 1 * dayMs)
+m6.recordSemantic('他讨厌被催', ['e1', 'e2'], 0.7, nowMs - 1 * dayMs)
+const claims0 = m6.claimsWithWeight(1)
+check('记忆带重量', claims0.length >= 2 && claims0[0].weight >= claims0[1].weight)
+const before = m6.memorySummary(1).semantics
+const favor = m6.findClaim('他喜欢猫')
+check('按原文找到认知 id', typeof favor === 'string')
+for (let i = 0; i < 4; i++) m6.recordReinforce(favor!, nowMs)
+const after = m6.memorySummary(1).semantics
+check('被反复提到 → 重量上升、优先注入', after[0] === '他喜欢猫', `before=${before.join('/')} after=${after.join('/')}`)
+check('强化次数被记录', (m6.claimsWithWeight(1).find(c => c.text === '他喜欢猫')?.hits ?? 0) === 4)
+
+const old = m6.claimTexts('semantic').length
+m6.recordSemantic('很久以前的一件小事', ['e1', 'e2'], 0.9, nowMs - 200 * dayMs)
+const ms6 = m6.memorySummary(1)
+check('超过窗口的记忆被折叠（不逐个注入）', !ms6.semantics.includes('很久以前的一件小事') && ms6.folded >= 1, `folded=${ms6.folded}`)
+check('折叠不等于删除（账本还在）', old + 1 === m6.claimTexts('semantic').length)
+const rec = m6.recall(1, 8)
+check('回忆能翻出旧事', rec.some(c => c.text === '很久以前的一件小事'))
+check('注入含折叠提示', summaryText(baseBias, baseAff, ms6).includes('记不清'))
+
+console.log('== M6：来历出生后只读 ==')
+check('seed 未改 → 不锁', seedChanged({ name: 'a', background: '' }, { name: 'a', background: '' }) === false)
+check('seed 改动 → 锁', seedChanged({ name: 'a' }, { name: 'b' }) === true)
 
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

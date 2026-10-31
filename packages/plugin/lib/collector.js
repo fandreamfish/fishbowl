@@ -50,7 +50,11 @@ export function createCollector(ctx, binding, cfg) {
       const events = creature.store.readEvents()
       const episodes = events.filter((e) => e.t === 'episode').slice(-8)
       if (episodes.length < 3) return
-      const existing = creature.memorySummary(cfg.growth)
+      // 去重对全集（含已折叠的旧记忆）：同一件事再次提到 → 强化重量，不重复落盘
+      const existing = {
+        semantics: creature.claimTexts('semantic'),
+        procedures: creature.claimTexts('procedure'),
+      }
       const known = [
         '你已经记住的：',
         ...existing.semantics.map((c) => `- 事实: ${c}`),
@@ -58,12 +62,28 @@ export function createCollector(ctx, binding, cfg) {
       ].join('\n')
       const lines = episodes.map((e, i) => `[${i + 1}] ${(e.note ?? '').slice(0, 300)}`).join('\n')
       const raw = await callLLM(cfg, CONSOLIDATION_SYSTEM_PROMPT, `${known}\n\n最近对话：\n${lines}`, { maxTokens: 600 })
-      const parsed = dedupeConsolidation(parseConsolidation(raw), existing)
+      const parsed = parseConsolidation(raw)
+      const fresh = dedupeConsolidation(parsed, existing)
       const ts = Date.now()
-      for (const s of parsed.semantics) creature.recordSemantic(s.claim, s.evidence, s.confidence, ts)
-      for (const p of parsed.procedures) creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
-      if (parsed.semantics.length || parsed.procedures.length) {
-        trace({ ts, sessionId, event: 'consolidated', semantics: parsed.semantics, procedures: parsed.procedures })
+      let reinforced = 0
+      for (const s of parsed.semantics) {
+        if (fresh.semantics.includes(s)) {
+          creature.recordSemantic(s.claim, s.evidence, s.confidence, ts)
+        } else {
+          const id = creature.findClaim(s.claim)
+          if (id) { creature.recordReinforce(id, ts); reinforced++ }
+        }
+      }
+      for (const p of parsed.procedures) {
+        if (fresh.procedures.includes(p)) {
+          creature.recordProcedure(p.trigger, p.action, p.evidence, p.confidence, ts)
+        } else {
+          const id = creature.findClaim(`${p.trigger} → ${p.action}`)
+          if (id) { creature.recordReinforce(id, ts); reinforced++ }
+        }
+      }
+      if (fresh.semantics.length || fresh.procedures.length || reinforced > 0) {
+        trace({ ts, sessionId, event: 'consolidated', semantics: fresh.semantics, procedures: fresh.procedures, reinforced })
       }
     } catch (err) {
       trace({ ts: Date.now(), sessionId, warn: `consolidate failed: ${String(err && err.message || err)}` })

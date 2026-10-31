@@ -37,6 +37,11 @@ export function uiConfigPath(stateDir) {
   return path.join(stateDir, 'ui-config.json')
 }
 
+/** seed 是否被这次请求改动（纯函数，便于测试）。 */
+export function seedChanged(prev, next) {
+  return !!next && (String(next.name ?? '') !== String(prev?.name ?? '') || String(next.background ?? '') !== String(prev?.background ?? ''))
+}
+
 export function createUiRoute(ctx, cfg, binding) {
   // Cordis：未在 inject 里声明的服务不能直接访问 ctx.webServer；
   // 用 ctx.get 取可选服务（dsh-pet 同款），没有 webServer 的 profile 也能正常激活。
@@ -67,9 +72,20 @@ export function createUiRoute(ctx, cfg, binding) {
       } catch { /* 单个个体坏了不影响整体 */ }
     }
     return {
+      born: creatures.some((c) => c.episodes > 0),
       config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation?.kind, wake: cfg.wake?.enabled },
       creatures,
     }
+  }
+
+  /** 来历只读判定：已经有任何个体出生（有过对话轮次）→ 不许改 seed。 */
+  function isBorn() {
+    for (const sid of Object.keys(binding.bindings)) {
+      try {
+        if (binding.creatureFor(sid).store.readEvents().some(e => e.t === 'episode')) return true
+      } catch { /* 单个个体坏了不影响判定 */ }
+    }
+    return false
   }
 
   function readBody(req) {
@@ -99,10 +115,16 @@ export function createUiRoute(ctx, cfg, binding) {
         if (sub === '/config' && req.method === 'POST') {
           const body = JSON.parse(await readBody(req) || '{}')
           const ui = mergeUiConfig({}, body)
+          // 公理 A1：她出生后来历只读——历史会被铭记，只能说服，不能修改
+          if (isBorn() && seedChanged(cfg.seed, ui.seed)) {
+            res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' })
+            res.end(JSON.stringify({ ok: false, error: '她已经出生了，来历不能再改（历史会被铭记，只能说服不能修改）' }))
+            return
+          }
           fs.writeFileSync(uiConfigPath(stateDir), JSON.stringify({ growth: ui.growth, seed: ui.seed ?? null }, null, 2))
           // 运行中立即生效（下次会话时 seed 会进入声音段）
           if (typeof ui.growth === 'number') cfg.growth = ui.growth
-          if (ui.seed) cfg.seed = ui.seed
+          if (ui.seed && !isBorn()) cfg.seed = ui.seed
           return send({ ok: true, growth: cfg.growth, seed: cfg.seed ?? null })
         }
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })

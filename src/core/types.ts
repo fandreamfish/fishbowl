@@ -111,6 +111,8 @@ export type CreatureEvent =
   | { t: 'commitment-resolved'; id: string; ts: number; ref: string; status: 'fulfilled' | 'broken' }
   // —— M3.2：共享活动（一起看/读/学） ——
   | { t: 'activity'; id: string; ts: number; title: string; status: 'started' | 'ended' }
+  // —— M6：记忆强化（同一件事被再次提到 → 重量上升，不是重复落盘） ——
+  | { t: 'reinforce'; id: string; ts: number; ref: string }
   // —— M4：封存（停止时间：不经历、不缺席、不想念） ——
   | { t: 'freeze'; id: string; ts: number }
   | { t: 'unfreeze'; id: string; ts: number }
