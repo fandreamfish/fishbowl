@@ -195,12 +195,13 @@ check('通道表：qq-group 是 public', CHANNELS['qq-group'].register === 'publ
 check('通道表：dsm-session 是 intimate', CHANNELS['dsm-session'].register === 'intimate')
 
 const q = named.store
-q.appendOutbox({ id: 'o1', ts: Date.now(), text: 'hi', channel: 'dsm-session', delivered: false })
-check('投递队列：入队可读', q.readOutbox().some(o => o.id === 'o1' && !o.delivered))
-q.appendOutbox({ id: 'o1', ts: Date.now(), text: 'dup', channel: 'dsm-session', delivered: false })
-check('投递队列：id 幂等去重', q.readOutbox().filter(o => o.id === 'o1').length === 1)
-q.markOutboxDelivered('o1')
-check('投递队列：标记已投', q.readOutbox().some(o => o.id === 'o1' && o.delivered))
+const oid = 'o-' + Date.now()
+q.appendOutbox({ id: oid, ts: Date.now(), text: 'hi', channel: 'dsm-session', delivered: false })
+check('投递队列：入队可读', q.readOutbox().some(o => o.id === oid && !o.delivered))
+q.appendOutbox({ id: oid, ts: Date.now(), text: 'dup', channel: 'dsm-session', delivered: false })
+check('投递队列：id 幂等去重', q.readOutbox().filter(o => o.id === oid).length === 1)
+q.markOutboxDelivered(oid)
+check('投递队列：标记已投', q.readOutbox().some(o => o.id === oid && o.delivered))
 
 console.log('== M3.2：共享活动与积压合并 ==')
 check('活动预筛', ACTIVITY_RE.test('我们一起看《三体》吧') && !ACTIVITY_RE.test('今天天气不错'))
@@ -212,7 +213,7 @@ named.recordActivity('看《三体》', 'ended')
 check('活动结束后清空', named.currentActivity() === null)
 check('注入含活动行', summaryText(baseBias, baseAff, { ...ms3, activity: '看《三体》' }).includes('正在一起做的事'))
 const mp = mergePendingText([{ id: 'a', text: 'x1' }, { id: 'b', text: 'x2' }, { id: 'c', text: 'x3' }, { id: 'd', text: 'x4' }])
-check('积压 >3 合并成一条', mp.text !== null && mp.ids.length === 4 && (mp.text ?? '').includes('攒了'))
+check('积压 >3 合并成一条', mp.text !== null && mp.ids.length === 4 && (mp.text ?? '').includes('前阵子'))
 check('积压 ≤3 不合并', mergePendingText([{ id: 'a', text: 'x1' }]).text === null)
 
 console.log('== 工具约束（纯决策函数） ==')
