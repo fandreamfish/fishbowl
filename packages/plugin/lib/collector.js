@@ -51,6 +51,18 @@ export function createCollector(ctx, binding, cfg, host) {
     bufferFor(sessionId).items.push({ role, text })
   }
 
+  /** 空壳鱼（默认名 + 没轮次 + 没记忆）就别注入中性数字了，纯噪音。 */
+  function isEmptyShell(creature, memory) {
+    try {
+      const defaultName = /^fish-/.test(creature.meta.name)
+      const episodes = creature.store.readEvents().filter((e) => e.t === 'episode').length
+      const hasMemory = (memory?.semantics?.length ?? 0) + (memory?.procedures?.length ?? 0) + (memory?.self?.length ?? 0) > 0
+      return defaultName && episodes === 0 && !hasMemory
+    } catch {
+      return false
+    }
+  }
+
   /** 用户这句话里提到的事 → 她"想起来"，注入一小段（同一条 10 分钟内不重复）。 */
   const recalledSeen = new Map() // creatureId -> Map(claimId -> ts)
   function maybeRecall(session, text) {
@@ -439,7 +451,11 @@ export function createCollector(ctx, binding, cfg, host) {
       const recent = recentBlock(creature.recentDialog(6))
       const text = summaryText(bias, affect, memory) + (recent ? '\n' + recent : '')
       Promise.resolve()
-        .then(() => host.inject(agent, injectMessage(text)))
+        .then(() => {
+          if (isEmptyShell(creature, memory)) return
+          trace({ ts: Date.now(), sessionId: sid, event: 'inject', kind: 'baseline', name: creature.meta.name })
+          return host.inject(agent, injectMessage(text))
+        })
         .catch(() => { /* agent 可能在注入前被销毁 */ })
     } catch { /* 同上，绝不外抛 */ }
   })
