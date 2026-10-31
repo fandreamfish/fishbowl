@@ -18,6 +18,8 @@ import { proactivePrompt, wakeReason } from '../lib/life.js'
 import { mergeUiConfig, seedChanged, summarizeEvent } from '../lib/ui-route.js'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
+import { matchClaims } from '../../../src/core/recall.ts'
+import { recallBlock } from '../lib/injector.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
 import { isRelationClaim, layerInterval, layerRate, memoryWindowDays, minEvidence } from '../../../src/core/growth.ts'
@@ -338,5 +340,14 @@ check('入住工作区 → 名字 的屋子', scopeTitle('小肥鱼', { kind: 'w
 check('没住处 → 空标题', scopeTitle('小肥鱼', null) === '')
 check('住处键：会话', scopeKey({ kind: 'session', id: 's1' }) === 'session:s1')
 check('住处键：工作区', scopeKey({ kind: 'workspace', id: 'D:\\x' }) === 'workspace:D:\\x')
+console.log('== M13：话题回忆 ==')
+const claimsTest = [
+  { id: 'a', kind: 'semantic', text: '用户讨厌被贬低自己喜欢的东西' },
+  { id: 'b', kind: 'semantic', text: '用户周六休息，不上班' },
+]
+check('提到相关话题 → 想起来', matchClaims(claimsTest, '你还记得我讨厌什么吗', 2)[0]?.id === 'a')
+check('无关话题 → 不想起来', matchClaims(claimsTest, '今天天气不错', 2).length === 0)
+check('回忆块渲染', recallBlock([{ text: '用户讨厌被贬低' }]).includes('用户讨厌被贬低'))
+check('空回忆 → 空串', recallBlock([]) === '')
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

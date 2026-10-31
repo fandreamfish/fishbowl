@@ -15,7 +15,7 @@ import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.j
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { createDshHost } from '../host/dsh.js'
-import { injectMessage, stateKey, summaryText } from './injector.js'
+import { injectMessage, recallBlock, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
 
@@ -51,6 +51,26 @@ export function createCollector(ctx, binding, cfg, host) {
     bufferFor(sessionId).items.push({ role, text })
   }
 
+  /** 用户这句话里提到的事 → 她"想起来"，注入一小段（同一条 10 分钟内不重复）。 */
+  const recalledSeen = new Map() // creatureId -> Map(claimId -> ts)
+  function maybeRecall(session, text) {
+    try {
+      if (!text || text.trim().length < 2) return
+      const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
+      if (!creature) return
+      const hits = creature.recallMatches(text, cfg.growth, 2)
+      if (hits.length === 0) return
+      const now = Date.now()
+      const seen = recalledSeen.get(creature.meta.creatureId) ?? new Map()
+      const fresh = hits.filter((h) => now - (seen.get(h.id) ?? 0) > 10 * 60_000)
+      if (fresh.length === 0) return
+      for (const h of fresh) seen.set(h.id, now)
+      recalledSeen.set(creature.meta.creatureId, seen)
+      const agent = host.agentFor(session.id)
+      if (!agent) return
+      host.inject(agent, injectMessage(recallBlock(fresh))).catch(() => {})
+    } catch { /* 回忆失败不影响主流程 */ }
+  }
   /** 巩固：把最近的转录压成语义与教训，落盘为事件（带去重与冷却）。 */
   async function consolidate(sessionId, creature) {
     try {
@@ -329,7 +349,9 @@ export function createCollector(ctx, binding, cfg, host) {
       const t = event.type
       if (t === 'user/message') {
         if (isFishbowlInjection(event)) return // 自己注入的状态块不算对话内容
-        pushItem(session.id, 'user', textOf(event))
+        const userText = textOf(event)
+        pushItem(session.id, 'user', userText)
+        maybeRecall(session, userText)
       } else if (t === 'assistant/message') {
         pushItem(session.id, 'assistant', textOf(event))
       } else if (t === 'tool/result') {

@@ -10,6 +10,13 @@ function q(x, lo, hi, loLabel, hiLabel) {
   return '中'
 }
 
+/** 用户这句话触发的回忆：短、只说命中的。 */
+export function recallBlock(claims) {
+  const list = (claims ?? []).filter((c) => c && c.text)
+  if (list.length === 0) return ''
+  return '（他这句话让你想起：' + list.map((c) => c.text).join('；') + '）'
+}
+
 /** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect @param {{name?: string|null, semantics?: string[], procedures?: string[], self?: string[]}} [memory] */
 export function summaryText(bias, affect, memory) {
   const mem = memory ?? { name: null, semantics: [], procedures: [], self: [] }

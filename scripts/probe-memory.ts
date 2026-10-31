@@ -1,0 +1,11 @@
+﻿import { Creature } from '../src/core/creature.ts'
+const c = Creature.open('C:/Users/24358/.fishbowl/creatures/8ec7a805-703a-4905-a56c-8c7790ea9bfd')
+const m = c.memorySummary(1)
+console.log('名字:', m.name)
+console.log('记得的事:', m.semantics)
+console.log('教训:', m.procedures)
+console.log('折叠:', m.folded, '承诺:', m.commitments)
+console.log('请求:', JSON.stringify(m.requests))
+const claims = c.claimsWithWeight(1)
+console.log('全部认知（按重量）:')
+for (const x of claims) console.log(`  ${x.weight.toFixed(2)} ${x.folded ? '[折叠]' : ''} ${x.kind}: ${x.text.slice(0, 60)}`)

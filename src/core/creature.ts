@@ -10,6 +10,7 @@ import {
 } from './engine.ts'
 import { memoryWindowDays } from './growth.ts'
 import { Store } from './store.ts'
+import { matchClaims } from './recall.ts'
 import { uid } from './util.ts'
 
 export class Creature {
@@ -316,6 +317,11 @@ export class Creature {
     return out.sort((a, b) => b.weight - a.weight)
   }
 
+  /** 按话题匹配她记得的事（用户这句话提到了什么）。 */
+  recallMatches(text: string, g = 1, limit = 3): { id: string; kind: MemoryClaim['kind']; text: string; score: number }[] {
+    return matchClaims(this.claimsWithWeight(g), text, limit)
+  }
+
   /** 回忆（M6）：按重量翻出记忆，含已折叠的旧事。 */
   recall(g = 1, limit = 8): MemoryClaim[] {
     return this.claimsWithWeight(g).slice(0, limit)
@@ -343,8 +349,8 @@ export class Creature {
     const activity = this.currentActivity(g)
     return {
       name,
-      semantics: active('semantic', 2),
-      procedures: active('procedure', 1),
+      semantics: active('semantic', 3),
+      procedures: active('procedure', 2),
       self: active('self', 2, 0.5),
       commitments,
       activity,
