@@ -8,7 +8,7 @@
 DSH 插件。不是记忆插件——记忆是底料，人格是派生。核心是**事件溯源 + 派生投影**：情绪是事件日志 + 时间的纯函数，随时可重算。
 
 - 五条公理：A1 人格不预设 · A2 价值观只解释不学习 · A3 情绪必须能改变行为 · A4 遗忘是功能 · A5 个体独立
-- 设计：`DESIGN.md`；记忆：`docs/MEMORY.md`；抽取决策：`docs/MEMORY-MODULE.md`；宿主契约：`docs/HOST.md`
+- 设计：`DESIGN.md`；记忆：`docs/MEMORY.md`；宿主契约：`docs/HOST.md`
 
 ## 2. 环境与路径
 

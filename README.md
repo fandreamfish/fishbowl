@@ -8,7 +8,6 @@
 |---|---|
 | [DESIGN.md](DESIGN.md) | 完整设计（公理、状态模型、评价器、情绪、记忆、成长率、关系原型、部署与搬迁） |
 | [docs/MEMORY.md](docs/MEMORY.md) | 记忆系统设计（账本、合并记忆、检索、注入） |
-| [docs/MEMORY-MODULE.md](docs/MEMORY-MODULE.md) | 把记忆抽成独立模块的决策、接口与迁移 |
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
