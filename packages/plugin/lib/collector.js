@@ -405,12 +405,6 @@ export function createCollector(ctx, binding, cfg, host) {
       const sid = agent?.session?.id ?? agent?.id
       if (!sid || !binding.manages(sid)) return
 
-      // 声音：注册到 agent.ctx 只作用于这个 agent（dsh-system-prompt 的 scoped 贡献）
-      try {
-        const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
-        host.voice(agent, voiceRulesFor(cfg.relation?.kind) + seedLine)
-      } catch { /* 声音注册失败不影响功能 */ }
-
       const ws = workspaceOf(agent?.session) ?? workspaceOf(payload?.session)
       const creature = binding.resolve({ sessionId: sid, workspace: ws })
       if (!creature) {
@@ -419,6 +413,13 @@ export function createCollector(ctx, binding, cfg, host) {
         restoreOriginalAsync(host, cfg.stateDir, { kind: 'session', id: sid })
         return
       }
+
+      // 声音：只给"有鱼住"的会话注册（scoped，只作用于这个 agent）
+      try {
+        const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
+        host.voice(agent, voiceRulesFor(cfg.relation?.kind) + seedLine)
+      } catch { /* 声音注册失败不影响功能 */ }
+
       // 入住时如果会话没开着就改不了名，开房时补一次（「<名字>的房间」）
       if (creature.meta.occupancy) renameScopeAsync(host, cfg.stateDir, creature.meta.occupancy, creature.meta.name)
 
