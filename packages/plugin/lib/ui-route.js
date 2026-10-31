@@ -13,36 +13,11 @@
  *   GET/POST /config               成长率与来历（来历出生后只读）
  */
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
+import { createDshHost } from '../host/dsh.js'
 
 const ROUTE = '/fishbowl-ui'
-
-export function decodeWorkspace(dirName) {
-    let s = dirName.slice(2, -2).replace(/~([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
-    if (!s) return null
-    const drive = /^[A-Za-z]$/.test(s[0]) ? s[0].toUpperCase() + ':' : null
-    const rest = drive ? s.slice(1) : s
-    const memo = new Map()
-    function go(i, acc) {
-      if (i >= rest.length) return fs.existsSync(acc) ? acc : null
-      const key = i + '|' + acc
-      if (memo.has(key)) return memo.get(key)
-      let out = null
-      if (rest[i] === '-') {
-        out = go(i + 1, acc + '-') || go(i + 1, acc + '\\')
-      } else {
-        out = go(i + 1, acc + rest[i])
-      }
-      memo.set(key, out)
-      return out
-    }
-    const full = go(0, drive ?? '')
-    return full && fs.existsSync(full) ? full : null
-  }
-
-
 
 /** 事件 → 一行摘要（给时间线用）。 */
 export function summarizeEvent(e) {
@@ -84,9 +59,9 @@ export function seedChanged(prev, next) {
   return !!next && (String(next.name ?? '') !== String(prev?.name ?? '') || String(next.background ?? '') !== String(prev?.background ?? ''))
 }
 
-export function createUiRoute(ctx, cfg, binding) {
-  const webServer = typeof ctx.get === 'function' ? ctx.get('webServer') : null
-  if (!webServer || typeof webServer.register !== 'function') return () => {}
+export function createUiRoute(ctx, cfg, binding, host) {
+  host = host ?? createDshHost(ctx, cfg)
+  if (typeof host.registerRoute !== 'function') return () => {}
   const stateDir = cfg.stateDir
 
   function fishView(c, sessions) {
@@ -114,67 +89,17 @@ export function createUiRoute(ctx, cfg, binding) {
     }
   }
 
-  /**
-   * 枚举 DSH 的全部工作区与会话（sessions/<编码路径>/session-<id>）。
-   * 工作区目录名是编码过的（`--C-Users-x-.dsh-fish-home--`），
-   * 用「把 - 当分隔符试遍所有切分 + 路径存在性校验」还原真实路径。
-   */
-  function scopesRoots() {
-    const out = []
-    if (process.env.DSH_HOME) out.push(path.join(process.env.DSH_HOME, 'sessions'))
-    out.push(path.join(os.homedir(), '.dsh', 'sessions'))
-    return [...new Set(out)].filter((r) => r && fs.existsSync(r))
-  }
-
-  function enumerateScopes() {
-    const workspaces = []
-    const sessions = []
-    const roots = scopesRoots()
-    let scanned = 0
-    let decoded = 0
-    for (const root of roots) {
-      try {
-        for (const d of fs.readdirSync(root, { withFileTypes: true })) {
-          if (!d.isDirectory() || !d.name.startsWith('--') || !d.name.endsWith('--')) continue
-          scanned += 1
-          const ws = decodeWorkspace(d.name)
-          if (!ws) continue
-          decoded += 1
-          if (!workspaces.includes(ws)) workspaces.push(ws)
-          let names = []
-          try { names = fs.readdirSync(path.join(root, d.name), { withFileTypes: true }) } catch { /* 读不到就跳过 */ }
-          for (const n of names) {
-            if (n.isDirectory() && n.name.startsWith('session-') && !sessions.some(x => x.id === n.name)) {
-              sessions.push({ id: n.name, workspace: ws })
-            }
-          }
-        }
-      } catch { /* 单个 root 失败不影响其他 */ }
-    }
-    const debug = {
-      homedir: os.homedir(),
-      dshHomeEnv: process.env.DSH_HOME ?? null,
-      roots,
-      scanned,
-      decoded,
-      workspaces: workspaces.length,
-      sessions: sessions.length,
-    }
-    try { fs.writeFileSync(path.join(cfg.stateDir, 'scopes-debug.json'), JSON.stringify(debug, null, 2)) } catch { /* 忽略 */ }
-    return { workspaces, sessions, debug }
-  }
-  /** 枚举结果 + 插件已记录的住处（主题目录不同时两边互补）。 */
+  /** 枚举结果 + 插件已记录的住处（两边互补）。枚举本身在 host 适配器里。 */
   function allScopes() {
-    const e = enumerateScopes()
+    const e = host.listScopes()
     const workspaces = [...e.workspaces]
     for (const w of (binding.scopes?.workspaces ?? [])) if (!workspaces.includes(w)) workspaces.push(w)
     const sessions = [...e.sessions]
     for (const s of (binding.scopes?.sessions ?? [])) {
       if (s && s.id && !sessions.some(x => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '' })
     }
-    return { workspaces, sessions, debug: e.debug }
+    return { workspaces, sessions }
   }
-
   function stateView() {
     const scopes = allScopes()
     const fish = binding.listCreatures().map((c) => fishView(c, scopes.sessions))
@@ -202,7 +127,7 @@ export function createUiRoute(ctx, cfg, binding) {
 
   let dispose
   try {
-    dispose = webServer.register({
+    dispose = host.registerRoute({
       kind: 'prefix',
       path: ROUTE,
       handler: async (req, res) => {
@@ -225,7 +150,7 @@ export function createUiRoute(ctx, cfg, binding) {
               if (conflict) return send(res, { ok: false, error: `这个住处已经住着「${conflict.name}」了` }, 409)
             }
             const c = binding.birth(name, occ)
-            if (occ) renameScopeAsync(ctx, occ, name)
+            if (occ) renameScopeAsync(host, stateDir, occ, name)
             return send(res, { ok: true, fish: fishView(c) })
           }
 
@@ -245,8 +170,8 @@ export function createUiRoute(ctx, cfg, binding) {
                 const c0 = binding.get(parts[1])
                 const prev = c0.meta.occupancy
                 binding.assign(parts[1], occ)
-                if (prev && (prev.kind !== occ.kind || prev.id !== occ.id)) restoreOriginalAsync(ctx, stateDir, prev)
-                renameScopeAsync(ctx, occ, c0.meta.name)
+                if (prev && (prev.kind !== occ.kind || prev.id !== occ.id)) restoreOriginalAsync(host, stateDir, prev)
+                renameScopeAsync(host, stateDir, occ, c0.meta.name)
                 return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
               } catch (e) {
                 return send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)
@@ -264,13 +189,13 @@ export function createUiRoute(ctx, cfg, binding) {
             if (action === 'delete' && req.method === 'POST') {
               const prev = c.meta.occupancy
               binding.remove(parts[1])
-              if (prev) restoreOriginalAsync(ctx, stateDir, prev)
+              if (prev) restoreOriginalAsync(host, stateDir, prev)
               return send(res, { ok: true })
             }
             if (action === 'release' && req.method === 'POST') {
               const prev = c.meta.occupancy
               binding.release(parts[1])
-              if (prev) restoreOriginalAsync(ctx, stateDir, prev)
+              if (prev) restoreOriginalAsync(host, stateDir, prev)
               return send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
             }
             if (action === 'diary' && req.method === 'GET') return send(res, { ok: true, diary: c.diaries(30) })
@@ -286,18 +211,8 @@ export function createUiRoute(ctx, cfg, binding) {
 
           // —— 诊断：服务可用性（排查改名问题用） ——
           if (sub === '/debug/services' && req.method === 'GET') {
-            const sessions = ctx.get?.('sessions')
-            const titles = ctx.get?.('sessionTitle')
-            const registry = ctx.get?.('workspaceRegistry')
-            let live = []
-            try { live = (sessions?.list?.() ?? []).map((s) => s?.id).filter(Boolean) } catch { live = [] }
-            return send(res, {
-              hasSessions: !!sessions,
-              hasSessionTitle: !!titles,
-              hasWorkspaceRegistry: !!registry,
-              liveSessions: live,
-              workspaces: (() => { try { return (registry?.list?.() ?? []).map((w) => ({ id: w.id, path: w.path, title: w.title })) } catch { return [] } })(),
-            })
+            const svc = host.services()
+            return send(res, svc)
           }
 
           // —— 兼容旧路径 ——

@@ -1,13 +1,11 @@
 /**
- * M9：入住时改名 / 搬走时改回原名。
+ * M9：入住时改名 / 搬走时改回原名（宿主无关部分）。
  *   房子（会话）→ 「<名字>的房间」
  *   屋子（工作区）→ 「<名字> 的屋子」
  *
- * rc.5 约束：会话标题只能改**活着的那个实例**（sessions.get(id) 同一对象），
- * 否则抛 "not live in this store"——没开着的会话等它被打开时再改。
- *
- * 原名记录：第一次改名之前把原标题记进 creatures/.titles.json，
- * 搬走时用原样恢复（记不到的就不动，绝不猜）。
+ * 真正的改名交给 host.nameScope()（DSH 适配器里才碰 sessionTitle / workspaceRegistry）。
+ * 原名记录：第一次改名之前把原标题记进 creatures/.titles.json，搬走时原样恢复；
+ * 记不到的就不动，绝不猜。
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,24 +20,6 @@ export function scopeTitle(name, occ) {
 export function scopeKey(occ) {
   return `${occ.kind}:${occ.id}`
 }
-
-/** 路径归一：统一分隔符、去尾斜杠、小写（Windows 不区分大小写）。 */
-function normPath(p) {
-  return String(p ?? '').replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
-}
-
-/** 找到工作区实体（按路径匹配；工作区 id 是内部 id）。 */
-function workspaceByPath(registry, p) {
-  try {
-    const list = typeof registry?.list === 'function' ? registry.list() : []
-    const want = normPath(p)
-    return list.find((w) => w && normPath(w.path) === want) ?? null
-  } catch {
-    return null
-  }
-}
-
-// —— 原名存档 ——
 
 function titlesPath(stateDir) {
   return path.join(stateDir, '.titles.json')
@@ -60,30 +40,22 @@ function writeTitles(stateDir, map) {
   } catch { /* 记不下来不影响流程 */ }
 }
 
-/** 读当前标题（读不到返回 null）。 */
-function currentTitle(ctx, occ) {
+function logResult(stateDir, occ, title, ok, why) {
   try {
-    if (occ.kind === 'session') {
-      const sessions = ctx.get?.('sessions')
-      const titles = ctx.get?.('sessionTitle')
-      const session = sessions && typeof sessions.get === 'function' ? sessions.get(occ.id) : null
-      if (!session || !titles || typeof titles.get !== 'function') return null
-      return titles.get(session)?.title ?? null
-    }
-    const ws = workspaceByPath(ctx.get?.('workspaceRegistry'), occ.id)
-    return ws?.title ?? null
-  } catch {
-    return null
-  }
+    if (!stateDir) return
+    fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({
+      ts: Date.now(), event: 'rename', occ: scopeKey(occ), title, ok, why: why ?? null,
+    }) + '\n')
+  } catch { /* 忽略 */ }
 }
 
-/** 改名之前先记下原名（只记一次；记不到就不覆盖旧的记录）。 */
-export function captureOriginal(ctx, stateDir, occ) {
-  if (!stateDir || !occ) return false
+/** 改名之前先记下原名（只记一次；读不到就不写）。 */
+export function captureOriginal(host, stateDir, occ) {
+  if (!stateDir || !occ || !host) return false
   const map = readTitles(stateDir)
   const key = scopeKey(occ)
   if (map[key] && map[key].title) return true
-  const title = currentTitle(ctx, occ)
+  const title = host.titleOf?.(occ) ?? null
   if (!title) return false
   map[key] = { title, at: Date.now() }
   writeTitles(stateDir, map)
@@ -91,93 +63,46 @@ export function captureOriginal(ctx, stateDir, occ) {
 }
 
 /** 把住处名字改回原名（没有记录就不动）。 */
-export async function restoreOriginal(ctx, stateDir, occ) {
-  if (!stateDir || !occ) return { ok: false, why: 'no-record' }
+export async function restoreOriginal(host, stateDir, occ) {
+  if (!stateDir || !occ || !host) return { ok: false, why: 'no-record' }
   const map = readTitles(stateDir)
   const key = scopeKey(occ)
   const rec = map[key]
   if (!rec || !rec.title) return { ok: false, why: 'no-record' }
-  try {
-    if (occ.kind === 'session') {
-      const sessions = ctx.get?.('sessions')
-      const titles = ctx.get?.('sessionTitle')
-      const session = sessions && typeof sessions.get === 'function' ? sessions.get(occ.id) : null
-      if (!session) return { ok: false, why: 'session-not-live' }
-      if (!titles || typeof titles.rename !== 'function') return { ok: false, why: 'no-sessionTitle-service' }
-      titles.rename(session, rec.title)
-    } else {
-      const ws = workspaceByPath(ctx.get?.('workspaceRegistry'), occ.id)
-      if (!ws) return { ok: false, why: 'workspace-not-found' }
-      await ws.setTitle(rec.title)
-    }
+  const res = await host.nameScope(occ, rec.title)
+  if (res?.ok) {
     delete map[key]
     writeTitles(stateDir, map)
-    return { ok: true }
-  } catch (e) {
-    return { ok: false, why: String((e && e.message) || e) }
+    logResult(stateDir, occ, rec.title, true)
+  } else {
+    logResult(stateDir, occ, rec.title, false, res?.why)
   }
-}
-
-/** 把结果记进 trace。 */
-function logResult(ctx, occ, title, ok, why) {
-  try {
-    const dir = ctx.__fishbowlStateDir
-    if (!dir) return
-    fs.appendFileSync(path.join(dir, 'trace.ndjson'), JSON.stringify({
-      ts: Date.now(), event: 'rename', occ: `${occ.kind}:${occ.id}`, title, ok, why: why ?? null,
-    }) + '\n')
-  } catch { /* 忽略 */ }
+  return res
 }
 
 /**
  * 给一个住处改名（先记原名）。
  * @returns {Promise<{ok: boolean, why?: string}>}
  */
-export async function renameScope(ctx, occ, name) {
+export async function renameScope(host, stateDir, occ, name) {
   const title = scopeTitle(name, occ)
-  if (!title) return { ok: false, why: 'no-title' }
-  try {
-    if (occ.kind === 'session') {
-      const sessions = ctx.get?.('sessions')
-      const titles = ctx.get?.('sessionTitle')
-      if (!sessions || typeof sessions.get !== 'function') return { ok: false, why: 'no-sessions-service' }
-      if (!titles || typeof titles.rename !== 'function') return { ok: false, why: 'no-sessionTitle-service' }
-      const session = sessions.get(occ.id)
-      if (!session) return { ok: false, why: 'session-not-live' }
-      captureOriginal(ctx, ctx.__fishbowlStateDir, occ)
-      titles.rename(session, title)
-      logResult(ctx, occ, title, true)
-      return { ok: true }
-    }
-    const registry = ctx.get?.('workspaceRegistry')
-    if (!registry) return { ok: false, why: 'no-workspaceRegistry' }
-    const ws = workspaceByPath(registry, occ.id)
-    if (!ws) return { ok: false, why: 'workspace-not-found' }
-    captureOriginal(ctx, ctx.__fishbowlStateDir, occ)
-    await ws.setTitle(title)
-    logResult(ctx, occ, title, true)
-    return { ok: true }
-  } catch (e) {
-    const why = String((e && e.message) || e)
-    logResult(ctx, occ, title, false, why)
-    return { ok: false, why }
-  }
+  if (!title || !host) return { ok: false, why: 'no-title' }
+  captureOriginal(host, stateDir, occ)
+  const res = await host.nameScope(occ, title)
+  logResult(stateDir, occ, title, !!res?.ok, res?.why)
+  return res
 }
 
 /** 静默版本：只发起，不等待，也永不抛。 */
-export function renameScopeAsync(ctx, occ, name) {
+export function renameScopeAsync(host, stateDir, occ, name) {
   try {
-    void Promise.resolve(renameScope(ctx, occ, name)).catch(() => {})
-  } catch {
-    /* 忽略 */
-  }
+    void Promise.resolve(renameScope(host, stateDir, occ, name)).catch(() => {})
+  } catch { /* 忽略 */ }
 }
 
 /** 静默恢复原名。 */
-export function restoreOriginalAsync(ctx, stateDir, occ) {
+export function restoreOriginalAsync(host, stateDir, occ) {
   try {
-    void Promise.resolve(restoreOriginal(ctx, stateDir, occ)).catch(() => {})
-  } catch {
-    /* 忽略 */
-  }
+    void Promise.resolve(restoreOriginal(host, stateDir, occ)).catch(() => {})
+  } catch { /* 忽略 */ }
 }

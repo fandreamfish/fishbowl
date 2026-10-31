@@ -6,6 +6,7 @@
 import { ContactGate } from '../../../src/core/contact.ts'
 import { Scheduler } from '../../../src/core/scheduler.ts'
 import { randomUUID } from 'node:crypto'
+import { createDshHost } from '../host/dsh.js'
 import { injectMessage } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
@@ -29,29 +30,13 @@ export function proactivePrompt(reason, stateLine) {
   ].join('\n')
 }
 
-function findAgent(ctx, sessionId) {
-  const reg = ctx.agents
-  if (!reg) return null
-  try {
-    if (typeof reg.get === 'function') {
-      const a = reg.get(sessionId)
-      if (a) return a
-    }
-  } catch { /* 形状不同则继续 */ }
-  try {
-    const list = typeof reg.list === 'function' ? reg.list() : []
-    for (const a of list) {
-      if (a && (a.id === sessionId || a.session?.id === sessionId)) return a
-    }
-  } catch { /* 同上 */ }
-  return null
-}
 
 /**
  * 启动唤醒循环。返回 cleanup。
  * @param {import('./types.js').FishbowlConfig} cfg
  */
-export function createWakeLoop(ctx, binding, cfg) {
+export function createWakeLoop(ctx, binding, cfg, host) {
+  host = host ?? createDshHost(ctx, cfg)
   if (!cfg.wake?.enabled) return () => {}
 
   const scheduler = new Scheduler(cfg.wake, cfg.timezone)
@@ -84,7 +69,7 @@ export function createWakeLoop(ctx, binding, cfg) {
         const decision = gate.can(now, reason !== null)
         if (!decision.ok || reason === null) continue
 
-        const agent = findAgent(ctx, sid)
+        const agent = host.agentFor(sid)
         const text = await generateProactive(creature, reason)
         if (!text) continue
         if (!agent) {
@@ -95,7 +80,7 @@ export function createWakeLoop(ctx, binding, cfg) {
         }
         gate.consume(now)
         try {
-          await agent.followup(injectMessage(text))
+          await host.wake(agent, injectMessage(text))
         } catch { /* 会话状态变化时可能失败，忽略 */ }
       }
     } catch {

@@ -14,12 +14,14 @@ import { isFishbowlInjection, messageText, textOf, toolNameOf, workspaceOf } fro
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
 import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
+import { createDshHost } from '../host/dsh.js'
 import { injectMessage, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from './voice.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
-export function createCollector(ctx, binding, cfg) {
+export function createCollector(ctx, binding, cfg, host) {
+  host = host ?? createDshHost(ctx, cfg)
   const appraise = createAppraiser(cfg)
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
   const lastKey = new Map() // sessionId -> stateKey（肉眼可见的变化才注入）
@@ -299,10 +301,10 @@ export function createCollector(ctx, binding, cfg) {
         // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
         if (key !== lastKey.get(session.id)) {
           lastKey.set(session.id, key)
-          const agent = findAgent(ctx, session.id)
+          const agent = host.agentFor(session.id)
           if (agent) {
             try {
-              await agent.inject(injectMessage(summaryText(bias, affect, memory)))
+              await host.inject(agent, injectMessage(summaryText(bias, affect, memory)))
             } catch (err) {
               trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
             }
@@ -315,7 +317,7 @@ export function createCollector(ctx, binding, cfg) {
     }
   }
 
-  const offEvent = ctx.on('session/event', (session, event) => {
+  const offEvent = host.onSessionEvent((session, event) => {
     try {
       if (!session || !event || typeof event.type !== 'string') return
       if (!binding.manages(session.id)) return
@@ -338,7 +340,7 @@ export function createCollector(ctx, binding, cfg) {
   if (offEvent) disposers.push(offEvent)
 
   // agent 建立时：注入一次基线状态 + 注册该 agent 的声音规则（scoped，不影响其他会话）
-  const offCreated = ctx.on('agent/created', (payload) => {
+  const offCreated = host.onAgentCreated((payload) => {
     try {
       const agent = payload?.agent ?? payload
       const sid = agent?.session?.id ?? agent?.id
@@ -347,17 +349,17 @@ export function createCollector(ctx, binding, cfg) {
       // 声音：注册到 agent.ctx 只作用于这个 agent（dsh-system-prompt 的 scoped 贡献）
       try {
         const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
-        agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text: voiceRulesFor(cfg.relation?.kind) + seedLine })
+        host.voice(agent, voiceRulesFor(cfg.relation?.kind) + seedLine)
       } catch { /* 声音注册失败不影响功能 */ }
 
       const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
       if (!creature) {
         // 之前住过又搬走了：会话打开时把名字改回原来的
-        restoreOriginalAsync(ctx, cfg.stateDir, { kind: 'session', id: sid })
+        restoreOriginalAsync(host, cfg.stateDir, { kind: 'session', id: sid })
         return
       }
       // 入住时如果会话没开着就改不了名，开房时补一次（「<名字>的房间」）
-      if (creature.meta.occupancy) renameScopeAsync(ctx, creature.meta.occupancy, creature.meta.name)
+      if (creature.meta.occupancy) renameScopeAsync(host, cfg.stateDir, creature.meta.occupancy, creature.meta.name)
 
       // M3.1：会话重开 → 先补投攒着的话（幂等，失败下轮再试；>3 条合并成一条不刷屏）
       Promise.resolve()
@@ -366,14 +368,14 @@ export function createCollector(ctx, binding, cfg) {
           const merged = mergePendingText(pending)
           if (merged.text !== null) {
             try {
-              await agent.followup(injectMessage(merged.text))
+              await host.wake(agent, injectMessage(merged.text))
               for (const id of merged.ids) creature.store.markOutboxDelivered(id)
             } catch { /* 下轮再试 */ }
             return
           }
           for (const item of pending) {
             try {
-              await agent.followup(injectMessage(item.text))
+              await host.wake(agent, injectMessage(item.text))
               creature.store.markOutboxDelivered(item.id)
             } catch { /* 单条失败不影响其余 */ }
           }
@@ -386,7 +388,7 @@ export function createCollector(ctx, binding, cfg) {
       const memory = creature.memorySummary(cfg.growth)
       const text = summaryText(bias, affect, memory)
       Promise.resolve()
-        .then(() => agent.inject(injectMessage(text)))
+        .then(() => host.inject(agent, injectMessage(text)))
         .catch(() => { /* agent 可能在注入前被销毁 */ })
     } catch { /* 同上，绝不外抛 */ }
   })
@@ -397,20 +399,3 @@ export function createCollector(ctx, binding, cfg) {
   }
 }
 
-function findAgent(ctx, sessionId) {
-  const reg = ctx.agents
-  if (!reg) return null
-  try {
-    if (typeof reg.get === 'function') {
-      const a = reg.get(sessionId)
-      if (a) return a
-    }
-  } catch { /* 形状不同则继续 */ }
-  try {
-    const list = typeof reg.list === 'function' ? reg.list() : []
-    for (const a of list) {
-      if (a && (a.id === sessionId || a.session?.id === sessionId)) return a
-    }
-  } catch { /* 同上 */ }
-  return null
-}

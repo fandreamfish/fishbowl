@@ -20,6 +20,7 @@ import { createConstraints } from './lib/constraints.js'
 import { normalizeConfig } from './lib/config.js'
 import { createWakeLoop } from './lib/life.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
+import { createDshHost } from './host/dsh.js'
 
 export const inject = ['tools', 'agents']
 
@@ -36,7 +37,7 @@ export function apply(ctx, config = {}) {
   } catch { /* 没有 UI 配置就用 patch 配置 */ }
 
   const cfg = normalizeConfig(raw)
-  ctx.__fishbowlStateDir = cfg.stateDir // 给 lib/rename.js 记 trace 用
+  const host = createDshHost(ctx, cfg)
   const disposers = []
   const binding = createBinding(cfg)
 
@@ -55,17 +56,17 @@ export function apply(ctx, config = {}) {
   }
 
   if (ctx.tools && cfg.applyConstraints) {
-    safe('constraints', () => createConstraints(ctx, binding, cfg))
+    safe('constraints', () => createConstraints(ctx, binding, cfg, host))
   }
 
   if (ctx.agents) {
-    safe('collector', () => createCollector(ctx, binding, cfg))
+    safe('collector', () => createCollector(ctx, binding, cfg, host))
     // M3.0：清醒节律与主动联系（默认关闭）
-    safe('wake', () => createWakeLoop(ctx, binding, cfg))
+    safe('wake', () => createWakeLoop(ctx, binding, cfg, host))
   }
 
   // M5：设置页后端（状态 / 配置）
-  safe('ui-route', () => createUiRoute(ctx, cfg, binding))
+  safe('ui-route', () => createUiRoute(ctx, cfg, binding, host))
 
   return () => {
     for (const d of disposers) {

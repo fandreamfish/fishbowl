@@ -41,11 +41,11 @@ export function guardVerdict(reason) {
 }
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
-export function createConstraints(ctx, binding, cfg) {
+export function createConstraints(ctx, binding, cfg, host) {
+  host = host ?? createDshHost(ctx, cfg)
   const disposers = []
 
-  if (typeof ctx.tools?.guard === 'function') {
-    const off = ctx.tools.guard((exec) => {
+  const guardOff = host.guard?.((exec) => {
       try {
         // rc.5：只有 undefined 是放行；null/false 都会被当成拒绝理由
         if (cfg.control || cfg.refuseTools.length === 0) return undefined
@@ -57,10 +57,9 @@ export function createConstraints(ctx, binding, cfg) {
         return undefined
       }
     })
-    if (off) disposers.push(off)
-  }
+  if (guardOff) disposers.push(guardOff)
 
-  const off = ctx.on('tools/pre-execute', (exec, next) => {
+  const off = host.preExecute((exec, next) => {
     try {
       if (typeof next !== 'function') return undefined
       if (cfg.control) return next()

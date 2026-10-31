@@ -86,7 +86,8 @@ Invoke-RestMethod -Uri 'https://api.github.com/repos/fandreamfish/fishbowl/conte
 | `lib/life.js` | 清醒节律 + 主动联系（默认关闭） |
 | `lib/ui-route.js` | 设置页后端：`/fishbowl-ui/state|config` |
 | `lib/voice.js` | 声音规则（few-shot 熟人腔）+ 关系语域 |
-| `client.js` | 设置页前端（`settings.section` 槽位） |
+| client.js | 设置页前端（settings.section 槽位） |
+| host/dsh.js | **唯一**的 DSH 接线层（事件流/注入/唤醒/工具钩子/标题/枚举/HTTP 路由），见 docs/HOST.md |
 | `src/core/*.ts` | 内核：引擎、个体、存储、调度、通道、承诺、巩固、自我认知 |
 
 ## 7. 数据流
