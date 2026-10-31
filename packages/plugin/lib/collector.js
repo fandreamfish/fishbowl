@@ -379,8 +379,10 @@ export function createCollector(ctx, binding, cfg, host) {
         host.voice(agent, voiceRulesFor(cfg.relation?.kind) + seedLine)
       } catch { /* 声音注册失败不影响功能 */ }
 
-      const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
+      const ws = workspaceOf(agent?.session) ?? workspaceOf(payload?.session)
+      const creature = binding.resolve({ sessionId: sid, workspace: ws })
       if (!creature) {
+        trace({ ts: Date.now(), sessionId: sid, warn: `no-occupant workspace=${ws ?? 'unknown'}` })
         // 之前住过又搬走了：会话打开时把名字改回原来的
         restoreOriginalAsync(host, cfg.stateDir, { kind: 'session', id: sid })
         return

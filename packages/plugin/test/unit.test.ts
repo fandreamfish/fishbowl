@@ -349,5 +349,18 @@ check('提到相关话题 → 想起来', matchClaims(claimsTest, '你还记得�
 check('无关话题 → 不想起来', matchClaims(claimsTest, '今天天气不错', 2).length === 0)
 check('回忆块渲染', recallBlock([{ text: '用户讨厌被贬低' }]).includes('用户讨厌被贬低'))
 check('空回忆 → 空串', recallBlock([]) === '')
+console.log('== M13：同一工作区的多个会话共享一只鱼 ==')
+const shareWs = 'D:\\ws-share-' + Date.now()
+const shared = binding.birth('共享鱼', { kind: 'workspace', id: shareWs })
+const s1 = { sessionId: 'share-a-' + Date.now(), workspace: shareWs }
+const s2 = { sessionId: 'share-b-' + Date.now(), workspace: shareWs }
+const cA = binding.resolve(s1)
+const cB = binding.resolve(s2)
+check('两个会话解析到同一只鱼', cA && cB && cA.meta.creatureId === cB.meta.creatureId && cA.meta.creatureId === shared.meta.creatureId)
+shared.recordSemantic('他每天早上七点起', ['e1', 'e2'], 0.8)
+shared.recordEpisode('joy', { goalCongruence: 1, agency: 0.5, certainty: 0.8, normViolation: 0, relationalImpact: 0.5, stake: 0.5, attribution: 'other' })
+check('记忆共享（同一个体摘要）', cA.memorySummary().semantics.includes('他每天早上七点起'))
+check('情绪共享（同一个体状态）', Math.abs(cA.fold().affect.valence - cB.fold().affect.valence) < 1e-9)
+check('工作区里的会话级解析也指向它', binding.occupantOf(s1)?.meta.creatureId === shared.meta.creatureId)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)
