@@ -111,6 +111,9 @@ export type CreatureEvent =
   | { t: 'commitment-resolved'; id: string; ts: number; ref: string; status: 'fulfilled' | 'broken' }
   // —— M3.2：共享活动（一起看/读/学） ——
   | { t: 'activity'; id: string; ts: number; title: string; status: 'started' | 'ended' }
+  // —— M4：封存（停止时间：不经历、不缺席、不想念） ——
+  | { t: 'freeze'; id: string; ts: number }
+  | { t: 'unfreeze'; id: string; ts: number }
 
 /** 四条不变量随目录走：模型、时区、schema、气质。 */
 export interface CreatureMeta {

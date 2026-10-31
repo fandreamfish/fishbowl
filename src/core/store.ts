@@ -11,6 +11,7 @@ import type { CreatureEvent, CreatureMeta } from './types.ts'
 export interface ProjectionCache {
   lastSeq: number
   affect: unknown
+  frozen?: boolean
 }
 
 export class Store {

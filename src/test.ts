@@ -178,6 +178,26 @@ check('删投影缓存 → 全量重算 → 结果一致', biasDiff(biasB, biasB
 migA.store.dropCache()
 check('原实例删缓存重放也一致', biasDiff(migA.bias(), biasA, 1e-9))
 
+// ---------------------------------------------------------------- M4 封存
+console.log('== M4：封存（停止时间） ==')
+const fz = mk('freeze')
+const T1 = 1_000_000
+fz.recordEpisode('rejected', sc.rejection(), undefined, T1)
+const vBefore = fz.fold().affect.valence
+fz.recordFreeze(T1 + 1000)
+fz.recordUnfreeze(T1 + 1000 + 61 * 60_000) // 封存 61 分钟
+fz.recordEpisode('quiet', sc.neutral(), undefined, T1 + 1000 + 61 * 60_000 + 1000)
+const vAfter = fz.fold().affect.valence
+// 注意：quiet 事件本身自带一次 0.85 事件衰减；时间衰减（61 分钟）应被跳过
+check('封存期间时间不流逝（只剩一次事件衰减，61 分钟未计入）',
+  Math.abs(vAfter - 0.85 * vBefore) < 0.01,
+  `v ${vBefore.toFixed(3)} -> ${vAfter.toFixed(3)}（预期 ${(0.85 * vBefore).toFixed(3)}）`)
+check('封存状态可查', fz.isFrozen() === false)
+fz.recordFreeze()
+check('封存后 isFrozen = true', fz.isFrozen() === true)
+fz.recordUnfreeze()
+check('解封恢复', fz.isFrozen() === false)
+
 // ----------------------------------------------------------------
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

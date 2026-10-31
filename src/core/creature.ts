@@ -32,26 +32,31 @@ export class Creature {
     return new Creature(store, store.readMeta())
   }
 
-  /** 从缓存尾重放事件，返回当前情绪。重放是确定性的。 */
-  fold(): { affect: Affect; fromSeq: number } {
+  /** 从缓存尾重放事件，返回当前情绪。重放是确定性的；封存期间时间不流逝。 */
+  fold(): { affect: Affect; fromSeq: number; frozen: boolean } {
     const events = this.store.readEvents()
     const cache = this.store.readCache()
     const t = this.temperament
 
     let aff = freshAffect(t)
     let start = 0
+    let frozen = false
     if (cache && typeof cache.lastSeq === 'number' && cache.lastSeq <= events.length) {
       aff = cache.affect as Affect
+      frozen = cache.frozen === true
       start = cache.lastSeq
     }
 
     for (let i = start; i < events.length; i++) {
-      if (i > 0) applyElapse(aff, (events[i].ts - events[i - 1].ts) / 1000, t)
-      this.applyEvent(aff, events[i], t)
+      if (i > 0 && !frozen) applyElapse(aff, (events[i].ts - events[i - 1].ts) / 1000, t)
+      const e = events[i]
+      if (e.t === 'freeze') frozen = true
+      else if (e.t === 'unfreeze') frozen = false
+      this.applyEvent(aff, e, t)
     }
 
-    this.store.writeCache({ lastSeq: events.length, affect: aff })
-    return { affect: aff, fromSeq: start }
+    this.store.writeCache({ lastSeq: events.length, affect: aff, frozen })
+    return { affect: aff, fromSeq: start, frozen }
   }
 
   private applyEvent(aff: Affect, e: CreatureEvent, t: Temperament): void {
@@ -59,7 +64,7 @@ export class Creature {
     else if (e.t === 'absence') applyAbsence(aff, e.wakingHours)
     else if (e.t === 'contact') applyContact(aff, e.relief)
     else if (e.t === 'repair') applyRepair(aff, e.amount)
-    // semantic / procedure / identity 是记忆事件，不参与情绪重放（no-op）
+    // semantic / procedure / identity / activity / freeze / unfreeze 不参与情绪重放
   }
 
   bias(): Bias {
@@ -113,6 +118,19 @@ export class Creature {
   /** 共享活动（M3.2）。 */
   recordActivity(title: string, status: 'started' | 'ended', ts?: number): void {
     this.store.appendEvent({ t: 'activity', id: uid(), ts: ts ?? Date.now(), title, status })
+  }
+
+  /** 封存（M4）：停止时间。 */
+  recordFreeze(ts?: number): void {
+    this.store.appendEvent({ t: 'freeze', id: uid(), ts: ts ?? Date.now() })
+  }
+
+  recordUnfreeze(ts?: number): void {
+    this.store.appendEvent({ t: 'unfreeze', id: uid(), ts: ts ?? Date.now() })
+  }
+
+  isFrozen(): boolean {
+    return this.fold().frozen
   }
 
   /** 当前正在一起做的事（记忆窗口内最后一次 started 且未 ended）。 */
