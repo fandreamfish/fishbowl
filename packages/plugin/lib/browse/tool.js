@@ -13,6 +13,7 @@
  */
 import { workspaceOf } from '../extract.js'
 import { inSelfTime, lookForCreature } from './runtime.js'
+import { configFor } from '../fishcfg.js'
 
 export function createBrowseTool(binding, cfg) {
   return {
@@ -60,7 +61,7 @@ export function createBrowseTool(binding, cfg) {
         if (!creature) return { ok: false, text: '', note: '这条会话里没有鱼住。' }
         const what = ['home', 'search', 'related', 'video'].includes(args?.what) ? args.what : 'home'
         const selfTime = inSelfTime(creature.meta.creatureId)
-        const r = await lookForCreature(creature, cfg, {
+        const r = await lookForCreature(creature, configFor(cfg, creature), {
           what,
           keyword: args?.keyword,
           bvid: args?.bvid,

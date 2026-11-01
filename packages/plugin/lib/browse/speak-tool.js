@@ -10,6 +10,7 @@
  */
 import { workspaceOf } from '../extract.js'
 import { postComment, postReply } from './comment.js'
+import { configFor } from '../fishcfg.js'
 
 export function createSpeakTool(binding, cfg) {
   return {
@@ -62,12 +63,12 @@ export function createSpeakTool(binding, cfg) {
           return { ok: false, said: '', note: '要说哪种？评论还是回复。' }
         }
         const r = args.kind === 'reply'
-          ? await postReply(creature, cfg, {
+          ? await postReply(creature, configFor(cfg, creature), {
             bvid: args?.bvid,
             parentRpid: args?.parentRpid,
             text: args?.text,
           })
-          : await postComment(creature, cfg, { bvid: args?.bvid, text: args?.text })
+          : await postComment(creature, configFor(cfg, creature), { bvid: args?.bvid, text: args?.text })
         return { ok: !!r.ok, said: String(r.said ?? ''), note: String(r.note ?? '') }
       } catch (err) {
         return { ok: false, said: '', note: '没说出来。' }

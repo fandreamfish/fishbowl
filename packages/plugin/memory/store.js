@@ -4,6 +4,7 @@
  */
 import path from 'node:path'
 import { Memory } from '../../memory/src/memory.ts'
+import { configFor } from '../lib/fishcfg.js'
 import { createHttpEmbedder } from '../../memory/src/embed.ts'
 
 /** 向量检索默认关；开了才建 embedder，密钥沿用评价器那把（不另存一份）。 */
@@ -32,7 +33,7 @@ export function createMemoryStore(cfg) {
       })
       map.set(id, m)
     }
-    m.setConfig(cfg.memory)
+    m.setConfig(configFor(cfg, creature).memory)
     return m
   }
 

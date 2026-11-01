@@ -25,6 +25,7 @@ import { createBrowseTool } from './lib/browse/tool.js'
 import { createSpeakTool } from './lib/browse/speak-tool.js'
 import { setPacing } from './lib/browse/client.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
+import { migrateFishConfigs } from './lib/fishcfg.js'
 import { createDshHost } from './host/dsh.js'
 
 export const inject = ['tools', 'agents']
@@ -45,6 +46,12 @@ export function apply(ctx, config = {}) {
   const host = createDshHost(ctx, cfg)
   const disposers = []
   const binding = createBinding(cfg)
+
+  // 以前配置是全家的：给每条还没有自己配置的鱼写一份快照，之后各改各的
+  try {
+    const legacy = JSON.parse(fs.readFileSync(uiConfigPath(cfg.stateDir), 'utf8'))
+    migrateFishConfigs(cfg, binding.listCreatures(), legacy)
+  } catch { /* 没有旧配置就不用迁 */ }
 
   /** 子系统失败只记一笔，绝不拖垮激活（宿主启动的底线）。 */
   function safe(name, fn) {

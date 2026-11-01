@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createDshHost, workspaceOf } from '../host/dsh.js'
+import { configFor } from './fishcfg.js'
 import { injectMessage } from './injector.js'
 import { browseGrant, grantLine } from './grant.js'
 import { browseDayKey } from '../../../src/core/browse.ts'
@@ -136,11 +137,11 @@ export function createWakeLoop(ctx, binding, cfg, host) {
   let timer = null
   let stopped = false
 
-  function gateFor(creature, now) {
+  function gateFor(creature, fcfg, now) {
     const cid = creature.meta.creatureId
     let g = gates.get(cid)
-    if (!g) {
-      g = new ContactGate(cfg.contact, cfg.timezone)
+    if (!g || g.cfg !== fcfg.contact) {
+      g = new ContactGate(fcfg.contact, cfg.timezone)
       gates.set(cid, g)
     }
     g.hydrate(creature.outreachTimes(now - 7 * 86_400_000))
@@ -176,22 +177,24 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         seen.add(cid)
         try {
 
+        const fcfg = configFor(cfg, creature)
+        if (fcfg.wake?.enabled === false) continue
         // 长时间没说话 → 记一条缺席（longing 就是这么来的）
         const events = creature.store.readEvents()
-        if (shouldRecordAbsence(events, now, cfg.wake.absenceHours ?? 8)) {
+        if (shouldRecordAbsence(events, now, fcfg.wake.absenceHours ?? 8)) {
           const hours = absenceHours(events, now)
           if (hours !== null) creature.recordAbsence(hours)
         }
 
-        const broken = creature.openCommitments(cfg.growth).filter((c) => c.broken).length
+        const broken = creature.openCommitments(fcfg.growth).filter((c) => c.broken).length
         const longing = creature.fold().affect.longing
         const { reason } = wakeReason({ openBroken: broken, longing })
-        const gate = gateFor(creature, now)
+        const gate = gateFor(creature, fcfg, now)
         const contactDecision = gate.can(now, reason !== null)
 
         // 自处闸：独立配额；没开就不看
-        const selfEnabled = selfTimeEnabled(cfg, creature)
-        const selfGate = selfEnabled ? selfGateFor(creature, cfg, now) : null
+        const selfEnabled = selfTimeEnabled(fcfg, creature)
+        const selfGate = selfEnabled ? selfGateFor(creature, fcfg, now) : null
         const selfDecision = selfGate ? selfGate.can(now, true) : { ok: false, reason: 'disabled' }
         const browseToday = countToday(creature, browseDayKey(now, cfg.timezone))
 
@@ -201,7 +204,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           longing: Number(longing.toFixed(2)),
           broken,
           gate: contactDecision,
-          self: { enabled: selfEnabled, gate: selfDecision, usedToday: browseToday, perDay: cfg.browse?.perDay ?? 0 },
+          self: { enabled: selfEnabled, gate: selfDecision, usedToday: browseToday, perDay: fcfg.browse?.perDay ?? 0 },
           at: now,
         })
 
@@ -214,14 +217,14 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           // 自处不等于上网：她可以只是醒着、写日记、什么都不做。
           // 上网配额在工具入口按「自处回合」收紧，不在这里把整次自处砍掉。
           mode = 'self'
-          situation = selfSituation(creature, cfg)
+          situation = selfSituation(creature, fcfg)
         }
 
         if (!mode) continue
 
         // 自处不能打断对话：等不到空闲就跳过，不消耗配额。
         if (mode === 'self') {
-          const idle = await waitIdle(agent, Number(cfg.selfTime?.idleWaitMs ?? 15000))
+          const idle = await waitIdle(agent, Number(fcfg.selfTime?.idleWaitMs ?? 15000))
           if (!idle) {
             report[report.length - 1].self.gate = { ok: false, reason: 'busy' }
             continue

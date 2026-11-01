@@ -1,5 +1,6 @@
 /** 插件单元测试：评价器、注入摘要、约束决策、会话↔个体绑定。 */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { ACTIVITY_RE, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
@@ -17,6 +18,7 @@ import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
+import { configFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../lib/fishcfg.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/summarize.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
 import { buildTranscript, createCollector } from '../lib/collector.js'
@@ -612,5 +614,25 @@ ocFish.recordOutreach('test', Date.now())
 const vAfter = ocFish.fold().affect.valence
 check('outreach 事件可读', ocFish.outreachTimes().length === 1)
 check('outreach 不影响情绪重放', Math.abs(vBefore - vAfter) < 1e-9)
+console.log('== M25：每条鱼的配置互相独立 ==')
+{
+  const sdF = fs.mkdtempSync(path.join(os.tmpdir(), 'fishcfg-'))
+  const base = normalizeConfig({ stateDir: sdF, wake: { enabled: true } })
+  const bF = createBinding(base)
+  const fa = bF.birth('甲鱼')
+  const fb = bF.birth('乙鱼')
+  writeFishConfig(sdF, fa.meta.creatureId, { wake: { absenceHours: 3 }, memory: { consolidateCap: 7 } })
+  check('A 的覆盖生效', configFor(base, fa).wake.absenceHours === 3 && configFor(base, fa).memory.consolidateCap === 7)
+  check('B 不受影响', configFor(base, fb).wake.absenceHours === base.wake.absenceHours && configFor(base, fb).memory.consolidateCap === base.memory.consolidateCap)
+  check('B 没有自己的文件（继承默认）', readFishConfig(sdF, fb.meta.creatureId) === null)
+  check('非法时段被丢', pickFishPatch({ wake: { activeWindow: ['99:00', '08:00'] } }).wake === undefined)
+  check('成长率被钳制', pickFishPatch({ growth: 99 }).growth === 5)
+  const fc = bF.birth('丙鱼')
+  const n = migrateFishConfigs(base, [fa, fb, fc], { wake: { absenceHours: 9 }, memory: { consolidateCap: 12 } })
+  check('只迁移没有配置的鱼', n === 2, 'migrated=' + n)
+  check('迁移后各自有一份', readFishConfig(sdF, fc.meta.creatureId).wake.absenceHours === 9)
+  check('已有配置的鱼不被覆盖', configFor(base, fa).wake.absenceHours === 3)
+  fs.rmSync(sdF, { recursive: true, force: true })
+}
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

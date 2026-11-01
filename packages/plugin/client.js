@@ -180,7 +180,7 @@ function makeFactory() {
           const payload = Object.assign({}, d, {
             tags: String(tagText || '').split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
           })
-          const r = await postJson(API + '/memory/config', payload)
+          const r = await postJson(API + '/fish/' + props.fishId + '/config', { memory: payload })
           setD(JSON.parse(JSON.stringify(r.config)))
           setTagText((r.config.tags || []).join('，'))
           setMsg('已保存')
@@ -534,7 +534,7 @@ function makeFactory() {
         finally { setBusy('') }
       }
       const save = () => act(async () => {
-        const r = await postJson(API + '/browse', { browse: cfg })
+        const r = await postJson(API + '/fish/' + f.id + '/config', { browse: cfg })
         setCfg(r.config)
       }, '上网设置已保存')
       const run = () => act(async () => {
@@ -550,7 +550,9 @@ function makeFactory() {
       const cm = comment || { enabled: false, perDay: 1, replyPerDay: 2, replyToReplies: true, scanEveryMin: 30, window: ['20:00', '23:00'], atOwner: true }
       const setCm = (k, v) => setComment(Object.assign({}, cm, { [k]: v }))
       const saveBili = () => act(async () => {
-        await postJson(API + '/bili', { auth: { mid: ownerMid, nickname: ownerName }, comment: cm })
+        // 账号是这台机器一份；评论开关是这条鱼自己的
+        await postJson(API + '/bili', { auth: { mid: ownerMid, nickname: ownerName } })
+        await postJson(API + '/fish/' + f.id + '/config', { comment: cm })
       }, 'B 站设置已保存')
       const saveCookie = () => act(async () => {
         const r = await postJson(API + '/bili/auth', { cookie: cookieText })
@@ -813,7 +815,11 @@ function makeFactory() {
         catch (x) { setErr(String((x && x.message) || x)); setMsg('') }
       }
 
-      const openFish = (id) => { setView({ level: 'fish', id, page: 'home' }); setWs(''); setSess(''); setMsg(''); setMoveOpen(false); setPick(null) }
+      const openFish = (id) => {
+        const f0 = ((data && data.fish) || []).find((x) => x.id === id)
+        if (f0 && f0.config) { setRoutine({ wake: f0.config.wake ?? {}, contact: f0.config.contact ?? {}, selfTime: f0.config.selfTime ?? {} }); if (typeof f0.config.growth === 'number') setGrowth(f0.config.growth) }
+        setView({ level: 'fish', id, page: 'home' }); setWs(''); setSess(''); setMsg(''); setMoveOpen(false); setPick(null)
+      }
 
       // ---------- 列表 ----------
       if (view.level === 'list') {
@@ -1181,7 +1187,7 @@ function makeFactory() {
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/config', { wake, contact, selfTime })
+              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime })
             }, '作息已保存'), children: '保存' }, 'save'),
           ] }, 'act'),
         ] }, 'routine')      } else if (page === 'browse') {
@@ -1216,7 +1222,7 @@ function makeFactory() {
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: btnP, onClick: () => act(async () => {
               const body2 = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
-              await postJson(API + '/config', body2)
+              await postJson(API + '/fish/' + f.id + '/config', body2)
             }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
           ] }, 'act'),
           e('div', { style: { ...box, marginTop: 4 }, children: [
@@ -1235,9 +1241,9 @@ function makeFactory() {
           ] }, 'danger'),
         ] }, 'persona')
       } else if (page === 'memory') {
-        const memCfg = (data.config && data.config.memory) || null
+        const memCfg = (f.config && f.config.memory) || (data.config && data.config.memory) || null
         body = e('div', { children: [
-          e(MemoryConfigCard, { cfg: memCfg }, 'mcfg'),
+          e(MemoryConfigCard, { cfg: memCfg, fishId: f.id }, 'mcfg'),
           e(MemoryDetail, { fishId: f.id }, 'mdet'),
         ] }, 'memory')
       }

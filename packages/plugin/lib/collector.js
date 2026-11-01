@@ -8,6 +8,7 @@ import { ACTIVITY_RE, ACTIVITY_SYSTEM_PROMPT, mergePendingText, parseActivity } 
 import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
 import { applyAppraisal, salienceOf, toBias } from '../../../src/core/engine.ts'
 import { createMemoryStore } from '../memory/store.js'
+import { configFor } from './fishcfg.js'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
@@ -101,11 +102,11 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
    */
   function maybeGrant(session, text) {
     try {
-      if (!cfg.browse?.grantDetect) return
-      const g = detectGrant(text)
-      if (!g) return
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) return
+      if (!configFor(cfg, creature).browse?.grantDetect) return
+      const g = detectGrant(text)
+      if (!g) return
       const active = activeGrants(creature, 'browse').length > 0
       if (g.allowed === active) return
       recordGrant(creature, g.topic, g.text, g.allowed)
@@ -171,7 +172,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   /** 违诺检测（M2.4）：用户抱怨 + 评价器给出 norm_violation → 判定哪个承诺没兑现。 */
   async function checkBroken(sessionId, creature, transcript) {
     try {
-      const open = creature.openCommitments(cfg.growth).filter(c => !c.broken)
+      const open = creature.openCommitments(configFor(cfg, creature).growth).filter(c => !c.broken)
       if (open.length === 0) return
       const lines = open.map((c, i) => `${i}. ${c.text}`).join('\n')
       const raw = await callLLM(cfg, BROKEN_SYSTEM_PROMPT, `未完成承诺：\n${lines}\n\n最近对话：\n${transcript.slice(-800)}`, { maxTokens: 60 })
@@ -285,7 +286,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const commitments = creature.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+      const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
       // 许可是一条稳定事实：他允许她没事时自己刷 B 站。不是命令，也不翻硬开关。
       const grant = grantLine(creature)
@@ -411,7 +412,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       // 声音：只给"有鱼住"的会话注册（scoped，只作用于这个 agent）
       try {
         const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
-        host.voice(agent, voiceRulesFor(cfg.relation?.kind) + seedLine)
+        host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine)
       } catch { /* 声音注册失败不影响功能 */ }
 
       // 入住时如果会话没开着就改不了名，开房时补一次（「<名字>的房间」）
@@ -442,7 +443,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const mem = memoryFor(creature)
       const affect = creature.fold().affect
       const bias = toBias(affect, creature.temperament)
-      const commitments = creature.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+      const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments })
       injectedBy.set(sid, snap.picked)
       // 基线里带上"你们之前说过的话"，新会话打开也能接上
