@@ -590,6 +590,11 @@ function makeFactory() {
           ] }, 'head'),
           e('div', { style: { ...lab, marginBottom: 8 }, children: '上网的开关在「状态 → 能力」里（关掉后工具和这一页都会消失）。' }, 'hint'),
           e('div', { style: rowS, children: [
+            e('span', { style: lab, children: '看 B 站前要先得到我同意' }, 'pl'),
+            e(Toggle, { on: cfg.requirePermit === true, onChange: () => set('requirePermit', cfg.requirePermit !== true), k: 'permit' }),
+          ] }, 'permitrow'),
+          e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '打开后：没有许可时工具直接返回「需要许可才能调用」，她自己醒着时也一样。' }, 'permithint'),
+          e('div', { style: rowS, children: [
             e('span', { style: lab, children: '上网时段' }, 'l'),
             e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
               time((cfg.window || [])[0] ?? '08:00', (v) => set('window', [v, (cfg.window || [])[1] ?? '23:00']), 'w1'),
@@ -719,6 +724,10 @@ function makeFactory() {
             ] }, 'w'),
           ] }, 'w'),
         ] }, 'grid'),
+        e('div', { style: rowS, children: [
+          e('span', { style: lab, children: '说话前要先得到我同意' }, 'pl'),
+          e(Toggle, { on: cm.requirePermit === true, onChange: () => setCm('requirePermit', cm.requirePermit !== true), k: 'permit' }),
+        ] }, 'cmpermit'),
         e('div', { style: rowS, children: [
           e('span', { style: lab, children: '有人回她时允许她回一句' }, 'l'),
           e(Toggle, { on: cm.replyToReplies !== false, onChange: () => setCm('replyToReplies', cm.replyToReplies === false), k: 'rt' }),

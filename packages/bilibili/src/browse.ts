@@ -56,6 +56,8 @@ export function normalizeBrowseConfig(raw: any = {}) {
     enabled: r.enabled !== false,
     // 从对话里识别「你没事可以刷刷 B 站」这类许可；不想识别就关掉。
     grantDetect: r.grantDetect !== false,
+    // 看 B 站前必须先拿到许可（默认关）：没有许可时工具直接拒绝，不静默放过
+    requirePermit: r.requirePermit === true,
     window: [hhmm(r.window?.[0], '08:00'), hhmm(r.window?.[1], '23:00')],
     perDay: num(r.perDay, 1, 0, 4),
     topN: num(r.topN, 4, 1, 10),

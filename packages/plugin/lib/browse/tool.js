@@ -64,10 +64,17 @@ export function createBrowseTool(binding, cfg) {
         const fcfg = configFor(cfg, creature)
     if (fcfg.capabilities?.browse === false) return { ok: false, text: '', note: '我现在不上网。' }
     const selfTime = inSelfTime(creature.meta.creatureId)
-        // 他说过"需要申请"：没许可也让她看，但会被记下来（约定，不是围墙）
-        const grants = activeGrants(creature, 'browse')
-        const needsAsk = grants.some((g) => /申请/.test(String(g.text ?? '')))
+        // 需要许可时硬拦：没有许可就返回「需要许可才能调用」
         let browsePermit = null
+        const requirePermit = fcfg.browse?.requirePermit === true
+        if (requirePermit) {
+          browsePermit = findPermit(creature, 'browse', '')
+          if (!browsePermit) return { ok: false, text: '', note: '需要许可才能调用：先用 fish_ask_permission(action=browse) 问他。' }
+          consumePermit(creature, browsePermit)
+        }
+        // 没有强制开关、但他说过「需要申请」：没许可也让她看，只记一笔
+        const grants = activeGrants(creature, 'browse')
+        const needsAsk = !requirePermit && grants.some((g) => /申请/.test(String(g.text ?? '')))
         if (needsAsk) {
           browsePermit = findPermit(creature, 'browse', '')
           if (browsePermit) consumePermit(creature, browsePermit)

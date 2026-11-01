@@ -64,10 +64,12 @@ export function createSpeakTool(binding, cfg) {
         if (args?.kind !== 'comment' && args?.kind !== 'reply') {
           return { ok: false, said: '', note: '要说哪种？评论还是回复。' }
         }
-        // 约定，不是围墙：没有许可也让她说，但要被看见（审计）
         const fcfg = configFor(cfg, creature)
         const target = String(args?.bvid ?? '')
         const permit = fcfg.comment?.autoApprove === true ? null : findPermit(creature, 'comment.post', target)
+        if (fcfg.comment?.requirePermit === true && fcfg.comment?.autoApprove !== true && !permit) {
+          return { ok: false, said: '', note: '需要许可才能调用：先用 fish_ask_permission(action=comment.post) 问他。' }
+        }
         if (permit) consumePermit(creature, permit)
         const r = args.kind === 'reply'
           ? await postReply(creature, configFor(cfg, creature), {
