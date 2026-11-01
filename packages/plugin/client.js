@@ -887,8 +887,6 @@ function makeFactory() {
         }
         const allWs = (data && data.scopes && data.scopes.workspaces) || []
         const allSess = (data && data.scopes && data.scopes.sessions) || []
-        const freeWs = allWs.filter((w) => !takenWs[w])
-        const freeSess = allSess.filter((s) => !takenSess[s.id] && !takenWs[s.workspace])
 
         return e('div', { className: 'fb', children: [
           e('div', { children: [
@@ -929,8 +927,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个工作区' }),
-                  ...freeWs.map((w, i) => e('option', { value: w, children: wsName(data.scopes.workspaceNames, w) + '（' + w + '）' }, 'w' + i)),
-                  !freeWs.length ? e('option', { value: '', disabled: true, children: '没有空闲的工作区（可以新建一个）' }) : null,
+                  ...allWs.map((w, i) => e('option', { value: w, disabled: !!takenWs[w], children: wsName(data.scopes.workspaceNames, w) + (takenWs[w] ? '（已被 ' + takenWs[w] + ' 占）' : '') + '（' + w + '）' }, 'w' + i)),
                 ],
               }, 'house-ws') : null,
               (newHouse.mode === 'existing-session') ? e('select', {
@@ -939,8 +936,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个会话' }),
-                  ...freeSess.map((s, i) => e('option', { value: s.id, children: sessName(s) + (s.workspace ? ' · ' + wsName(data.scopes.workspaceNames, s.workspace) : '') }, 's' + i)),
-                  !freeSess.length ? e('option', { value: '', disabled: true, children: '没有空闲的会话（可以新建一个）' }) : null,
+                  ...allSess.map((s, i) => e('option', { value: s.id, disabled: !!takenSess[s.id] || !!takenWs[s.workspace], children: sessName(s) + (s.workspace ? ' · ' + wsName(data.scopes.workspaceNames, s.workspace) : '') + (takenSess[s.id] ? '（已被 ' + takenSess[s.id] + ' 占）' : (takenWs[s.workspace] ? '（屋子已被 ' + takenWs[s.workspace] + ' 占）' : '')) }, 's' + i)),
                 ],
               }, 'house-ss') : null,
               (newHouse.mode === 'new-session') ? e('select', {
@@ -949,8 +945,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个现有工作区' }),
-                  ...freeWs.map((w, i) => e('option', { value: w, children: wsName(data.scopes.workspaceNames, w) + '（' + w + '）' }, 'w' + i)),
-                  !freeWs.length ? e('option', { value: '', disabled: true, children: '没有空闲的工作区（可以新建一个）' }) : null,
+                  ...allWs.map((w, i) => e('option', { value: w, disabled: !!takenWs[w], children: wsName(data.scopes.workspaceNames, w) + (takenWs[w] ? '（已被 ' + takenWs[w] + ' 占）' : '') + '（' + w + '）' }, 'w' + i)),
                 ],
               }, 'house-ws2') : null,
               (newHouse.mode === 'new-session') ? e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: '会在选中的工作区里新建一个会话，只有这个会话归她' }, 'house-hint2') : null,
