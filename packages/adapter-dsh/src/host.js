@@ -366,6 +366,46 @@ export function createDshHost(ctx, cfg) {
       return { id: String(id), workspace: dir, attached, attachError }
     },
 
+    /** 按路径找注册表里的工作区（返回真实实例，可 detachSession）。 */
+    workspaceByPath(p) {
+      const registry = workspaceRegistry()
+      try {
+        const hit = (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(p))
+        if (!hit) return null
+        return registry?.get?.(hit.id) ?? hit
+      } catch { return null }
+    },
+
+    /** 把会话从工作区摘掉（侧边栏不再显示）。 */
+    async detachSession(ws, sid) {
+      try { await ws.detachSession(String(sid)); return true } catch { return false }
+    },
+
+    /** 会话在磁盘上的目录（通常在某个 --workspace-- 目录下）。 */
+    sessionDirsOf(sid) {
+      const out = []
+      const want = String(sid)
+      for (const root of scopesRoots()) {
+        let entries = []
+        try { entries = fs.readdirSync(root, { withFileTypes: true }) } catch { continue }
+        for (const d of entries) {
+          if (!d.isDirectory()) continue
+          const p = path.join(root, d.name, want)
+          try { if (fs.statSync(p).isDirectory()) out.push(p) } catch { /* 不存在 */ }
+        }
+      }
+      return out
+    },
+
+    /** 删除会话文件（调用方负责先确认没有鱼住）。返回删掉的目录数。 */
+    deleteSessionFiles(sid) {
+      let n = 0
+      for (const dir of this.sessionDirsOf(sid)) {
+        try { fs.rmSync(dir, { recursive: true, force: true }); n++ } catch { /* 尽力 */ }
+      }
+      return n
+    },
+
     listScopes() {
       const scopes = enumerateScopes()
       const titles = get('sessionTitle')

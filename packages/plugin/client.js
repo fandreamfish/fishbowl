@@ -1367,7 +1367,19 @@ function makeFactory() {
               e('div', { style: { fontWeight: 600, fontSize: 14 }, children: f.name + '的房间' }, 'rn'),
               e('div', { style: { display: 'flex', gap: 6 }, children: [
                 e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 500 }, onClick: () => { setMoveOpen(true); setPick(null); setPickWs(null); setMoveErr('') }, children: '搬家' }),
-                f.occupancy ? e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
+                wsPath ? e('button', {
+                  style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' },
+                  onClick: () => act(async () => {
+                    const dry = await postJson(API + '/cleanup/rooms', { path: wsPath, dryRun: true })
+                    const list = (dry.candidates || [])
+                    if (!list.length) { window.alert('这个屋子里没有需要清理的房间。'); return }
+                    const names = list.map((c) => c.title || c.id.slice(0, 12)).join('、')
+                    if (!window.confirm('这些房间没有鱼住，删除后不可恢复：\n' + names + '\n\n继续？')) return
+                    const r = await postJson(API + '/cleanup/rooms', { path: wsPath, dryRun: false })
+                    window.alert('清理了 ' + (r.removed || []).length + ' 个房间。')
+                  }, '清理完成'),
+                  children: '清理空房间',
+                }, 'clean') : null,                f.occupancy ? e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
               ] }, 'btns'),
             ] }, 'head'),
             e('div', { style: { display: 'grid', gridTemplateColumns: '52px 1fr', rowGap: 4, fontSize: 12.5, marginBottom: 4 }, children: [
