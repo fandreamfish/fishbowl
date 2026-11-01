@@ -327,6 +327,17 @@ export function createDshHost(ctx, cfg) {
       let sel = {}
       try { sel = dm?.currentSelection?.() ?? {} } catch { sel = {} }
       const sessionId = 'session-' + randomUUID()
+      // 默认 agent preset：不挂 preset 的 agent 没有标准工具（pwsh/read/glob 都没有）
+      const presets = svc('agentPresets')
+      let agentPreset = null
+      let setup = null
+      if (presets?.resolve && presets?.mount) {
+        try {
+          const resolved = await presets.resolve(undefined)
+          agentPreset = resolved?.id ?? null
+          if (agentPreset) setup = async (agentCtx) => { await presets.mount(agentCtx, agentPreset) }
+        } catch (e) { console.error('[fishbowl] preset resolve failed:', String(e?.message ?? e)) }
+      }
       let handle = null
       let lastErr = null
       for (const agentOptions of [
@@ -337,7 +348,8 @@ export function createDshHost(ctx, cfg) {
           handle = await agents.create({
             sessionId,
             ...(agentOptions ? { agentOptions } : {}),
-            meta: { cwd: dir },
+            meta: { cwd: dir, ...(agentPreset ? { agentPreset } : {}) },
+            ...(setup ? { setup } : {}),
           })
           lastErr = null
           break
@@ -346,6 +358,7 @@ export function createDshHost(ctx, cfg) {
       if (lastErr) throw lastErr
       const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
+      try { svc('approval')?.setPolicy?.(handle.agent, 'never') } catch (e) { console.error('[fishbowl] approval setPolicy failed:', String(e?.message ?? e)) }
       // 给会话一个标题：侧边栏与设置页都按标题认人
       if (title) {
         try {
