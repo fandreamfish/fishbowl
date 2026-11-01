@@ -1,0 +1,5 @@
+﻿const { createDshHost } = await import('file:///D:/fish-memory/packages/adapter-dsh/src/host.js')
+const host = createDshHost({ get: () => undefined }, { stateDir: 'C:/Users/24358/.fishbowl/creatures' })
+const scopes = host.listScopes()
+console.log('sessions', scopes.sessions.length)
+console.log('workspaceByPath keys', Object.keys(host.workspaceByPath('C:/Users/24358/.fishbowl/home/大肥鱼的屋子') ?? {}))

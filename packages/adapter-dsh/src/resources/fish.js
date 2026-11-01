@@ -109,6 +109,21 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     send(res, { ok: true, fish: fishView(c) })
     return true
   }
+  if (action === 'room' && parts[3] === 'restore' && req.method === 'POST') {
+    const body = JSON.parse(await readBody(req) || '{}')
+    const sid = String(body.sessionId ?? '')
+    const hit = (host.listScopes?.()?.sessions ?? []).find((s) => String(s.id) === sid)
+    if (!hit) { send(res, { ok: false, error: '找不到这个会话' }, 404); return true }
+    const prev = c.meta.occupancy
+    await host.unarchiveSession?.(sid)
+    binding.assign(parts[1], { kind: 'session', id: sid, workspace: hit.workspace })
+    if (prev && prev.id !== sid) {
+      const prevWs = (host.listScopes?.()?.sessions ?? []).find((s) => String(s.id) === String(prev.id))?.workspace
+      if (prevWs) await host.archiveSession?.(prevWs, prev.id)
+    }
+    send(res, { ok: true, occupancy: { kind: 'session', id: sid, workspace: hit.workspace } })
+    return true
+  }
   if (action === 'delete' && req.method === 'POST') {
     const prev = c.meta.occupancy
     binding.remove(parts[1])

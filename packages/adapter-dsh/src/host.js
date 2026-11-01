@@ -366,6 +366,15 @@ export function createDshHost(ctx, cfg) {
       return ok
     },
 
+    /** 取消归档：DSH 的 workspaceRegistry 有 unarchiveSession。 */
+    async unarchiveSession(sid) {
+      const registry = workspaceRegistry()
+      try {
+        if (typeof registry?.unarchiveSession === 'function') { await registry.unarchiveSession(String(sid)); return true }
+      } catch (e) { lastSessionError = 'unarchive: ' + String(e?.message ?? e) }
+      return false
+    },
+
     /** 会话在磁盘上的目录（通常在某个 --workspace-- 目录下）。 */
     sessionDirsOf(sid) {
       const out = []

@@ -160,25 +160,30 @@ function makeFactory() {
 
       // 改一下就存：不再有"保存"按钮
       const lastRef = useRef('')
+      const memPendingRef = useRef(null)
+      const memSaveNow = (payload) => {
+        if (!payload) return
+        const key = JSON.stringify(payload)
+        if (key === lastRef.current) return
+        lastRef.current = key
+        void postJson(API + '/fish/' + props.fishId + '/config', { memory: payload })
+          .then(() => { setMsg('已自动保存'); setErr('') })
+          .catch((x) => setErr(String((x && x.message) || x)))
+      }
       useEffect(() => {
         if (!d) return undefined
         const payload = Object.assign({}, d, {
           tags: String(tagText || '').split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
         })
+        memPendingRef.current = payload
         const key = JSON.stringify(payload)
         if (lastRef.current === '') { lastRef.current = key; return undefined }
         if (key === lastRef.current) return undefined
-        const timer = setTimeout(async () => {
-          lastRef.current = key
-          try {
-            setBusy(true)
-            await postJson(API + '/fish/' + props.fishId + '/config', { memory: payload })
-            setMsg('已自动保存')
-            setErr('')
-          } catch (x) { setErr(String((x && x.message) || x)) } finally { setBusy(false) }
-        }, 500)
+        const timer = setTimeout(() => memSaveNow(payload), 500)
         return () => clearTimeout(timer)
       }, [d, tagText])
+      // 切页时补存
+      useEffect(() => () => memSaveNow(memPendingRef.current), [])
 
       if (!d) return e('div', { style: box, children: '记忆配置读取中…' }, 'mcfg-loading')
 
@@ -523,21 +528,30 @@ function makeFactory() {
 
       // 上网与说话：改一下就存到这条鱼的 config.json
       const lastCfgRef = useRef('')
+      const pendingCfgRef = useRef(null)
+      const saveCfgNow = (payload) => {
+        const key = JSON.stringify(payload)
+        if (key === lastCfgRef.current) return
+        lastCfgRef.current = key
+        void postJson(API + '/fish/' + f.id + '/config', payload)
+          .then(() => { setMsg('已自动保存'); setErr('') })
+          .catch((x) => { setErr(String((x && x.message) || x)) })
+      }
       useEffect(() => {
         if (!cfg || !comment) return undefined
-        const key = JSON.stringify({ browse: cfg, comment })
+        const payload = { browse: cfg, comment }
+        pendingCfgRef.current = payload
+        const key = JSON.stringify(payload)
         if (lastCfgRef.current === '') { lastCfgRef.current = key; return undefined }
         if (key === lastCfgRef.current) return undefined
-        const timer = setTimeout(async () => {
-          lastCfgRef.current = key
-          try {
-            await postJson(API + '/fish/' + f.id + '/config', { browse: cfg, comment })
-            setMsg('已自动保存')
-            setErr('')
-          } catch (x) { setErr(String((x && x.message) || x)) }
-        }, 500)
+        const timer = setTimeout(() => saveCfgNow(payload), 500)
         return () => clearTimeout(timer)
       }, [cfg, comment, f.id])
+      // 切走页面时把还没落盘的那一笔补上（否则刚点的开关会丢）
+      useEffect(() => () => {
+        const payload = pendingCfgRef.current
+        if (payload) saveCfgNow(payload)
+      }, [f.id])
 
       const loadAll = useCallback(async () => {
         try {
@@ -940,31 +954,33 @@ function makeFactory() {
         const key = JSON.stringify(routine)
         if (lastRoutineRef.current === '') { lastRoutineRef.current = key; return undefined }
         if (key === lastRoutineRef.current) return undefined
-        const timer = setTimeout(async () => {
-          lastRoutineRef.current = key
-          try {
-            await postJson(API + '/fish/' + data.fish.id + '/config', routine)
-            setMsg('已自动保存')
-          } catch (x) { setErr(String((x && x.message) || x)) }
-        }, 500)
-        return () => clearTimeout(timer)
+        lastRoutineRef.current = key
+        void postJson(API + '/fish/' + data.fish.id + '/config', routine).then(() => setMsg('已自动保存')).catch((x) => setErr(String((x && x.message) || x)))
+        return undefined
       }, [routine, data?.fish?.id])
 
+      const personaPendingRef = useRef(null)
+      const personaSaveNow = (payload) => {
+        if (!payload || !data?.fish?.id) return
+        const key = JSON.stringify(payload)
+        if (key === lastPersonaRef.current) return
+        lastPersonaRef.current = key
+        void postJson(API + '/fish/' + data.fish.id + '/config', payload)
+          .then(() => setMsg('已自动保存'))
+          .catch((x) => setErr(String((x && x.message) || x)))
+      }
       useEffect(() => {
         if (!data?.fish?.id) return undefined
         const payload = data?.born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
+        personaPendingRef.current = payload
         const key = JSON.stringify(payload)
         if (lastPersonaRef.current === '') { lastPersonaRef.current = key; return undefined }
         if (key === lastPersonaRef.current) return undefined
-        const timer = setTimeout(async () => {
-          lastPersonaRef.current = key
-          try {
-            await postJson(API + '/fish/' + data.fish.id + '/config', payload)
-            setMsg('已自动保存')
-          } catch (x) { setErr(String((x && x.message) || x)) }
-        }, 500)
+        const timer = setTimeout(() => personaSaveNow(payload), 500)
         return () => clearTimeout(timer)
       }, [growth, seedName, seedBg, data?.fish?.id, data?.born])
+      // 切页时补存还没落盘的那一笔
+      useEffect(() => () => personaSaveNow(personaPendingRef.current), [data?.fish?.id])
 
       const load = useCallback(async (attempt = 0) => {
         try {
