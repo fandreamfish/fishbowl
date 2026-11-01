@@ -10,8 +10,8 @@
 | [docs/MEMORY.md](docs/MEMORY.md) | 记忆系统设计（账本、合并记忆、检索、注入） |
 | [docs/BROWSE.md](docs/BROWSE.md) | 上网与说话设计（B 站、自处、许可、登录/@/评论/回复、风控与设置） |
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
-| [docs/BROWSE.md](docs/BROWSE.md) | 上网（B 站只读浏览 / 评论闸门 / 自处节律） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层分析：核心 / 能力 / 工具 / 可抽取模块与重构路线 |
+| [docs/RELEASE-0.1.0.md](docs/RELEASE-0.1.0.md) | 0.1.0 发布说明：包清单、能力、不变量与留白 |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
 | [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
@@ -20,20 +20,22 @@
 ## 结构
 
 ```
-src/core/          认知内核：评价→情绪→偏置、事件日志、成长率、住处、节律（纯逻辑，零宿主）
-                   另有 browse.ts：上网的时段/配额/过滤/排序/素材渲染（纯逻辑）
-src/scenarios.ts   脚本化评价（测试/离线用）
-packages/memory/   记忆模块：只追加账本、合并记忆、检索、渲染（纯 TS，可独立使用）
-creatures/<id>/   一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）
-packages/plugin/   DSH 插件
-  host/dsh.js       唯一碰 DSH 的地方（事件流/注入/唤醒/工具钩子/标题/枚举/HTTP 路由）
-  memory/           记忆模块的进程内实例与 memory_search 工具
-  lib/              回合管道、注入渲染、绑定、声音、约束、设置页后端
-  lib/browse/       上网与说话：B 站客户端、素材、seen、登录、评论/回复、工具、风控
-  client.js         设置页前端
-packages/bridge-qq/ QQ 桥（OneBot v11，独立进程，共享同一份个体状态）
-scripts/            CLI 与实验工具；dev/ 调试脚本；smoke/ 冒烟测试
-prototype/          Python 原型（已冻结，8/8 通过）
+packages/
+  affect/          核心：评价→情绪→偏置、成长率、遗忘（纯函数，零 IO）
+  being/           个体：账本、事件溯源、住处、承诺、许可
+  memory/          记忆：账本、合并记忆、检索、渲染
+  schedule/        清醒节律与主动联系配额
+  voice/           声音规则（按关系原型）
+  journal/         日记 / 小纸条 / 请求
+  bilibili/        B 站只读浏览（窗口、配额、风控、评论闸门、登录态）
+  app/             应用服务：按鱼配置、评价器、LLM 端口、注入渲染、绑定、改名、回合/唤醒用例
+  adapter-dsh/     DSH 适配器：事件、注入、唤醒、工具、设置页 HTTP
+  plugin/          DSH 插件入口与前端（index.js / client.js / 工具薄封装）
+  bridge-qq/       QQ 桥（OneBot v11，独立进程）
+creatures/<id>/    一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）
+src/               demo / 测试 / 兼容层（旧路径 re-export，下一版删除）
+scripts/           CLI、dev 工具（分层检查 / 迁移 / 调试）、smoke
+prototype/         Python 原型（已冻结）
 ```
 
 ## 运行
