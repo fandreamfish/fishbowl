@@ -28,7 +28,9 @@ export function workspaceOf(session) {
 
 /** 在注册表里找活的 agent。 */
 export function findAgent(ctx, sessionId) {
-  const reg = ctx.agents
+  let reg = null
+  try { reg = typeof ctx.get === 'function' ? ctx.get('agents') : undefined } catch { reg = null }
+  if (!reg) { try { reg = ctx.agents } catch { reg = null } }
   if (!reg) return null
   try {
     if (typeof reg.get === 'function') {
@@ -120,9 +122,15 @@ export function createDshHost(ctx, cfg) {
 
   let lastSessionError = null
 
-  function sessionsService() { return get('sessions') }
-  function titlesService() { return get('sessionTitle') }
-  function workspaceRegistry() { return get('workspaceRegistry') }
+  /** 安全取服务：ctx.agents 是注入属性，未激活时会抛，一律走 get + 兜底。 */
+  function svc(name) {
+    try { const s = get(name); if (s) return s } catch { /* 未激活 */ }
+    try { return ctx[name] } catch { return undefined }
+  }
+
+  function sessionsService() { return svc('sessions') }
+  function titlesService() { return svc('sessionTitle') }
+  function workspaceRegistry() { return svc('workspaceRegistry') }
 
   function liveSession(id) {
     const sessions = sessionsService()
@@ -163,7 +171,7 @@ export function createDshHost(ctx, cfg) {
     /** 所有活着的 agent（跨会话同步用）。 */
     listAgents() {
       try {
-        const reg = ctx.agents
+        const reg = svc('agents')
         return typeof reg?.list === 'function' ? (reg.list() ?? []) : []
       } catch {
         return []
@@ -313,7 +321,7 @@ export function createDshHost(ctx, cfg) {
       if (!dir) throw new Error('新建会话需要工作区或目录')
 
       // DSH 的会话就是 agent：走 agents.create（与 GUI 新建会话同一条路）
-      const agents = ctx.agents ?? get('agents')
+      const agents = svc('agents') ?? svc('agent')
       if (!agents?.create) throw new Error('宿主没有会话服务（agents.create 不可用）')
       const dm = get('agentDefaultModel')
       let sel = {}
