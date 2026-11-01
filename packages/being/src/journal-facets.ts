@@ -51,21 +51,29 @@ export function answerRequest(creature: Creature, ref: string, answer: 'yes' | '
   creature.store.appendEvent({ t: 'request-answered', id: uid(), ts: ts ?? Date.now(), ref, answer } as CreatureEvent)
 }
 
-export function requests(creature: Creature): { id: string; text: string; ts: number; answer: 'yes' | 'no' | null }[] {
+export function requests(creature: Creature): { id: string; text: string; ts: number; answer: 'yes' | 'no' | null; action?: string; target?: string; uses?: number; ttlMs?: number }[] {
   const events = creature.store.readEvents()
   const answers = new Map<string, 'yes' | 'no'>()
   for (const e of events) if (e.t === 'request-answered') answers.set(e.ref, e.answer)
   return events
     .filter((e): e is Extract<CreatureEvent, { t: 'request' }> => e.t === 'request')
-    .map((e) => ({ id: e.id, text: e.text, ts: e.ts, answer: answers.get(e.id) ?? null }))
+    .map((e) => ({
+      id: e.id,
+      text: e.text,
+      ts: e.ts,
+      answer: answers.get(e.id) ?? null,
+      ...(e.action ? { action: e.action, target: e.target ?? '', uses: e.uses ?? 1, ttlMs: e.ttlMs ?? 0 } : {}),
+    }))
 }
 
 export function requestCountSince(creature: Creature, since: number): number {
   return creature.store.readEvents().filter((e) => e.t === 'request' && e.ts >= since).length
 }
 
-export function pendingRequests(creature: Creature): { id: string; text: string; ts: number }[] {
-  return requests(creature).filter((r) => r.answer === null).map(({ id, text, ts }) => ({ id, text, ts }))
+export function pendingRequests(creature: Creature): { id: string; text: string; ts: number; action?: string; target?: string }[] {
+  return requests(creature)
+    .filter((r) => r.answer === null)
+    .map(({ id, text, ts, action, target }) => ({ id, text, ts, ...(action ? { action } : {}), ...(target ? { target } : {}) }))
 }
 
 export function requestDigest(creature: Creature, now = Date.now()): { pending: string[]; answered: { text: string; answer: 'yes' | 'no' }[] } {
