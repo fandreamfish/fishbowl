@@ -503,13 +503,15 @@ function makeFactory() {
       const loadAll = useCallback(async () => {
         try {
           const b = await getJson(API + '/browse')
-          setCfg(b.config)
+          // 这一页编辑的是「这条鱼」的配置：不能用全局默认值回填，否则保存后看起来又还原了
+          const fv = await getJson(API + '/fish/' + f.id)
+          setCfg(fv.fish?.config?.browse || b.config)
           setStatus(await getJson(API + '/fish/' + f.id + '/browse'))
           const h = await getJson(API + '/fish/' + f.id + '/browse/history?days=14&page=0')
           setHist(h)
           const bl = await getJson(API + '/bili')
           setAuth(bl.auth)
-          setComment(bl.comment)
+          setComment(fv.fish?.config?.comment || bl.comment)
           setOwnerMid(bl.auth?.mid ?? '')
           setOwnerName(bl.auth?.nickname ?? '')
           setBiliStatus(await getJson(API + '/fish/' + f.id + '/bili'))
