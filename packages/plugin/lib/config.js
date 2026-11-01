@@ -65,7 +65,8 @@ export function normalizeConfig(raw = {}) {
     affect: (() => {
       const a = raw.affect || {}
       const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
-      return { guiltDays: days(a.guiltDays, 3), longingDays: days(a.longingDays, 2), namedDays: days(a.namedDays, 2) }
+      // 只有负面情绪可配；positive（温暖/好奇）不受这里影响
+      return { guiltDays: days(a.guiltDays, 3), longingDays: days(a.longingDays, 2), negativeDays: days(a.negativeDays ?? a.namedDays, 2) }
     })(),
     // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
     wake: {

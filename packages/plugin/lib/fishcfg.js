@@ -59,7 +59,7 @@ export function pickFishPatch(body) {
     out.affect = {
       guiltDays: days(body.affect.guiltDays, 3),
       longingDays: days(body.affect.longingDays, 2),
-      namedDays: days(body.affect.namedDays, 2),
+      negativeDays: days(body.affect.negativeDays ?? body.affect.namedDays, 2),
     }
   }
   if (body.relation && typeof body.relation === 'object' && ['companion', 'friend'].includes(body.relation.kind)) {
@@ -153,5 +153,5 @@ export function halfLivesFor(cfg, creatureId) {
   const over = readFishConfig(cfg.stateDir, creatureId)
   const a = { ...(cfg.affect || {}), ...(over?.affect || {}) }
   const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
-  return { guilt: days(a.guiltDays, 3), longing: days(a.longingDays, 2), named: days(a.namedDays, 2) }
+  return { guilt: days(a.guiltDays, 3), longing: days(a.longingDays, 2), negative: days(a.negativeDays ?? a.namedDays, 2) }
 }

@@ -6,7 +6,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { ContactGate } from './core/contact.ts'
 import { Creature } from './core/creature.ts'
-import { toBias } from './core/engine.ts'
+import { applyElapse, toBias } from './core/engine.ts'
+import { freshAffect } from './core/types.ts'
 import { Scheduler } from './core/scheduler.ts'
 import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from './core/types.ts'
 import type { Bias, CreatureMeta } from './core/types.ts'
@@ -110,6 +111,20 @@ const w0 = s7.fold().affect.named.wary ?? 0
 s7.recordEpisode('quiet', sc.neutral(), undefined, T0 + 2 * 86_400_000)
 const w2 = s7.fold().affect.named.wary ?? 0
 check('警惕也会随时间淡', w0 > 0.1 && w2 < w0, `wary ${w0.toFixed(2)} -> ${w2.toFixed(2)}`)
+// ---------------------------------------------------------------- 只有负面情绪跟设置走
+{
+  const t0 = DEFAULT_TEMPERAMENT
+  const af = freshAffect(t0)
+  af.named.warm = 1
+  af.named.curious = 1
+  af.named.wary = 1
+  af.guilt = 1
+  applyElapse(af, 3 * 86_400, t0, { guilt: 1, longing: 1, negative: 0.1 })
+  check('负面状态跟设置走（0.1 天半衰）', af.named.wary < 0.05, `wary=${af.named.wary.toFixed(3)}`)
+  check('愧疚跟设置走（1 天半衰）', near(af.guilt, 0.125, 0.01), `guilt=${af.guilt.toFixed(3)}`)
+  check('正面不跟设置走（温暖 3 天半衰）', near(af.named.warm, 0.5, 0.02), `warm=${af.named.warm.toFixed(2)}`)
+  check('好奇按自己的固定节奏', af.named.curious < 0.05, `curious=${af.named.curious.toFixed(3)}`)
+}
 // ---------------------------------------------------------------- S4 缺席
 const s4 = mk('s4')
 s4.recordAbsence(72, T0)

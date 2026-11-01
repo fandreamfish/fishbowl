@@ -1187,10 +1187,10 @@ function makeFactory() {
           ] }, 'contact'),
           e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '心情半衰期' }, 'h'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '心情都会随时间淡下去。半衰期越短，忘得越快；愧疚默认 3 天，想念 2 天。' }, 'hint'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '负面情绪都会随时间淡下去。半衰期越短，忘得越快；愧疚默认 3 天，想念 2 天。正面状态（温暖、好奇）不在这里调。' }, 'hint'),
             e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '愧疚' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.guiltDays ?? 3, (v) => setAffect('guiltDays', v), 'a', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a1'),
             e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '想念' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.longingDays ?? 2, (v) => setAffect('longingDays', v), 'b', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a2'),
-            e('div', { style: rowS, children: [e('span', { style: lab, children: '警惕/温暖等' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.namedDays ?? 2, (v) => setAffect('namedDays', v), 'c', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a3'),
+            e('div', { style: rowS, children: [e('span', { style: lab, children: '负面情绪（警惕、烦躁）' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.negativeDays ?? 2, (v) => setAffect('negativeDays', v), 'c', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a3'),
           ] }, 'affect'),
           statusCard,
           e('div', { style: rowS, children: [
