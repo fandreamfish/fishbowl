@@ -58,10 +58,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
     if (stopped) return
     try {
       const now = Date.now()
-      if (!scheduler.inWindow(now)) {
-        scheduleNext(now)
-        return
-      }
+      // 每条鱼有自己的清醒时段：不能因为全局窗口没开就把所有人都跳过
       const report = []
       // 每条鱼都要有检查记录：会话没开着也要记，否则设置页「现在的状态」永远是空的
       const live = (host.listAgents?.() ?? []).map((a) => ({
@@ -83,6 +80,8 @@ export function createWakeLoop(ctx, binding, cfg, host) {
 
         const fcfg = configFor(cfg, creature)
         if (fcfg.wake?.enabled === false) continue
+        const sched = new Scheduler(fcfg.wake, cfg.timezone)
+        if (!sched.inWindow(now)) continue
         // 想念不再靠事件攒：longingAt 按「距上次互动多久」算
 
         const broken = creature.openCommitments(fcfg.growth).filter((c) => c.broken).length

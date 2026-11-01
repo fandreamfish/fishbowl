@@ -248,6 +248,9 @@ routeFish.recordRequest('申请：今天可以刷 B 站', undefined, { action: '
 const reqList = await callRoute('GET', '/fishbowl-ui/requests')
 const reqBody = reqList.code === 200 ? JSON.parse(reqList.body) : { requests: [] }
 const fishOne = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId)
+const setG = await callRoute('POST', '/fishbowl-ui/fish/' + routeFish.meta.creatureId + '/config', { growth: 2.2 })
+const getG = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId)
+check('单鱼配置写入后能读回', setG.code === 200 && getG.code === 200 && JSON.parse(getG.body).fish.config.growth === 2.2)
 check('GET /fish/:id 返回单鱼配置', fishOne.code === 200 && !!JSON.parse(fishOne.body).fish.config.browse)
 const unknown = await callRoute('GET', '/fishbowl-ui/not-a-route')
 check('未知 GET 不会被 /requests 兜住', unknown.code === 404)
