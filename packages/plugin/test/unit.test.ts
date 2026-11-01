@@ -328,6 +328,9 @@ memFish.recordEpisode('turn', { goalCongruence: -0.5, agency: 0.5, certainty: 0.
 memFish.recordSemantic('用户讨厌被当成工具人', ['1', '2'], 0.8)
 memFish.recordDiary('2026-11-01', '日记正文', new Date(2026, 10, 1, 10, 30).getTime())
 check('日记落成单独文件', fs.existsSync(path.join(memDir, 'diary', '2026-11-01.md')) && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01.md'), 'utf8').includes('日记正文'))
+memFish.recordDiary('2026-11-01', '第二篇', new Date(2026, 10, 1, 11, 0).getTime())
+const diaryFiles = fs.readdirSync(path.join(memDir, 'diary'))
+check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
 memFish.recordNote('纸条正文', new Date(2026, 10, 1, 11, 0).getTime())
 const noteFiles = fs.existsSync(path.join(memDir, 'notes')) ? fs.readdirSync(path.join(memDir, 'notes')) : []
 check('小纸条单独成文件', noteFiles.length === 1 && fs.readFileSync(path.join(memDir, 'notes', noteFiles[0]), 'utf8').includes('纸条正文'))

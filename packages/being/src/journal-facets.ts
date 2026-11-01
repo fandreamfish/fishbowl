@@ -86,11 +86,19 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export function writeDiaryFile(creature: Creature, date: string, text: string, ts?: number): string {
   const dir = path.join(creature.store.dir, 'diary')
   fs.mkdirSync(dir, { recursive: true })
-  const file = path.join(dir, `${date}.md`)
   const at = ts ?? Date.now()
   const when = new Date(at)
   const head = `${date} ${pad(when.getHours())}:${pad(when.getMinutes())}`
-  fs.writeFileSync(file, `# ${head}\n\n${text.trim()}\n`, 'utf8')
+  const body = `# ${head}\n\n${text.trim()}\n`
+  // 她自己可能已经手写过同一天的日记：不覆盖，另起一个文件
+  let file = path.join(dir, `${date}.md`)
+  let n = 1
+  while (fs.existsSync(file)) {
+    try { if (fs.readFileSync(file, 'utf8') === body) return file } catch { /* 读不了就换名 */ }
+    n += 1
+    file = path.join(dir, `${date}-${n}.md`)
+  }
+  fs.writeFileSync(file, body, 'utf8')
   return file
 }
 
