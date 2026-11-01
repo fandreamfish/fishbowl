@@ -392,8 +392,11 @@ export function createDshHost(ctx, cfg) {
     },
 
     /** 归档一个会话（侧边栏隐藏，文件保留）。 */
-    async archiveSession(ws, sid) {
-      try { await ws.archiveSession(String(sid), { stopActivity: true }); return true }
+    async archiveSession(_ws, sid) {
+      // archiveSession 是注册表服务的方法，不在工作区实体上
+      const registry = workspaceRegistry()
+      if (typeof registry?.archiveSession !== 'function') { lastSessionError = 'registry has no archiveSession'; return false }
+      try { await registry.archiveSession(String(sid), { stopActivity: true }); return true }
       catch (e) { lastSessionError = String(e?.message ?? e); console.error('[fishbowl] archiveSession failed:', lastSessionError); return false }
     },
 
@@ -489,7 +492,7 @@ export function createDshHost(ctx, cfg) {
           const list = workspaceRegistry()?.list?.() ?? []
           const w = list[0]
           const g = w?.id ? workspaceRegistry()?.get?.(w.id) : null
-          return { listHasArchive: typeof w?.archiveSession, getHasArchive: typeof g?.archiveSession, count: list.length }
+          return { registryHasArchive: typeof workspaceRegistry()?.archiveSession, listHasArchive: typeof w?.archiveSession, getHasArchive: typeof g?.archiveSession, entityHasAttach: typeof w?.attachSession, count: list.length }
         } catch (e) { return String(e?.message ?? e) }
       })(),
         hasSessionTitle: !!titlesService(),
