@@ -874,12 +874,13 @@ function makeFactory() {
       // ---------- 列表 ----------
       if (view.level === 'list') {
         // 已被占的住处：新鱼的下拉里直接过滤掉，免得选完才报错
-        const takenWs = {}
-        const takenSess = {}
+        const takenWs = {}        // 任何鱼住在这个屋子里（含只住某个房间）
+        const takenSess = {}      // 这个房间被谁住
+        const wholeWs = {}        // 整个屋子被谁占了（workspace 级）
         for (const g of fish) {
           const o = g.occupancy
           if (!o) continue
-          if (o.kind === 'workspace') takenWs[o.id] = g.name
+          if (o.kind === 'workspace') { wholeWs[o.id] = g.name; takenWs[o.id] = g.name }
           else {
             takenSess[o.id] = g.name
             if (o.workspace) takenWs[o.workspace] = takenWs[o.workspace] || g.name
@@ -945,7 +946,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个现有工作区' }),
-                  ...allWs.map((w, i) => e('option', { value: w, disabled: !!takenWs[w], children: wsName(data.scopes.workspaceNames, w) + (takenWs[w] ? '（已被 ' + takenWs[w] + ' 占）' : '') + '（' + w + '）' }, 'w' + i)),
+                  ...allWs.map((w, i) => e('option', { value: w, disabled: !!wholeWs[w], children: wsName(data.scopes.workspaceNames, w) + (wholeWs[w] ? '（整个屋子已归 ' + wholeWs[w] + '）' : (takenWs[w] ? '（有房间住着 ' + takenWs[w] + '，可以再开一间）' : '')) + '（' + w + '）' }, 'w' + i)),
                 ],
               }, 'house-ws2') : null,
               (newHouse.mode === 'new-session') ? e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: '会在选中的工作区里新建一个会话，只有这个会话归她' }, 'house-hint2') : null,
