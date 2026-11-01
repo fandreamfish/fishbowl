@@ -607,5 +607,19 @@ console.log('== M35：日记时间窗 ==')
     return ok
   })())
 }
+console.log('== M37：能力可以按鱼关闭 ==')
+{
+  const sdC = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-'))
+  const base = normalizeConfig({ stateDir: sdC })
+  const b = createBinding(base)
+  const a = b.birth('会上网')
+  const c = b.birth('不上网')
+  check('默认能力全开', configFor(base, a).capabilities.browse !== false && configFor(base, a).capabilities.speak !== false)
+  writeFishConfig(sdC, c.meta.creatureId, { capabilities: { browse: false, speak: false } })
+  check('关掉后这条鱼没有上网能力', configFor(base, c).capabilities.browse === false && configFor(base, c).capabilities.speak === false)
+  check('另一条鱼不受影响', configFor(base, a).capabilities.browse !== false)
+  check('配置校验：只认布尔', pickFishPatch({ capabilities: { browse: 0 } }).capabilities.browse === true)
+  fs.rmSync(sdC, { recursive: true, force: true })
+}
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

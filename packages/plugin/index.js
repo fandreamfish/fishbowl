@@ -25,7 +25,7 @@ import { createBrowseTool } from './lib/browse/tool.js'
 import { createSpeakTool } from './lib/browse/speak-tool.js'
 import { setPacing } from './lib/browse/client.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from './lib/ui-route.js'
-import { migrateFishConfigs } from './lib/fishcfg.js'
+import { configFor, migrateFishConfigs } from './lib/fishcfg.js'
 import { createDshHost } from './host/dsh.js'
 
 export const inject = ['tools', 'agents']
@@ -79,13 +79,31 @@ export function apply(ctx, config = {}) {
     safe('memory-tool', () => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
   }
 
-  // M21：她自己上网看（docs/BROWSE.md）。工具始终注册；开关只决定能不能联网。
-  if (ctx.tools) {
-    try { setPacing(cfg.browse?.pacing) } catch { /* 节奏坏值不影响激活 */ }
-    safe('browse-tool', () => host.registerTool(createBrowseTool(binding, cfg)))
-    // M21.2：在 B 站说话（写）。开关关着时工具在，但只会回「现在不方便说」。
-    safe('speak-tool', () => host.registerTool(createSpeakTool(binding, cfg)))
+  // M21：她自己上网看（docs/BROWSE.md）。
+  // M37：能力按鱼配置——全都没开就不注册；改完配置可以重注册。
+  let toolOffs = []
+  function anyFishHas(cap) {
+    try {
+      return (binding.listCreatures?.() ?? []).some((c) => configFor(cfg, c).capabilities?.[cap] !== false)
+    } catch {
+      return true
+    }
   }
+  function registerCapabilityTools() {
+    for (const off of toolOffs) { try { off() } catch { /* 旧工具卸载失败也继续 */ } }
+    toolOffs = []
+    if (!ctx.tools) return
+    try { setPacing(cfg.browse?.pacing) } catch { /* 节奏坏值不影响激活 */ }
+    const add = (fn) => {
+      try {
+        const off = fn()
+        if (typeof off === 'function') toolOffs.push(off)
+      } catch (err) { traceWarn('tool', err) }
+    }
+    if (anyFishHas('browse')) add(() => host.registerTool(createBrowseTool(binding, cfg)))
+    if (anyFishHas('speak')) add(() => host.registerTool(createSpeakTool(binding, cfg)))
+  }
+  registerCapabilityTools()
 
   if (ctx.agents) {
     safe('collector', () => createCollector(ctx, binding, cfg, host, memoryFor))
@@ -106,7 +124,7 @@ export function apply(ctx, config = {}) {
     disposers.push(() => { try { wakeOff?.() } catch { /* 忽略 */ } })
 
     // M5：设置页后端（状态 / 配置）；作息改动通过 restartWake 即时生效
-    safe('ui-route', () => createUiRoute(ctx, cfg, binding, host, { restartWake: startWake }))
+    safe('ui-route', () => createUiRoute(ctx, cfg, binding, host, { restartWake: startWake, refreshTools: registerCapabilityTools }))
   } else {
     safe('ui-route', () => createUiRoute(ctx, cfg, binding, host))
   }

@@ -54,6 +54,14 @@ export function pickFishPatch(body) {
   if (body.browse && typeof body.browse === 'object') out.browse = normalizeBrowseConfig(body.browse)
   const comment = pickCommentConfig(body.comment)
   if (comment && Object.keys(comment).length) out.comment = comment
+  if (body.capabilities && typeof body.capabilities === 'object') {
+    const on = (v, dflt) => (v === undefined ? dflt : v !== false)
+    out.capabilities = {
+      browse: on(body.capabilities.browse, true),
+      speak: on(body.capabilities.speak, true),
+      memorySearch: on(body.capabilities.memorySearch, true),
+    }
+  }
   if (body.diary && typeof body.diary === 'object') {
     const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)
     out.diary = {
@@ -108,6 +116,7 @@ export function configFor(cfg, creature) {
   if (over.comment) out.comment = { ...cfg.comment, ...over.comment }
   if (over.relation) out.relation = { ...cfg.relation, ...over.relation }
   if (over.diary) out.diary = { ...cfg.diary, ...over.diary }
+  if (over.capabilities) out.capabilities = { ...cfg.capabilities, ...over.capabilities }
   if (over.affect) out.affect = { ...cfg.affect, ...over.affect }
   if (over.memory) out.memory = normalizeMemory({ ...cfg.memory, ...over.memory })
   return out
@@ -124,6 +133,7 @@ export function fishConfigView(cfg, creature) {
     memory: f.memory,
     affect: f.affect,
     diary: f.diary,
+    capabilities: f.capabilities,
     browse: f.browse,
     comment: f.comment,
     relation: f.relation,

@@ -8,6 +8,7 @@
  */
 import { workspaceOf } from '../lib/extract.js'
 import { dialogOnly } from '../../../src/core/signals.ts'
+import { configFor } from '../lib/fishcfg.js'
 
 function fmtTime(ts) {
   try {
@@ -65,6 +66,7 @@ export function createMemoryTool(binding, cfg, memoryFor) {
       const sid = session?.id
       if (!sid) return '（这一轮拿不到会话，翻不了记忆）'
       const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(session) })
+    if (creature && configFor(cfg, creature).capabilities?.memorySearch === false) return '我现在不翻记忆。'
       if (!creature) return '（这条会话里没有鱼住，没有记忆可翻）'
       const q = String(args?.query ?? '').trim()
       if (!q) return '要翻什么？给我一个词。'

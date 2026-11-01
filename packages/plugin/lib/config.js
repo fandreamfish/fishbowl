@@ -67,6 +67,12 @@ export function normalizeConfig(raw = {}) {
       const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)
       return { enabled: d.enabled !== false, start: hm(d.start, '21:30'), end: hm(d.end, '23:59'), catchUp: d.catchUp !== false }
     })(),
+    // 能力开关（每条鱼可单独关）：关掉后工具不注册/会拒绝，设置页也不显示对应页面
+    capabilities: (() => {
+      const c = raw.capabilities || {}
+      const on = (v) => v !== false
+      return { browse: on(c.browse), speak: on(c.speak), memorySearch: on(c.memorySearch) }
+    })(),
     // 心情半衰期（天）：每条鱼可单独改；0.1–60
     affect: (() => {
       const a = raw.affect || {}

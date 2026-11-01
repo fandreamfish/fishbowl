@@ -404,6 +404,8 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
                 writeFishConfig(stateDir, c.meta.creatureId, pickFishPatch(body))
                 // 半衰期改了要立刻用在新值上（实例是缓存的）
                 try { c.halfLives = halfLivesFor(cfg, c.meta.creatureId) } catch { /* 忽略 */ }
+                // 能力开关变了：重新注册工具（全关就不注册）
+                try { opts.refreshTools?.() } catch { /* 忽略 */ }
                 return send(res, { ok: true, config: fishConfigView(cfg, c), inherited: false })
               }
             }

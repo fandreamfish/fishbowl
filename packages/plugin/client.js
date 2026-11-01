@@ -864,12 +864,24 @@ function makeFactory() {
       const f = selected
       const page = view.page || 'status'
       const setPage = (p) => setView({ ...view, page: p })
+      const caps = (f.config && f.config.capabilities) || {}
       const tabs = [
-        ['status', '状态'], ['home', '住所'], ['routine', '作息'], ['browse', '上网'], ['persona', '人设'], ['memory', '记忆'],
+        ['status', '状态'], ['home', '住所'], ['routine', '作息'],
+        ...(caps.browse === false ? [] : [['browse', '上网']]),
+        ['persona', '人设'], ['memory', '记忆'],
       ]
 
       let body = null
       if (page === 'status') {
+        const capRow = (key, label) => e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, children: [
+          e('span', { style: { fontSize: 12.5 }, children: label }, 'l'),
+          e('button', { style: caps[key] === false ? btnS : { ...btnP, padding: '3px 12px', fontSize: 12 }, onClick: () => act(async () => {
+            const next = { browse: caps.browse !== false, speak: caps.speak !== false, memorySearch: caps.memorySearch !== false }
+            next[key] = caps[key] === false
+            await postJson(API + '/fish/' + f.id + '/config', { capabilities: next })
+          }, '能力已更新'), children: caps[key] === false ? '关' : '开' }, key),
+        ] }, key + 'row')
+        const capRows = [capRow('browse', '上网（刷 B 站）'), capRow('speak', '在 B 站说话'), capRow('memorySearch', '翻自己的记忆')]
         const mem = f.memory || {}
         const lines = []
         if (mem.semantics?.length) lines.push('记得: ' + mem.semantics.join('；'))
@@ -886,8 +898,12 @@ function makeFactory() {
           e('div', { style: box, children: lines.length
             ? lines.map((l, i) => e('div', { style: { fontSize: 12.5, lineHeight: 1.8 }, children: l }, 'l' + i))
             : e('div', { style: lab, children: '还没有记忆（聊几轮后会开始巩固）' }) }, 'm'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '能力' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 8 }, children: '关掉后她就拿不到对应工具，设置页也不再显示那一页。' }, 'hint'),
+            ...capRows,
+          ] }, 'caps'),
         ] }, 'status')
-      } else if (page === 'home') {
         const workspaces = (data.scopes && data.scopes.workspaces) || []
         const sessions = (data.scopes && data.scopes.sessions) || []
         const occupiedWs = {}     // 整个屋子被占（workspace 级）

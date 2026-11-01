@@ -60,7 +60,9 @@ export function createBrowseTool(binding, cfg) {
         const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(session) })
         if (!creature) return { ok: false, text: '', note: '这条会话里没有鱼住。' }
         const what = ['home', 'search', 'related', 'video'].includes(args?.what) ? args.what : 'home'
-        const selfTime = inSelfTime(creature.meta.creatureId)
+        const fcfg = configFor(cfg, creature)
+    if (fcfg.capabilities?.browse === false) return { ok: false, text: '', note: '我现在不上网。' }
+    const selfTime = inSelfTime(creature.meta.creatureId)
         const r = await lookForCreature(creature, configFor(cfg, creature), {
           what,
           keyword: args?.keyword,
