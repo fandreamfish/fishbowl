@@ -236,6 +236,9 @@ function callRoute(method: string, url: string, body: any = null) {
   })
 }
 check('路由注册成功', typeof routeHandler === 'function')
+const stateRes = await callRoute('GET', '/fishbowl-ui/fish')
+const stateBody = JSON.parse(stateRes.body)
+check('状态里有工作区名字表', !!stateBody.scopes && typeof stateBody.scopes.workspaceNames === 'object')
 const gb = await callRoute('GET', '/fishbowl-ui/browse')
 check('GET /browse 返回配置', gb.code === 200 && JSON.parse(gb.body).config.enabled === false)
 const fb = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId + '/browse')

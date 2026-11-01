@@ -323,12 +323,15 @@ export function createDshHost(ctx, cfg) {
     listScopes() {
       const scopes = enumerateScopes()
       // 名字：工作区用注册表的 title，会话用 sessionTitle（仅活着的会话能取到）
-      const workspaceNames = {}
+      const byNorm = new Map()
       try {
         for (const w of (workspaceRegistry()?.list?.() ?? [])) {
-          if (w?.path) workspaceNames[normPath(w.path)] = String(w.title ?? '')
+          if (w?.path) byNorm.set(normPath(w.path), String(w.title ?? ''))
         }
       } catch { /* 没有注册表就只用路径 */ }
+      // 键必须和返回的 workspaces 字符串完全一致（normPath 会小写、换分隔符）
+      const workspaceNames = {}
+      for (const p of scopes.workspaces) workspaceNames[p] = byNorm.get(normPath(p)) ?? ''
       const titles = get('sessionTitle')
       const sessionsSvc = sessionsService()
       const sessions = scopes.sessions.map((s) => {
