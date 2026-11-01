@@ -220,7 +220,13 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       injectedBy.set(session.id, snap.picked)
       const grant = grantLine(creature)
       const recent = recentBlock(recentDialog(creature, 6))
-      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + (recent ? '\n' + recent : '')
+      // 请求：还在等回音的 + 最近 24 小时他答过的（否则她根本看不到自己请求过什么）
+      const req = creature.requestDigest()
+      const reqLines = []
+      if (req.pending.length) reqLines.push(`还在等回音: ${req.pending.join('；')}`)
+      if (req.answered.length) reqLines.push(`他答过的: ${req.answered.map((r) => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
+      const reqText = reqLines.length ? '\n' + reqLines.join('\n') : ''
+      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + (recent ? '\n' + recent : '')
       await host.inject(agent, injectMessage(text))
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session?.id, warn: `state inject failed: ${String(err?.message || err)}` })

@@ -171,6 +171,17 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     const body = JSON.parse(await readBody(req) || '{}')
     if (body.answer !== 'yes' && body.answer !== 'no') { send(res, { ok: false, error: 'answer 只能是 yes 或 no' }, 400); return true }
     c.answerRequest(parts[3], body.answer)
+    // 回音要叫醒她一次：不然她永远不知道自己请求过什么、你答了什么
+    try {
+      const reqText = c.requests().find((r) => r.id === parts[3])?.text ?? ''
+      const occ = c.meta.occupancy
+      const agent = occ?.kind === 'session' ? host.agentFor?.(occ.id) : null
+      if (agent) {
+        const word = body.answer === 'yes' ? '同意' : '不同意'
+        const text = `（他回答了你的请求「${reqText}」：${word}。想做什么就做，不想做也行。）`
+        await host.wake(agent, injectMessage(text, { mode: 'contact', reason: '请求有回音' }))
+      }
+    } catch (e) { console.error('[fishbowl] request wake failed:', String(e?.message ?? e)) }
     send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
     return true
   }
