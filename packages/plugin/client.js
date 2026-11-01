@@ -1414,8 +1414,76 @@ function makeFactory() {
     const name = 'fishbowl'
     const inject = ['slots', 'locale']
 
+    /** 她有问题时，在页面右下角直接问，不用打开设置页。 */
+    function mountRequestToast(ctx) {
+      if (typeof document === 'undefined') return
+      const box = document.createElement('div')
+      box.id = 'fishbowl-toast'
+      box.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:360px'
+      document.body.appendChild(box)
+      let timer = null
+      let disposed = false
+
+      const answer = async (fishId, reqId, yes) => {
+        try {
+          await postJson(API + '/fish/' + fishId + '/requests/' + reqId + '/answer', { answer: yes ? 'yes' : 'no' })
+        } catch { /* 下一轮再试 */ }
+        void refresh()
+      }
+
+      const card = (f, r) => {
+        const el = document.createElement('div')
+        el.style.cssText = 'background:var(--dsw-alias-bg-1,#fff);color:var(--dsw-alias-text-1,#222);border:1px solid var(--dsw-alias-border,#ddd);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.18);padding:12px 14px'
+        const t = document.createElement('div')
+        t.style.cssText = 'font-size:12.5px;line-height:1.5;margin-bottom:8px;white-space:pre-wrap'
+        t.textContent = f.name + '：' + String(r.text || '')
+        const row = document.createElement('div')
+        row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+        const mk = (label, primary, fn) => {
+          const b = document.createElement('button')
+          b.textContent = label
+          b.style.cssText = 'font-size:12.5px;padding:4px 12px;border-radius:8px;cursor:pointer;border:1px solid '
+            + (primary ? 'transparent' : 'var(--dsw-alias-border,#ccc)')
+            + ';background:' + (primary ? 'var(--dsw-alias-accent,#3b82f6)' : 'transparent')
+            + ';color:' + (primary ? '#fff' : 'inherit')
+          b.onclick = fn
+          return b
+        }
+        row.appendChild(mk('不同意', false, () => answer(f.id, r.id, false)))
+        row.appendChild(mk('同意', true, () => answer(f.id, r.id, true)))
+        el.appendChild(t)
+        el.appendChild(row)
+        return el
+      }
+
+      const refresh = async () => {
+        if (disposed) return
+        try {
+          const d = await getJson(API + '/fish')
+          box.textContent = ''
+          for (const f of (d.fish || [])) {
+            for (const r of (f.pendingRequests || [])) {
+              if (!r.action) continue
+              box.appendChild(card(f, r))
+            }
+          }
+        } catch { /* 宿主没起来：下一轮再试 */ }
+      }
+
+      timer = setInterval(() => { void refresh() }, 20_000)
+      void refresh()
+      try {
+        ctx.effect(() => () => { disposed = true; clearInterval(timer); box.remove() })
+      } catch {
+        disposed = true
+        clearInterval(timer)
+        box.remove()
+      }
+    }
+
     function apply(ctx) {
       ensureStyle()
+      try { mountRequestToast(ctx) } catch { /* 提醒失败不影响设置页 */ }
       ctx.slots.inject('settings.section', function* () {
         yield ctx.slots.register({
           name: 'settings.section',

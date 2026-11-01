@@ -9,7 +9,20 @@ import { configFor } from '../../../app/src/index.js'
 
 const ACTIONS = {
   'comment.post': { label: '在 B 站说一句话', uses: 1, ttlMs: 2 * 60 * 60_000, gate: 'comment' },
-  'browse': { label: '看一次 B 站', uses: 1, ttlMs: 2 * 60 * 60_000, gate: 'browse' },
+  // 看 B 站的许可按「今天」算：今天有效，第二天作废
+  'browse': { label: '今天可以刷 B 站', uses: 20, ttlMs: 0, gate: 'browse', untilDayEnd: true },
+}
+
+/** 距离本地当天结束还有多久（毫秒）。 */
+function msUntilDayEnd(now, tz) {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+    const parts = Object.fromEntries(fmt.formatToParts(new Date(now)).map((p) => [p.type, p.value]))
+    const h = Number(parts.hour) % 24
+    const m = Number(parts.minute)
+    const s = Number(parts.second)
+    return Math.max(60_000, ((24 * 3600) - (h * 3600 + m * 60 + s)) * 1000)
+  } catch { return 12 * 60 * 60_000 }
 }
 
 export function createPermissionTool(binding, cfg) {
@@ -58,9 +71,11 @@ export function createPermissionTool(binding, cfg) {
         }
         const target = String(args?.target ?? '').trim()
         const reason = String(args?.reason ?? '').trim()
-        const text = `申请：${spec.label}${target ? '（' + target + '）' : ''}，${spec.uses} 次，${Math.round(spec.ttlMs / 60_000)} 分钟内有效`
+        const ttlMs = spec.untilDayEnd ? msUntilDayEnd(Date.now(), cfg.timezone) : spec.ttlMs
+        const span = spec.untilDayEnd ? '今天有效（到当天结束）' : `${Math.round(ttlMs / 60_000)} 分钟内有效`
+        const text = `申请：${spec.label}${target ? '（' + target + '）' : ''}，${span}`
           + (reason ? `\n理由：${reason}` : '')
-        creature.recordRequest(text, undefined, { action: args.action, target, uses: spec.uses, ttlMs: spec.ttlMs })
+        creature.recordRequest(text, undefined, { action: args.action, target, uses: spec.uses, ttlMs })
         return { ok: true, note: '已经问他了，等他点头。' }
       } catch (err) {
         return { ok: false, note: '申请没发出去。' }
