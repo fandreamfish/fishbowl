@@ -621,5 +621,13 @@ console.log('== M37：能力可以按鱼关闭 ==')
   check('配置校验：只认布尔', pickFishPatch({ capabilities: { browse: 0 } }).capabilities.browse === true)
   fs.rmSync(sdC, { recursive: true, force: true })
 }
+console.log('== M38：设置页分支完整（回归） ==')
+{
+  const src = fs.readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  for (const p of ['status', 'home', 'routine', 'browse', 'persona', 'memory']) {
+    check(`页签 ${p} 有分支`, src.includes(`page === '${p}'`))
+  }
+  check('状态分支以住所分支收尾（防止掉进 home 覆盖 body）', /\}, 'status'\)\s*\} else if \(page === 'home'\)/.test(src))
+}
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

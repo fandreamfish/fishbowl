@@ -904,6 +904,7 @@ function makeFactory() {
             ...capRows,
           ] }, 'caps'),
         ] }, 'status')
+      } else if (page === 'home') {
         const workspaces = (data.scopes && data.scopes.workspaces) || []
         const sessions = (data.scopes && data.scopes.sessions) || []
         const occupiedWs = {}     // 整个屋子被占（workspace 级）
