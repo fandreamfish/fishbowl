@@ -8,8 +8,8 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { createBinding } from '../plugin/lib/binding.js'
-import { normalizeConfig } from '../plugin/lib/config.js'
+import { createBinding } from '../app/src/binding.js'
+import { normalizeConfig } from '../app/src/config.js'
 import { OneBot, parseMessageEvent } from './lib/onebot.js'
 import { reply } from './lib/pipeline.js'
 

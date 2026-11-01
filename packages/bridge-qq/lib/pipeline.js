@@ -8,11 +8,11 @@
 import path from 'node:path'
 import { applyAppraisal, salienceOf, toBias } from '../../../src/core/engine.ts'
 import { Memory } from '../../memory/src/memory.ts'
-import { createAppraiser } from '../../plugin/lib/appraiser.js'
-import { configFor } from '../../plugin/lib/fishcfg.js'
-import { summaryText } from '../../plugin/lib/injector.js'
-import { callLLM } from '../../plugin/lib/llm.js'
-import { voiceRulesFor } from '../../plugin/lib/voice.js'
+import { createAppraiser } from '../../app/src/appraiser.js'
+import { configFor } from '../../app/src/fishcfg.js'
+import { summaryText } from '../../app/src/injector.js'
+import { callLLM } from '../../app/src/llm.js'
+import { voiceRulesFor } from '../../voice/src/voice.js'
 
 /**
  * 把一轮 QQ 对话记进她的账本（与 DSH 那边同一种 turn 事件）。
