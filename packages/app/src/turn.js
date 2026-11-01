@@ -265,7 +265,8 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
     // 声音：只给"有鱼住"的会话注册（scoped，只作用于这个 agent）
     try {
       const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
-      host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine)
+      const dataLine = `\n\n你的东西都在 ${creature.store.dir}：日记（diary/）、小纸条（notes/）、记忆账本都在那里。你想写下、创建、保存的任何东西都放到这个文件夹里，不要写到别处；房间只是你住的地方。`
+      host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine + dataLine)
     } catch { /* 声音注册失败不影响功能 */ }
 
     // 第二天打开会话：先把昨天的日记补上

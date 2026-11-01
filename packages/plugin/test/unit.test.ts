@@ -326,6 +326,11 @@ const memFish = Creature.create(memDir, {
 })
 memFish.recordEpisode('turn', { goalCongruence: -0.5, agency: 0.5, certainty: 0.5, normViolation: 0, relationalImpact: -0.3, stake: 0.6, attribution: 'other' }, 'user: 这个方案不行\nassistant: 我改。')
 memFish.recordSemantic('用户讨厌被当成工具人', ['1', '2'], 0.8)
+memFish.recordDiary('2026-11-01', '日记正文', new Date(2026, 10, 1, 10, 30).getTime())
+check('日记落成单独文件', fs.existsSync(path.join(memDir, 'diary', '2026-11-01.md')) && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01.md'), 'utf8').includes('日记正文'))
+memFish.recordNote('纸条正文', new Date(2026, 10, 1, 11, 0).getTime())
+const noteFiles = fs.existsSync(path.join(memDir, 'notes')) ? fs.readdirSync(path.join(memDir, 'notes')) : []
+check('小纸条单独成文件', noteFiles.length === 1 && fs.readFileSync(path.join(memDir, 'notes', noteFiles[0]), 'utf8').includes('纸条正文'))
 memFish.recordProcedure('他抱怨方案时', '先问哪里不对再改', ['2'], 0.7)
 const semEv = memFish.store.readEvents().find((e) => e.t === 'semantic')
 if (semEv) memFish.recordReinforce(semEv.id)

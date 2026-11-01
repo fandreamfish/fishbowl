@@ -37,7 +37,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
           if (i) await new Promise((r) => setTimeout(r, 500))
           agent = host.agentFor?.(occ.id) ?? null
         }
-        if (agent) await host.wake(agent, injectMessage(moveInText({ name, occupancy: occ }), { mode: 'self', reason: null }))
+        if (agent) await host.wake(agent, injectMessage(moveInText({ name, occupancy: occ, dataDir: c.store.dir }), { mode: 'self', reason: null }))
         else console.error('[fishbowl] move-in wake skipped: no live agent for', occ.id)
       } catch (e) { console.error('[fishbowl] move-in wake failed:', String(e?.message ?? e)) }
     }
@@ -92,7 +92,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
         if (i) await new Promise((r) => setTimeout(r, 500))
         agent = host.agentFor?.(occ.id) ?? null
       }
-      if (agent) await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ }), { mode: 'self', reason: null }))
+      if (agent) await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ, dataDir: c.store.dir }), { mode: 'self', reason: null }))
     } catch (e) { console.error('[fishbowl] move wake failed:', String(e?.message ?? e)) }
 
     send(res, { ok: true, archived, fish: fishView(binding.get(parts[1])) })
