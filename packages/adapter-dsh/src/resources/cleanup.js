@@ -13,13 +13,14 @@ export async function handleCleanup({ binding, host, views, send, readBody }, re
   for (const wsPath of paths) {
     const ws = host.workspaceByPath?.(wsPath)
     if (!ws) continue
-    const inWs = scopes.sessions.filter((s) => String(s.workspace ?? '') === String(wsPath))
+    const ids = Array.isArray(ws.sessionIds) ? ws.sessionIds.map(String) : []
+    const titleOf = new Map(scopes.sessions.map((s) => [s.id, s.title || '']))
     const kept = []
     const candidates = []
-    for (const s of inWs) {
-      const owner = binding.resolve({ sessionId: s.id, workspace: wsPath })
-      if (owner) kept.push({ id: s.id, title: s.title || '', owner: owner.meta.name })
-      else candidates.push({ id: s.id, title: s.title || '', dirs: host.sessionDirsOf?.(s.id) ?? [] })
+    for (const id of ids) {
+      const owner = binding.resolve({ sessionId: id, workspace: wsPath })
+      if (owner) kept.push({ id, title: titleOf.get(id) || '', owner: owner.meta.name })
+      else candidates.push({ id, title: titleOf.get(id) || '', dirs: host.sessionDirsOf?.(id) ?? [] })
     }
     plans.push({ path: wsPath, ws, kept, candidates })
   }

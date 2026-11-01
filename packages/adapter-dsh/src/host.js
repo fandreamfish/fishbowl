@@ -393,11 +393,22 @@ export function createDshHost(ctx, cfg) {
 
     /** 归档一个会话（侧边栏隐藏，文件保留）。 */
     async archiveSession(_ws, sid) {
-      // archiveSession 是注册表服务的方法，不在工作区实体上
+      // 归档 = 从工作区摘掉（侧边栏才不再显示）+ 注册表归档（停止后续工作）
       const registry = workspaceRegistry()
+      const id = String(sid)
+      let ok = true
+      try {
+        for (const w of (registry?.list?.() ?? [])) {
+          const ids = Array.isArray(w?.sessionIds) ? w.sessionIds : []
+          if (!ids.includes(id)) continue
+          if (typeof w.detachSession === 'function') await w.detachSession(id)
+          break
+        }
+      } catch (e) { ok = false; lastSessionError = 'detach: ' + String(e?.message ?? e); console.error('[fishbowl] detachSession failed:', lastSessionError) }
       if (typeof registry?.archiveSession !== 'function') { lastSessionError = 'registry has no archiveSession'; return false }
-      try { await registry.archiveSession(String(sid), { stopActivity: true }); return true }
-      catch (e) { lastSessionError = String(e?.message ?? e); console.error('[fishbowl] archiveSession failed:', lastSessionError); return false }
+      try { await registry.archiveSession(id, { stopActivity: true }) }
+      catch (e) { ok = false; lastSessionError = 'archive: ' + String(e?.message ?? e); console.error('[fishbowl] archiveSession failed:', lastSessionError) }
+      return ok
     },
 
     /** 会话在磁盘上的目录（通常在某个 --workspace-- 目录下）。 */
