@@ -8,9 +8,9 @@
 import {
   BROWSE_TOOL_MATERIAL, avoidHit, bvidFrom, pickTids, rankVideos, renderMaterial,
   sampleDanmaku, shuffle, slimItem,
-} from '../../../src/core/browse.ts'
-import { debrief, sanitizeForeign } from '../../plugin/lib/browse/guard.js'
-import { appendSeen, seenBvids } from '../../plugin/lib/browse/store.js'
+} from './browse.ts'
+import { debrief, sanitizeForeign } from './guard.js'
+import { appendSeen, seenBvids } from './store.js'
 
 const SOURCE_LABEL = {
   popular: '热门',

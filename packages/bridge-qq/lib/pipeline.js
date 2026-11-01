@@ -6,7 +6,7 @@
  * 这一轮的情绪不参与这一轮的判断。
  */
 import path from 'node:path'
-import { applyAppraisal, salienceOf, toBias } from '../../../src/core/engine.ts'
+import { applyAppraisal, salienceOf, toBias } from '../../affect/src/engine.ts'
 import { Memory } from '../../memory/src/memory.ts'
 import { createAppraiser } from '../../app/src/appraiser.js'
 import { configFor } from '../../app/src/fishcfg.js'

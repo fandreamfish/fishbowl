@@ -6,9 +6,9 @@
  *   - 只在这一层认识宿主：会话从 exec.agent 拿，其余交给 binding / memory；
  *   - 返回纯文本：她说得出口的东西，不是 JSON。
  */
-import { workspaceOf } from '../lib/extract.js'
-import { dialogOnly } from '../../../src/core/signals.ts'
-import { configFor } from '../lib/fishcfg.js'
+import { workspaceOf } from '../../app/src/extract.js'
+import { dialogOnly } from '../../being/src/signals.ts'
+import { configFor } from '../../app/src/fishcfg.js'
 
 function fmtTime(ts) {
   try {

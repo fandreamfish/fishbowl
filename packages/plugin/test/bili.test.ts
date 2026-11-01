@@ -3,18 +3,18 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { Creature } from '../../../src/core/creature.ts'
-import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
-import { browseDayKey, slimItem } from '../../../src/core/browse.ts'
-import { normalizeConfig } from '../lib/config.js'
+import { Creature } from '../../being/src/creature.ts'
+import { DEFAULT_TEMPERAMENT } from '../../affect/src/types.ts'
+import { browseDayKey, slimItem } from '../../bilibili/src/browse.ts'
+import { normalizeConfig } from '../../app/src/config.js'
 import { authPath, clearCookie, mentionPrefix, parseCookieInput, publicAuth, readAuth, saveAccount, saveAuth } from '../lib/browse/auth.js'
-import { createClient, normalizeCookie } from '../lib/browse/client.js'
+import { createClient, normalizeCookie } from '../../bilibili/src/client.js'
 import {
   commentCountToday, commentStatus, herCommentsRecent, postComment, postReply, renderReplies,
   replyCountToday, scanDueReplies, scanReplies, seenReplyRpids,
-} from '../lib/browse/comment.js'
+} from '../../bilibili/src/comment.js'
 import { createSpeakTool } from '../lib/browse/speak-tool.js'
-import { appendSeen } from '../lib/browse/store.js'
+import { appendSeen } from '../../bilibili/src/store.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = '') {

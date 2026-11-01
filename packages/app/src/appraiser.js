@@ -2,8 +2,8 @@
  * scripted：关键词启发式，离线可跑、可复现（M1 默认）。
  * deepseek：调用 API 结构化输出（json_object）。失败回退中性，绝不阻塞主对话。
  */
-import { appraisal } from '../../../src/core/types.ts'
-import { clip } from '../../../src/core/util.ts'
+import { appraisal } from '../../affect/src/types.ts'
+import { clip } from '../../affect/src/util.ts'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createAppraiser(cfg) {

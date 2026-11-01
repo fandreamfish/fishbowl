@@ -7,7 +7,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { RISK_CODES } from '../../../src/core/browse.ts'
+import { RISK_CODES } from './browse.ts'
 
 export const RISK_FILE = 'browse-risk.json'
 export const STRIKES_MIN = [10, 30, 60, 120]

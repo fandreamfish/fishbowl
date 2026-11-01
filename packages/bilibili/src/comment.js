@@ -18,11 +18,11 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { browseDayKey, inWindow } from '../../../src/core/browse.ts'
-import { readAuth, saveAccount, mentionPrefix } from '../../plugin/lib/browse/auth.js'
-import { createClient } from '../../plugin/lib/browse/client.js'
-import { debrief, sanitizeForeign, screenOutgoing } from '../../plugin/lib/browse/guard.js'
-import { todayItems } from '../../plugin/lib/browse/store.js'
+import { browseDayKey, inWindow } from './browse.ts'
+import { readAuth, saveAccount, mentionPrefix } from './auth.js'
+import { createClient } from './client.js'
+import { debrief, sanitizeForeign, screenOutgoing } from './guard.js'
+import { todayItems } from './store.js'
 
 export const REPLY_LOOKBACK_DAYS = 7
 export const MAX_SCAN_ROOTS = 6

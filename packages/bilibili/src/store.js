@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { allSeenBvids, browseDayKey, parseSeenLine, seenItemsForDay, slimItem } from '../../../src/core/browse.ts'
+import { allSeenBvids, browseDayKey, parseSeenLine, seenItemsForDay, slimItem } from './browse.ts'
 
 export function browseDir(creature) {
   return path.join(creature.store.dir, 'browse')

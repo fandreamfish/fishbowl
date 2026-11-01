@@ -282,3 +282,18 @@ capabilities:
 3. **界面**：设置页的页签按能力过滤（关掉 browse 就没有「上网」页），状态页提供开关。
 
 这带来一个架构上的好处：能力包（`@fishbowl/bilibili` 等）可以按需加载，宿主适配层只需知道"注册哪些工具"，不需要知道能力内部的实现。
+## 11. 重构完成状态（r1–r9 → 0.1.0）
+
+| 阶段 | 完成 | 产物 |
+|---|---|---|
+| R1 | ✅ | `@fishbowl/affect` |
+| R2 | ✅ | `@fishbowl/being` |
+| R3 | ✅ | `@fishbowl/schedule` `@fishbowl/voice` `@fishbowl/journal` |
+| R4 | ✅ | `@fishbowl/app` `@fishbowl/bilibili` |
+| R5 | ✅ | bilibili 内部实现、app 支撑模块、记忆实例迁入包内 |
+| R6 | ✅ | 回合管线与唤醒循环迁入 `@fishbowl/app`（不再依赖适配器） |
+| R7 | ✅ | `@fishbowl/adapter-dsh`（host + http） |
+| R8 | ✅ | QQ 桥只依赖 app 与各能力包 |
+| R9 | ✅ | `scripts/dev/check-layers.mjs` 强制依赖方向 |
+
+旧路径（`src/core/*`、`packages/plugin/lib/*`）保留为 re-export 兼容层，下一版删除。

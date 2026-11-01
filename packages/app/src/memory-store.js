@@ -4,7 +4,7 @@
  */
 import path from 'node:path'
 import { Memory } from '../../memory/src/memory.ts'
-import { configFor } from '../../plugin/lib/fishcfg.js'
+import { configFor } from './fishcfg.js'
 import { createHttpEmbedder } from '../../memory/src/embed.ts'
 
 /** 向量检索默认关；开了才建 embedder，密钥沿用评价器那把（不另存一份）。 */

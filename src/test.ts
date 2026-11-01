@@ -4,14 +4,14 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ContactGate } from './core/contact.ts'
-import { Creature } from './core/creature.ts'
-import { applyElapse, toBias } from './core/engine.ts'
-import { freshAffect } from './core/types.ts'
-import { Scheduler } from './core/scheduler.ts'
-import { wakingSecondsBetween } from './core/util.ts'
-import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from './core/types.ts'
-import type { Bias, CreatureMeta } from './core/types.ts'
+import { ContactGate } from '../packages/schedule/src/contact.ts'
+import { Creature } from '../packages/being/src/creature.ts'
+import { applyElapse, toBias } from '../packages/affect/src/engine.ts'
+import { freshAffect } from '../packages/affect/src/types.ts'
+import { Scheduler } from '../packages/schedule/src/scheduler.ts'
+import { wakingSecondsBetween } from '../packages/affect/src/util.ts'
+import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from '../packages/affect/src/types.ts'
+import type { Bias, CreatureMeta } from '../packages/affect/src/types.ts'
 import * as sc from './scenarios.ts'
 
 let failures = 0

@@ -7,19 +7,19 @@ import path from 'node:path'
 import {
   BROWSE_TOOL_MATERIAL, avoidHit, browseDayKey, browsePlan, inWindow, normalizeBrowseConfig,
   parseSeenLine, pickTids, rankVideos, renderMaterial, sampleDanmaku, slimItem,
-} from '../../../src/core/browse.ts'
-import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
-import { Creature } from '../../../src/core/creature.ts'
-import { normalizeConfig } from '../lib/config.js'
-import { detectGrant, detectRevoke, grantLine } from '../lib/grant.js'
+} from '../../bilibili/src/browse.ts'
+import { DEFAULT_TEMPERAMENT } from '../../affect/src/types.ts'
+import { Creature } from '../../being/src/creature.ts'
+import { normalizeConfig } from '../../app/src/config.js'
+import { detectGrant, detectRevoke, grantLine } from '../../app/src/grant.js'
 import { selfTimeEnabled } from '../lib/life.js'
-import { createClient, mixinKey, parseDanmaku, signQuery } from '../lib/browse/client.js'
-import { lookForCreature, browseStatus } from '../lib/browse/runtime.js'
+import { createClient, mixinKey, parseDanmaku, signQuery } from '../../bilibili/src/client.js'
+import { lookForCreature, browseStatus } from '../../bilibili/src/runtime.js'
 import { createBrowseTool } from '../lib/browse/tool.js'
 import { createUiRoute } from '../lib/ui-route.js'
-import { createBinding } from '../lib/binding.js'
-import { readSeen, todayItems } from '../lib/browse/store.js'
-import { riskState, noteRisk, clearRisk, markRiskOk } from '../lib/browse/risk.js'
+import { createBinding } from '../../app/src/binding.js'
+import { readSeen, todayItems } from '../../bilibili/src/store.js'
+import { riskState, noteRisk, clearRisk, markRiskOk } from '../../bilibili/src/risk.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = '') {

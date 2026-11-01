@@ -2,12 +2,12 @@
  * 上网的运行时：把客户端、风控、配置、记账串起来。
  * 不碰宿主；tool / 设置页 / 自处唤醒都从这里调用。
  */
-import { browseDayKey, browsePlan, inWindow } from '../../../src/core/browse.ts'
-import { createClient, inCooldown, setPacing } from '../../plugin/lib/browse/client.js'
-import { lookOnce, recordBrowse } from '../../plugin/lib/browse/browse.js'
-import { riskState, noteRisk, markRiskOk } from '../../plugin/lib/browse/risk.js'
-import { browseSummary, countToday } from '../../plugin/lib/browse/store.js'
-import { browseGrant } from '../../plugin/lib/grant.js'
+import { browseDayKey, browsePlan, inWindow } from './browse.ts'
+import { createClient, inCooldown, setPacing } from './client.js'
+import { lookOnce, recordBrowse } from './browse.js'
+import { riskState, noteRisk, markRiskOk } from './risk.js'
+import { browseSummary, countToday } from './store.js'
+import { browseGrant } from '../../being/src/grant.js'
 
 /**
  * 「当前这一轮是自处醒来的」。
