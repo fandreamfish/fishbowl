@@ -200,7 +200,7 @@ export class Memory {
    * 补齐未完成的总结 + 到点就整理。
    * 每次最多 maxCalls 次模型调用（默认 3：两份总结 + 一次整理），失败不抛。
    */
-  async tick(opts: { llm: Llm; now?: number; maxCalls?: number; by?: any }): Promise<TickReport> {
+  async tick(opts: { llm: Llm; now?: number; maxCalls?: number; by?: any; force?: boolean }): Promise<TickReport> {
     const now = opts.now ?? this.clock()
     const max = Math.max(1, opts.maxCalls ?? 3)
     const report: TickReport = { her: 0, neutral: 0, merged: 0, rejected: [], errors: [], skipped: [] }
@@ -285,7 +285,7 @@ export class Memory {
       const to = from + batch.length - 1
       const last = [...view.attempts].reverse().find((a) => a.from === from && a.to === to)
       const attempts = view.attempts.filter((a) => a.from === from && a.to === to).length
-      if (attempts >= 3 || (last && !last.ok && now - last.ts < 10 * 60_000)) {
+      if (!opts.force && (attempts >= 3 || (last && !last.ok && now - last.ts < 10 * 60_000))) {
         report.skipped.push(`merge ${from}-${to}（退避中）`)
       } else {
         report.merged = await this.merge(batch, view.memories, { from, to }, opts)
@@ -296,6 +296,10 @@ export class Memory {
     return report
   }
 
+  /** 把水位线退回去，让被零产出吞掉的批次重新整理（追加事件，不改历史）。 */
+  rewindTo(to: number) {
+    this.ledger.append({ t: 'watermark-rewind', id: newId(), ts: this.clock(), to: Math.max(0, Math.floor(to)) } as any)
+  }
   private wantsHer(t: TurnRecord): boolean {
     if (this.cfg.herSummaryOnPlainTurns) return true
     return Number(t.salience) >= 0.4
@@ -324,7 +328,7 @@ export class Memory {
         system: MERGE_SYSTEM.replace('{{MIN}}', '2').replace('{{MAX}}', '12'),
         user: buildMergeUser(batch, existing, this.cfg.tags),
         json: true,
-        maxTokens: 900,
+        maxTokens: 1800,
         model: this.cfg.neutralModel || undefined,
       })
     } catch (e) {
@@ -338,6 +342,20 @@ export class Memory {
     const parsed = parseMerge(raw)
     const { accepted, rejected } = gateMemories(parsed, batch, this.cfg.tags)
     const { fresh, dup } = dedupeAgainst(accepted, existing)
+
+    // 产出 0：不推进水位线（批次还有机会重新整理）；连续 3 次才放弃
+    if (fresh.length === 0 && dup.length === 0) {
+      const prior = this.view().attempts.filter((a) => a.from === range.from && a.to === range.to).length
+      this.ledger.append({
+        t: 'consolidation-attempt', id: newId(), ts: this.clock(), batch: range, ok: false,
+        produced: 0, rejected: rejected.slice(0, 5), rawHead: String(raw ?? '').slice(0, 200),
+        giveUp: prior + 1 >= 3, by,
+      } as any)
+      if (prior + 1 >= 3) {
+        this.ledger.append({ t: 'consolidation-attempt', id: newId(), ts: this.clock(), batch: range, ok: true, produced: 0, gaveUp: true, by } as any)
+      }
+      return 0
+    }
 
     const now = this.clock()
     for (const c of dup) {
@@ -361,7 +379,7 @@ export class Memory {
 
     this.ledger.append({
       t: 'consolidation-attempt', id: newId(), ts: now, batch: range, ok: true,
-      produced: fresh.length, by,
+      produced: fresh.length, rejected: rejected.slice(0, 5), by,
     } as any)
 
     return fresh.length

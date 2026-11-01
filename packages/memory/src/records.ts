@@ -190,6 +190,10 @@ export function buildView(events: any[]): LedgerView {
   let watermark = 0
   const attempts: { from: number; to: number; ok: boolean; ts: number }[] = []
   for (const e of events) {
+    if (e.t === 'watermark-rewind') {
+      watermark = Math.min(watermark, Number(e.to) || 0)
+      continue
+    }
     if (e.t !== 'consolidation-attempt' || !e.batch) continue
     const to = Number(e.batch.to) || 0
     attempts.push({ from: Number(e.batch.from) || 0, to, ok: !!e.ok, ts: Number(e.ts) || 0 })

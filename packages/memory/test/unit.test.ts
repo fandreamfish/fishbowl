@@ -206,6 +206,24 @@ check('失败不产生记忆', v4.memories.length === 0)
 const retry = await mem2.tick({ llm: flaky })
 check('失败后进入退避，不立刻重试', retry.skipped.length >= 1, JSON.stringify(retry.skipped))
 
+console.log('== 零产出不吞批 ==')
+const emptyMerge = async (req: any) => {
+  if (req.kind === 'merge') return JSON.stringify({ memories: [] })
+  if (req.kind === 'neutral') return JSON.stringify({ segments: [{ text: '一句话', quote: 'a' }], tags: [] })
+  return JSON.stringify({ herSummary: '嗯', used: [] })
+}
+const mem3 = new Memory({ dir: path.join(TMP, 'fish3'), cfg: { memory: { consolidateCap: 5 } } })
+for (let i = 0; i < 5; i++) mem3.observe({ note: `第${i}轮`, salience: 0.1, scope: { kind: 'session', id: 's1' } })
+for (let i = 0; i < 6 && mem3.view().attempts.length === 0; i++) await mem3.tick({ llm: emptyMerge, force: true })
+check('零产出不推进水位线', mem3.view().watermark === 0)
+check('零产出留下失败尝试', mem3.view().attempts.length >= 1 && mem3.view().attempts.at(-1)!.ok === false)
+for (let i = 0; i < 8 && mem3.view().watermark === 0; i++) await mem3.tick({ llm: emptyMerge, force: true })
+check('连续三次零产出才放弃并推进', mem3.view().watermark === 5, 'watermark=' + mem3.view().watermark)
+
+const wmBefore = mem.view().watermark
+mem.rewindTo(0)
+check('rewind 可以把水位线退回去', mem.view().watermark === 0, 'before=' + wmBefore)
+mem.rewindTo(5)
 console.log('== 检索全文 ==')
 const found = mem.search('工具人', { limit: 3 })
 check('搜得到合并记忆', found.length > 0 && found[0].kind === 'memory')
