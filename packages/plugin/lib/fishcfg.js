@@ -54,6 +54,14 @@ export function pickFishPatch(body) {
   if (body.browse && typeof body.browse === 'object') out.browse = normalizeBrowseConfig(body.browse)
   const comment = pickCommentConfig(body.comment)
   if (comment && Object.keys(comment).length) out.comment = comment
+  if (body.affect && typeof body.affect === 'object') {
+    const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
+    out.affect = {
+      guiltDays: days(body.affect.guiltDays, 3),
+      longingDays: days(body.affect.longingDays, 2),
+      namedDays: days(body.affect.namedDays, 2),
+    }
+  }
   if (body.relation && typeof body.relation === 'object' && ['companion', 'friend'].includes(body.relation.kind)) {
     out.relation = { kind: body.relation.kind }
   }
@@ -90,6 +98,7 @@ export function configFor(cfg, creature) {
   if (over.browse) out.browse = { ...cfg.browse, ...over.browse }
   if (over.comment) out.comment = { ...cfg.comment, ...over.comment }
   if (over.relation) out.relation = { ...cfg.relation, ...over.relation }
+  if (over.affect) out.affect = { ...cfg.affect, ...over.affect }
   if (over.memory) out.memory = normalizeMemory({ ...cfg.memory, ...over.memory })
   return out
 }
@@ -103,6 +112,7 @@ export function fishConfigView(cfg, creature) {
     contact: f.contact,
     selfTime: f.selfTime,
     memory: f.memory,
+    affect: f.affect,
     browse: f.browse,
     comment: f.comment,
     relation: f.relation,
@@ -136,4 +146,12 @@ export function migrateFishConfigs(cfg, creatures, legacy = null) {
     n++
   }
   return n
+}
+
+/** 这条鱼的半衰期（给 Creature.open 用）。 */
+export function halfLivesFor(cfg, creatureId) {
+  const over = readFishConfig(cfg.stateDir, creatureId)
+  const a = { ...(cfg.affect || {}), ...(over?.affect || {}) }
+  const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
+  return { guilt: days(a.guiltDays, 3), longing: days(a.longingDays, 2), named: days(a.namedDays, 2) }
 }

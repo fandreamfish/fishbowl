@@ -61,6 +61,12 @@ export function normalizeConfig(raw = {}) {
       ? { name: String(raw.seed.name ?? ''), background: String(raw.seed.background ?? '') }
       : null,
 
+    // 心情半衰期（天）：每条鱼可单独改；0.1–60
+    affect: (() => {
+      const a = raw.affect || {}
+      const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
+      return { guiltDays: days(a.guiltDays, 3), longingDays: days(a.longingDays, 2), namedDays: days(a.namedDays, 2) }
+    })(),
     // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
     wake: {
       enabled: raw.wake?.enabled === true,

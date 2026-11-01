@@ -3,6 +3,8 @@
  * 情绪是投影，从日志重放得出；缓存只是加速，删了重算结果一致。
  */
 import type { Affect, Appraisal, Bias, CreatureEvent, CreatureMeta, Temperament } from './types.ts'
+import { HALF_LIFE_DAYS } from './engine.ts'
+import type { HalfLives } from './engine.ts'
 import { freshAffect } from './types.ts'
 import {
   applyAbsence, applyAppraisal, applyContact, applyElapse,
@@ -23,20 +25,24 @@ export class Creature {
   readonly store: Store
   readonly meta: CreatureMeta
 
-  constructor(store: Store, meta: CreatureMeta) {
+  /** 半衰期可以按鱼配置（设置页里改）；默认见 engine.HALF_LIFE_DAYS。 */
+  readonly halfLives: HalfLives
+
+  constructor(store: Store, meta: CreatureMeta, halfLives: HalfLives = HALF_LIFE_DAYS) {
     this.store = store
     this.meta = meta
+    this.halfLives = halfLives
   }
 
   get temperament(): Temperament { return this.meta.temperament }
 
-  static create(dir: string, meta: CreatureMeta): Creature {
-    return new Creature(Store.create(dir, meta), meta)
+  static create(dir: string, meta: CreatureMeta, halfLives?: HalfLives): Creature {
+    return new Creature(Store.create(dir, meta), meta, halfLives)
   }
 
-  static open(dir: string): Creature {
+  static open(dir: string, opts: { halfLives?: HalfLives } = {}): Creature {
     const store = new Store(dir)
-    return new Creature(store, store.readMeta())
+    return new Creature(store, store.readMeta(), opts.halfLives)
   }
 
   /** 从缓存尾重放事件，返回当前情绪。重放是确定性的；封存期间时间不流逝。 */
@@ -55,7 +61,7 @@ export class Creature {
     }
 
     for (let i = start; i < events.length; i++) {
-      if (i > 0 && !frozen) applyElapse(aff, (events[i].ts - events[i - 1].ts) / 1000, t)
+      if (i > 0 && !frozen) applyElapse(aff, (events[i].ts - events[i - 1].ts) / 1000, t, this.halfLives)
       const e = events[i]
       if (e.t === 'freeze') frozen = true
       else if (e.t === 'unfreeze') frozen = false
@@ -85,7 +91,7 @@ export class Creature {
     const events = this.store.readEvents()
     const lastTs = events.length ? Number(events[events.length - 1].ts) || 0 : 0
     if (!this.isFrozen() && lastTs > 0 && now > lastTs) {
-      applyElapse(out, (now - lastTs) / 1000, this.temperament)
+      applyElapse(out, (now - lastTs) / 1000, this.temperament, this.halfLives)
     }
     return out
   }

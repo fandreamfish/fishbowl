@@ -16,7 +16,7 @@ import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
 import { absenceHours, createWakeLoop, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
-import { configFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../lib/fishcfg.js'
+import { configFor, halfLivesFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../lib/fishcfg.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/summarize.ts'
 import { Memory } from '../../memory/src/memory.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
@@ -569,6 +569,24 @@ check('原谅的话能认出来', forgivenessOf('没事，别往心里去') && f
   const g2 = cR.fold().affect.guilt
   check('修复让愧疚下降', g2 < g1 && Math.abs(g1 - g2 - 0.35) < 1e-6, 'guilt=' + g2.toFixed(2))
   fs.rmSync(sdR, { recursive: true, force: true })
+}
+console.log('== M31：半衰期可配 ==')
+{
+  const sdH = fs.mkdtempSync(path.join(os.tmpdir(), 'halflife-'))
+  const baseH = normalizeConfig({ stateDir: sdH })
+  const bH = createBinding(baseH)
+  const fh = bH.birth('半衰鱼')
+  fh.recordEpisode('broke-promise', { goalCongruence: -0.5, agency: 0.5, certainty: 0.5, normViolation: 0.8, relationalImpact: -0.5, stake: 0.5, attribution: 'self' } as any, undefined, 1_700_000_000_000)
+  const g0 = fh.affectNow(1_700_000_000_000).guilt
+  fh.recordEpisode('quiet', { goalCongruence: 0, agency: 0.5, certainty: 0.5, normViolation: 0, relationalImpact: 0, stake: 0.1, attribution: 'other' } as any, undefined, 1_700_000_000_000 + 86_400_000)
+  const g1 = fh.fold().affect.guilt
+  check('默认半衰期：一天后大约 0.79', Math.abs(g1 / g0 - Math.pow(0.5, 1 / 3)) < 0.02, 'ratio=' + (g1 / g0).toFixed(2))
+  writeFishConfig(sdH, fh.meta.creatureId, { affect: { guiltDays: 1 } })
+  check('按鱼配置生效', halfLivesFor(baseH, fh.meta.creatureId).guilt === 1)
+  check('非法半衰期被钳制', pickFishPatch({ affect: { guiltDays: 9999 } }).affect.guiltDays === 60)
+  const other = bH.birth('对照鱼')
+  check('另一条鱼不受影响', halfLivesFor(baseH, other.meta.creatureId).guilt === 3)
+  fs.rmSync(sdH, { recursive: true, force: true })
 }
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

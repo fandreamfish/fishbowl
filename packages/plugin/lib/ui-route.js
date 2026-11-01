@@ -30,7 +30,7 @@ import { recordWake } from '../../../src/core/signals.ts'
 import { buildView } from '../../memory/src/records.ts'
 import { validateMemory } from '../../memory/src/config.ts'
 import { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from './cfgkeys.js'
-import { fishConfigView, hasFishConfig, pickFishPatch, writeFishConfig } from './fishcfg.js'
+import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from './fishcfg.js'
 export { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from './cfgkeys.js'
 
 const ROUTE = '/fishbowl-ui'
@@ -402,6 +402,8 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
               if (req.method === 'POST') {
                 const body = JSON.parse(await readBody(req) || '{}')
                 writeFishConfig(stateDir, c.meta.creatureId, pickFishPatch(body))
+                // 半衰期改了要立刻用在新值上（实例是缓存的）
+                try { c.halfLives = halfLivesFor(cfg, c.meta.creatureId) } catch { /* 忽略 */ }
                 return send(res, { ok: true, config: fishConfigView(cfg, c), inherited: false })
               }
             }

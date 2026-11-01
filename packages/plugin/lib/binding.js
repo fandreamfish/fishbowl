@@ -14,6 +14,7 @@ import { Creature } from '../../../src/core/creature.ts'
 import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
 import { mulberry32 } from '../../../src/core/util.ts'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
+import { halfLivesFor } from './fishcfg.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createBinding(cfg) {
@@ -75,7 +76,7 @@ export function createBinding(cfg) {
       const dir = path.join(cfg.stateDir, cid)
       if (!fs.existsSync(path.join(dir, 'meta.json'))) continue
       try {
-        const c = cache.get(cid) ?? Creature.open(dir)
+        const c = cache.get(cid) ?? Creature.open(dir, { halfLives: halfLivesFor(cfg, cid) })
         cache.set(cid, c)
         out.push(c)
       } catch { /* 坏目录跳过 */ }
@@ -120,7 +121,7 @@ export function createBinding(cfg) {
     if (hit) return hit
     const dir = path.join(cfg.stateDir, creatureId)
     if (!fs.existsSync(path.join(dir, 'meta.json'))) return null
-    const c = Creature.open(dir)
+    const c = Creature.open(dir, { halfLives: halfLivesFor(cfg, creatureId) })
     cache.set(creatureId, c)
     return c
   }
@@ -162,7 +163,7 @@ export function createBinding(cfg) {
       occupancy: occ,
     }
     Creature.create(path.join(cfg.stateDir, cid), meta)
-    const c = Creature.open(path.join(cfg.stateDir, cid))
+    const c = Creature.open(path.join(cfg.stateDir, cid), { halfLives: halfLivesFor(cfg, cid) })
     cache.set(cid, c)
     return c
   }

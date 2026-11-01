@@ -68,13 +68,14 @@ function tagNamed(aff: Affect, a: Appraisal): void {
  * 心情自己会淡：所有项都随时间走，只是半衰期不同。
  * 愧疚和想念比效价慢得多（天级），但不会永远钉在同一格。
  */
-export const HALF_LIFE_DAYS = { guilt: 3, longing: 2 } as const
-const NAMED_HALF_LIFE_DAYS: Record<string, number> = { guilty: 2, wary: 2, warm: 3, frustrated: 1, curious: 0.5 }
+export interface HalfLives { guilt: number; longing: number; named: number }
+export const HALF_LIFE_DAYS: HalfLives = { guilt: 3, longing: 2, named: 2 }
+const NAMED_FACTOR: Record<string, number> = { guilty: 1, wary: 1, warm: 1.5, frustrated: 0.5, curious: 0.25 }
 
 const half = (x: number, halfLifeDays: number, days: number) => x * Math.pow(0.5, days / halfLifeDays)
 
 /** 时间流逝。按真实秒数做半衰期式衰减；持久项只是慢一点，不是不动。 */
-export function applyElapse(aff: Affect, seconds: number, t: Temperament): void {
+export function applyElapse(aff: Affect, seconds: number, t: Temperament, hl: HalfLives = HALF_LIFE_DAYS): void {
   if (seconds <= 0) return
   const k = Math.pow(t.decayRate, seconds / 60)
   aff.valence = t.baselineValence + k * (aff.valence - t.baselineValence)
@@ -83,10 +84,10 @@ export function applyElapse(aff: Affect, seconds: number, t: Temperament): void 
   aff.mood = mk * aff.mood + (1 - mk) * aff.valence
 
   const days = seconds / 86_400
-  aff.guilt = clip(half(aff.guilt, HALF_LIFE_DAYS.guilt, days), 0, 1)
-  aff.longing = clip(half(aff.longing, HALF_LIFE_DAYS.longing, days), 0, 1)
+  aff.guilt = clip(half(aff.guilt, hl.guilt, days), 0, 1)
+  aff.longing = clip(half(aff.longing, hl.longing, days), 0, 1)
   for (const key of Object.keys(aff.named)) {
-    aff.named[key] = clip(half(aff.named[key], NAMED_HALF_LIFE_DAYS[key] ?? 2, days), 0, 1)
+    aff.named[key] = clip(half(aff.named[key], hl.named * (NAMED_FACTOR[key] ?? 1), days), 0, 1)
   }
 }
 

@@ -796,7 +796,7 @@ function makeFactory() {
           setGrowth(d.config.growth)
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
-          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {} })
+          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {}, affect: d.config.affect ?? {} })
           setErr('')
         } catch (x) {
           setErr(String((x && x.message) || x))
@@ -817,7 +817,7 @@ function makeFactory() {
 
       const openFish = (id) => {
         const f0 = ((data && data.fish) || []).find((x) => x.id === id)
-        if (f0 && f0.config) { setRoutine({ wake: f0.config.wake ?? {}, contact: f0.config.contact ?? {}, selfTime: f0.config.selfTime ?? {} }); if (typeof f0.config.growth === 'number') setGrowth(f0.config.growth) }
+        if (f0 && f0.config) { setRoutine({ wake: f0.config.wake ?? {}, contact: f0.config.contact ?? {}, selfTime: f0.config.selfTime ?? {}, affect: f0.config.affect ?? {} }); if (typeof f0.config.growth === 'number') setGrowth(f0.config.growth) }
         setView({ level: 'fish', id, page: 'home' }); setWs(''); setSess(''); setMsg(''); setMoveOpen(false); setPick(null)
       }
 
@@ -1066,6 +1066,8 @@ function makeFactory() {
         const selfTime = r.selfTime || {}
         const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
         const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const affectCfg = r.affect || {}
+        const setAffect = (k, v) => setRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
         const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
         const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
         const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
@@ -1183,11 +1185,18 @@ function makeFactory() {
               ] }, 'v'),
             ] }, 'c4'),
           ] }, 'contact'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '心情半衰期' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '心情都会随时间淡下去。半衰期越短，忘得越快；愧疚默认 3 天，想念 2 天。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '愧疚' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.guiltDays ?? 3, (v) => setAffect('guiltDays', v), 'a', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '想念' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.longingDays ?? 2, (v) => setAffect('longingDays', v), 'b', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a2'),
+            e('div', { style: rowS, children: [e('span', { style: lab, children: '警惕/温暖等' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.namedDays ?? 2, (v) => setAffect('namedDays', v), 'c', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a3'),
+          ] }, 'affect'),
           statusCard,
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime })
+              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg })
             }, '作息已保存'), children: '保存' }, 'save'),
           ] }, 'act'),
         ] }, 'routine')      } else if (page === 'browse') {
