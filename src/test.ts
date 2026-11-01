@@ -86,10 +86,30 @@ check('违诺当刻：愧疚 0.60', near(aff0.guilt, 0.60, 0.02), `guilt=${aff0.
 for (let i = 0; i < 6; i++) s3.recordEpisode('quiet', sc.neutral(), undefined, T0)
 const aff6 = s3.fold().affect
 check('六轮平静后情绪平复', aff6.valence > aff0.valence + 0.3, `v ${aff0.valence.toFixed(2)} -> ${aff6.valence.toFixed(2)}`)
-check('愧疚不随时间衰减', near(aff6.guilt, aff0.guilt, 1e-9), `guilt=${aff6.guilt.toFixed(2)}`)
+check('同一时刻的六轮平静不改愧疚', near(aff6.guilt, aff0.guilt, 1e-9), `guilt=${aff6.guilt.toFixed(2)}`)
 check('六轮平静后仍保持警惕', s3.bias().thresholdVerify > 0.65, `veri=${s3.bias().thresholdVerify.toFixed(2)}`)
 check('verify 与 Python 一致', near(s3.bias().thresholdVerify, 0.78), '')
 
+// ---------------------------------------------------------------- 心情随时间
+const s5 = mk('s5')
+s5.recordEpisode('broke-promise', sc.promiseBroken(), undefined, T0)
+const g0 = s5.fold().affect.guilt
+s5.recordEpisode('quiet', sc.neutral(), undefined, T0 + 3 * 86_400_000)
+const g3d = s5.fold().affect.guilt
+check('愧疚三天减半', near(g3d, g0 / 2, 0.02), `guilt ${g0.toFixed(2)} -> ${g3d.toFixed(2)}`)
+const s6 = mk('s6')
+s6.recordAbsence(72, T0)
+const l0 = s6.fold().affect.longing
+s6.recordEpisode('quiet', sc.neutral(), undefined, T0 + 2 * 86_400_000)
+const l2 = s6.fold().affect.longing
+check('想念两天减半', near(l2, l0 / 2, 0.02), `longing ${l0.toFixed(2)} -> ${l2.toFixed(2)}`)
+const s7 = mk('s7')
+// wary 的条件：对方造成的负面关系影响 + 不确定
+s7.recordEpisode('wary', { goalCongruence: -0.2, agency: 0.3, certainty: 0.4, normViolation: 0, relationalImpact: -0.6, stake: 0.4, attribution: 'other' }, undefined, T0)
+const w0 = s7.fold().affect.named.wary ?? 0
+s7.recordEpisode('quiet', sc.neutral(), undefined, T0 + 2 * 86_400_000)
+const w2 = s7.fold().affect.named.wary ?? 0
+check('警惕也会随时间淡', w0 > 0.1 && w2 < w0, `wary ${w0.toFixed(2)} -> ${w2.toFixed(2)}`)
 // ---------------------------------------------------------------- S4 缺席
 const s4 = mk('s4')
 s4.recordAbsence(72, T0)

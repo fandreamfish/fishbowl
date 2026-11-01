@@ -52,9 +52,9 @@ export interface Affect {
   valence: number
   arousal: number
   mood: number
-  /** 缺席累积（想念）。持久项，不受死区影响。 */
+  /** 缺席累积（想念）。慢衰减（半衰 2 天），不受死区影响。 */
   longing: number
-  /** 未修复的违诺。持久项，只随 repair / contact 变化，不随情绪衰减。 */
+  /** 未修复的违诺。慢衰减（半衰 3 天）；repair 会加快它降下去。 */
   guilt: number
   /** 具名状态：frustrated / guilty / wary / curious / warm */
   named: Record<string, number>

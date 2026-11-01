@@ -34,7 +34,7 @@ export function applyAppraisal(aff: Affect, a: Appraisal, t: Temperament): void 
   )
   aff.mood = 0.98 * aff.mood + 0.02 * aff.valence
 
-  // 违诺只增，只有 repair 能减
+  // 违诺累加，之后按天慢慢淡；repair 是更快的出口
   if (a.normViolation > 0) {
     aff.guilt = clip(aff.guilt + 1.2 * a.normViolation, 0, 1)
   }
@@ -64,7 +64,16 @@ function tagNamed(aff: Affect, a: Appraisal): void {
   }
 }
 
-/** 时间流逝。按真实秒数做半衰期式衰减。持久项（愧疚、想念）不动。 */
+/**
+ * 心情自己会淡：所有项都随时间走，只是半衰期不同。
+ * 愧疚和想念比效价慢得多（天级），但不会永远钉在同一格。
+ */
+export const HALF_LIFE_DAYS = { guilt: 3, longing: 2 } as const
+const NAMED_HALF_LIFE_DAYS: Record<string, number> = { guilty: 2, wary: 2, warm: 3, frustrated: 1, curious: 0.5 }
+
+const half = (x: number, halfLifeDays: number, days: number) => x * Math.pow(0.5, days / halfLifeDays)
+
+/** 时间流逝。按真实秒数做半衰期式衰减；持久项只是慢一点，不是不动。 */
 export function applyElapse(aff: Affect, seconds: number, t: Temperament): void {
   if (seconds <= 0) return
   const k = Math.pow(t.decayRate, seconds / 60)
@@ -72,6 +81,13 @@ export function applyElapse(aff: Affect, seconds: number, t: Temperament): void 
   aff.arousal = t.baselineArousal + k * (aff.arousal - t.baselineArousal)
   const mk = Math.pow(0.98, seconds / 60)
   aff.mood = mk * aff.mood + (1 - mk) * aff.valence
+
+  const days = seconds / 86_400
+  aff.guilt = clip(half(aff.guilt, HALF_LIFE_DAYS.guilt, days), 0, 1)
+  aff.longing = clip(half(aff.longing, HALF_LIFE_DAYS.longing, days), 0, 1)
+  for (const key of Object.keys(aff.named)) {
+    aff.named[key] = clip(half(aff.named[key], NAMED_HALF_LIFE_DAYS[key] ?? 2, days), 0, 1)
+  }
 }
 
 /** 缺席累积。只在清醒时段累积（睡着时不想念）。想念本身是难受的。 */
@@ -92,7 +108,7 @@ export function applyRepair(aff: Affect, amount: number): void {
 
 /**
  * 死区：瞬态项归零。
- * 注意持久项（guilt / longing）不参与死区判定——否则没人提起就等于翻篇。
+ * 注意持久项（guilt / longing）不参与死区判定——它们本来就会随时间淡，不需要死区再归零。
  */
 export function inDeadband(aff: Affect, t: Temperament): boolean {
   return Math.abs(aff.arousal - t.baselineArousal) < 0.12
