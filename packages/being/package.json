@@ -1,0 +1,16 @@
+{
+  "name": "@fishbowl/being",
+  "version": "0.1.0",
+  "description": "fishbowl being: append-only ledger, event-sourced individual, housing, commitments and signals.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./store": "./src/store.ts",
+    "./creature": "./src/creature.ts",
+    "./tenancy": "./src/tenancy.ts",
+    "./signals": "./src/signals.ts"
+  },
+  "files": ["src/**/*.ts", "README.md"],
+  "engines": { "node": ">=22.18" }
+}
