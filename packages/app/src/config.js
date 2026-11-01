@@ -71,7 +71,8 @@ export function normalizeConfig(raw = {}) {
     capabilities: (() => {
       const c = raw.capabilities || {}
       const on = (v) => v !== false
-      return { browse: on(c.browse), speak: on(c.speak), memorySearch: on(c.memorySearch) }
+      // 两个总开关：上网（含说话）与记忆（含检索）
+      return { browse: on(c.browse), memory: on(c.memory ?? c.memorySearch) }
     })(),
     // 心情半衰期（天）：每条鱼可单独改；0.1–60
     affect: (() => {

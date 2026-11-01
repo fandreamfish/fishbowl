@@ -74,10 +74,6 @@ export function apply(ctx, config = {}) {
     safe('constraints', () => createConstraints(ctx, binding, cfg, host))
   }
 
-  // M17：她自己翻记忆的工具（docs/MEMORY.md §7.4「查阅」通道）
-  if (ctx.tools && cfg.memory?.searchTool !== false) {
-    safe('memory-tool', () => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
-  }
 
   // M21：她自己上网看（docs/BROWSE.md）。
   // M37：能力按鱼配置——全都没开就不注册；改完配置可以重注册。
@@ -101,7 +97,8 @@ export function apply(ctx, config = {}) {
       } catch (err) { traceWarn('tool', err) }
     }
     if (anyFishHas('browse')) add(() => host.registerTool(createBrowseTool(binding, cfg)))
-    if (anyFishHas('speak')) add(() => host.registerTool(createSpeakTool(binding, cfg)))
+    if (anyFishHas('browse')) add(() => host.registerTool(createSpeakTool(binding, cfg)))
+    if (anyFishHas('memory') && cfg.memory?.searchTool !== false) add(() => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
   }
   registerCapabilityTools()
 

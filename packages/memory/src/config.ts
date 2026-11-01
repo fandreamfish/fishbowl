@@ -29,6 +29,8 @@ export const MEMORY_DEFAULTS = {
   tags: DEFAULT_TAGS,
   // 单写者：'warn' 检测并上报、'strict' 抢不到就抛、'off' 不管
   singleWriter: 'warn',
+  // 记忆总开关
+  enabled: true,
   // 是否注册 memory_search 工具
   searchTool: true,
   // 向量检索（L2）：默认关，等评测集说话（docs/MEMORY.md §4.3）
@@ -57,6 +59,7 @@ export function normalizeMemory(raw) {
       ? r.tags.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()).slice(0, 40)
       : DEFAULT_TAGS.slice(),
     singleWriter: r.singleWriter === 'off' || r.singleWriter === 'strict' ? r.singleWriter : 'warn',
+    enabled: r.enabled !== false,
     searchTool: r.searchTool !== false,
     embeddings: {
       enabled: r.embeddings?.enabled === true,

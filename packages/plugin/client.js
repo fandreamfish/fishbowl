@@ -215,6 +215,10 @@ function makeFactory() {
             e('input', { type: 'checkbox', checked: !!d.herSummaryOnPlainTurns, onChange: (ev) => set('herSummaryOnPlainTurns', ev.target.checked) }, 'c'),
             e('span', { children: '平淡轮也写「她的总结」' }, 't'),
           ] }),
+          e('label', { key: 'search', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
+            e('input', { type: 'checkbox', checked: d.searchTool !== false, onChange: (ev) => set('searchTool', ev.target.checked) }, 'c'),
+            e('span', { children: '允许她主动翻记忆（memory_search）' }, 't'),
+          ] }),
           e('div', { key: 'writer', style: { marginBottom: 8 }, children: [
             e('div', { style: { fontSize: 13, marginBottom: 3 }, children: '同时写入' }, 'l'),
             e('select', {
@@ -693,6 +697,7 @@ function makeFactory() {
       const speakCard = e('div', { style: box, key: 'bili-speak', children: [
         e('div', { style: rowS, children: [
           e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '在 B 站说话' }, 'h'),
+          e(Toggle, { on: cm.enabled, onChange: () => setCm('enabled', !cm.enabled), k: 'sw' }),
         ] }, 'head'),
         e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '说话的总开关在「状态 → 能力」里。这是唯一会动账号的功能：评论公开留痕。她只评今天自己看过的视频；回复只回别人在她评论下面的楼。' }, 'hint'),
         e('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginBottom: 8 }, children: [
@@ -862,7 +867,8 @@ function makeFactory() {
       const tabs = [
         ['status', '状态'], ['home', '住所'], ['routine', '作息'],
         ...(caps.browse === false ? [] : [['browse', '上网']]),
-        ['persona', '人设'], ['memory', '记忆'],
+        ['persona', '人设'],
+        ...(caps.memory === false ? [] : [['memory', '记忆']]),
       ]
 
       let body = null
@@ -870,12 +876,12 @@ function makeFactory() {
         const capRow = (key, label) => e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, children: [
           e('span', { style: { fontSize: 12.5 }, children: label }, 'l'),
           e('button', { style: caps[key] === false ? btnS : { ...btnP, padding: '3px 12px', fontSize: 12 }, onClick: () => act(async () => {
-            const next = { browse: caps.browse !== false, speak: caps.speak !== false, memorySearch: caps.memorySearch !== false }
+            const next = { browse: caps.browse !== false, memory: caps.memory !== false }
             next[key] = caps[key] === false
             await postJson(API + '/fish/' + f.id + '/config', { capabilities: next })
           }, '能力已更新'), children: caps[key] === false ? '关' : '开' }, key),
         ] }, key + 'row')
-        const capRows = [capRow('browse', '上网（刷 B 站）'), capRow('speak', '在 B 站说话'), capRow('memorySearch', '翻自己的记忆')]
+        const capRows = [capRow('browse', '上网（看视频、在 B 站说话）'), capRow('memory', '记忆（记住、回忆、翻记忆）')]
         const mem = f.memory || {}
         const lines = []
         if (mem.semantics?.length) lines.push('记得: ' + mem.semantics.join('；'))

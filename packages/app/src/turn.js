@@ -17,7 +17,7 @@ import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { todayItems } from '../../bilibili/src/store.js'
 import { browseDayKey } from '../../bilibili/src/browse.ts'
 import { activeGrants, recordGrant, recentDialog } from '../../being/src/signals.ts'
-import { injectMessage, recallBlock, recentBlock } from './injector.js'
+import { injectMessage, recallBlock, recentBlock, stateKey, summaryText } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from '../../voice/src/voice.js'
 import { detectGrant, grantLine } from './grant.js'
@@ -125,6 +125,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) return
       const mem = memoryFor(creature)
+      if (configFor(cfg, creature).capabilities?.memory === false) return
       const hits = mem.search(text, { limit: 2 })
       if (!hits.length) return
       const now = Date.now()
@@ -315,12 +316,15 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       const injected = injectedBy.get(session.id) ?? []
       injectedBy.delete(session.id)
-      mem.observe({ note: transcript, scope, appraisal: a, salience: salienceOf(a), affect: peak, injected, ts })
+      const memoryOn = configFor(cfg, creature).capabilities?.memory !== false
+      if (memoryOn) mem.observe({ note: transcript, scope, appraisal: a, salience: salienceOf(a), affect: peak, injected, ts })
 
       const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
-      const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
+      const snap = memoryOn
+        ? mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
+        : { text: summaryText(bias, affect, { name: creature.meta.name, semantics: [], procedures: [], self: [], commitments }), fingerprint: stateKey(bias, affect, {}), picked: [] }
       // 许可是一条稳定事实：他允许她没事时自己刷 B 站。不是命令，也不翻硬开关。
       const grant = grantLine(creature)
       const snapText = grant ? `${snap.text}\n他允许你的事: ${grant}` : snap.text
@@ -337,7 +341,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       if (cfg.appraiser.kind === 'deepseek') {
         // 双总结 + 到点整理：异步、有预算、失败可重试；绝不阻塞对话
-        void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model } })
+        if (memoryOn) void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model } })
           .catch((err) => trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick failed: ${String(err?.message || err)}` }))
         if (IDENTITY_RE.test(transcript)) {
           void detectIdentity(session.id, creature, transcript)

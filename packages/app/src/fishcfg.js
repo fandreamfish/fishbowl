@@ -58,13 +58,11 @@ export function pickFishPatch(body) {
     const on = (v, dflt) => (v === undefined ? dflt : v !== false)
     out.capabilities = {
       browse: on(body.capabilities.browse, true),
-      speak: on(body.capabilities.speak, true),
-      memorySearch: on(body.capabilities.memorySearch, true),
+      memory: on(body.capabilities.memory ?? body.capabilities.memorySearch, true),
     }
-    // 能力 = 唯一开关；同步到旧的行为字段，运行时逻辑继续认它们
+    // 能力 = 总开关；同步到旧的行为字段，运行时逻辑继续认它们
     out.browse = { ...(out.browse || {}), enabled: out.capabilities.browse }
-    out.comment = { ...(out.comment || {}), enabled: out.capabilities.speak }
-    out.memory = { ...(out.memory || {}), searchTool: out.capabilities.memorySearch }
+    out.memory = { ...(out.memory || {}), enabled: out.capabilities.memory }
   }
   if (body.diary && typeof body.diary === 'object') {
     const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)

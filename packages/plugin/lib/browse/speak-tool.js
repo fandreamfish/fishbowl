@@ -59,7 +59,7 @@ export function createSpeakTool(binding, cfg) {
         if (!sid) return { ok: false, said: '', note: '这一轮拿不到会话。' }
         const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(session) })
         if (!creature) return { ok: false, said: '', note: '这条会话里没有鱼住。' }
-        if (configFor(cfg, creature).capabilities?.speak === false) return { ok: false, said: '', note: '我现在不在外面说话。' }
+        if (configFor(cfg, creature).capabilities?.browse === false) return { ok: false, said: '', note: '我现在不上网，也就不在外面说话。' }
         if (args?.kind !== 'comment' && args?.kind !== 'reply') {
           return { ok: false, said: '', note: '要说哪种？评论还是回复。' }
         }
