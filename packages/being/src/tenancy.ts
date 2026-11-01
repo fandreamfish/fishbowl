@@ -10,6 +10,12 @@
  * 解析优先级：会话级 > 工作区级。都没有 → 没有鱼（不注入、不记忆）。
  */
 
+/** 住处里的路径比较：大小写/分隔符不敏感（DSH 不同入口给的写法不一致）。 */
+export function samePath(a?: string | null, b?: string | null): boolean {
+  const n = (v?: string | null) => String(v ?? '').replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+  return !!a && !!b && n(a) === n(b)
+}
+
 export type Occupancy =
   | { kind: 'workspace'; id: string }
   | { kind: 'session'; id: string; workspace?: string }
@@ -27,12 +33,12 @@ export function findConflict(target: Occupancy, taken: OccupantRow[]): string | 
   for (const t of taken) {
     const o = t.occupancy
     if (target.kind === 'workspace') {
-      if (o.kind === 'workspace' && o.id === target.id) return t.creatureId
+      if (o.kind === 'workspace' && samePath(o.id, target.id)) return t.creatureId
       // 想住整个工作区：该工作区下已住着一只鱼（会话级）→ 也冲突
-      if (o.kind === 'session' && o.workspace === target.id) return t.creatureId
+      if (o.kind === 'session' && samePath(o.workspace, target.id)) return t.creatureId
     } else {
       if (o.kind === 'session' && o.id === target.id) return t.creatureId
-      if (o.kind === 'workspace' && o.id === target.workspace) return t.creatureId
+      if (o.kind === 'workspace' && samePath(o.id, target.workspace)) return t.creatureId
     }
   }
   return null
@@ -50,7 +56,7 @@ export function resolveOccupant(
   }
   if (!session.workspace) return null
   for (const c of creatures) {
-    if (c.occupancy?.kind === 'workspace' && c.occupancy.id === session.workspace) {
+    if (c.occupancy?.kind === 'workspace' && samePath(c.occupancy.id, session.workspace)) {
       return { creatureId: c.creatureId, via: 'workspace' }
     }
   }

@@ -307,7 +307,7 @@ export function createDshHost(ctx, cfg) {
         target = registry?.get?.(workspaceId) ?? null
         if (!target) throw new Error('工作区不存在：' + workspaceId)
       }
-      const dir = normPath(cwd || target?.path || dirPath || '')
+      const dir = path.resolve(cwd || target?.path || dirPath || '')
       if (!dir) throw new Error('新建会话需要工作区或目录')
 
       // DSH 的会话就是 agent：走 agents.create（与 GUI 新建会话同一条路）
@@ -336,11 +336,14 @@ export function createDshHost(ctx, cfg) {
       if (lastErr) throw lastErr
       const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
-      const ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir))
+      // 挂到工作区（侧边栏按 workspace.sessionIds 显示）：list() 给的是视图，要 get() 拿真实实例
+      let ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir)) ?? null
+      try { if (ws?.id) ws = registry?.get?.(ws.id) ?? ws } catch { /* 忽略 */ }
+      let attached = false
       if (ws && typeof ws.attachSession === 'function') {
-        try { await ws.attachSession(String(id)) } catch { /* 挂不上也不影响会话本身 */ }
+        try { await ws.attachSession(String(id)); attached = true } catch { /* 下面把失败带回去 */ }
       }
-      return { id: String(id), workspace: dir }
+      return { id: String(id), workspace: dir, attached }
     },
 
     listScopes() {

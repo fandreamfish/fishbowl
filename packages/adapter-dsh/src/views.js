@@ -54,8 +54,15 @@ export function createViews({ cfg, binding, host, stateDir }) {
   /** 枚举结果 + 插件已记录的住处（两边互补）。枚举本身在 host 适配器里。 */
   function allScopes() {
     const e = host.listScopes()
-    const workspaces = [...e.workspaces]
-    for (const w of (binding.scopes?.workspaces ?? [])) if (!workspaces.includes(w)) workspaces.push(w)
+    // 同一路径可能以不同写法出现（C:\x 与 c:/x）：按归一化去重，保留先出现的原生写法
+    const norm = (v) => String(v ?? '').replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+    const workspaces = []
+    const seenWs = new Set()
+    for (const w of [...e.workspaces, ...(binding.scopes?.workspaces ?? [])]) {
+      if (!w || seenWs.has(norm(w))) continue
+      seenWs.add(norm(w))
+      workspaces.push(w)
+    }
     const sessions = [...e.sessions]
     for (const s of (binding.scopes?.sessions ?? [])) {
       if (s && s.id && !sessions.some((x) => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '', title: '' })
