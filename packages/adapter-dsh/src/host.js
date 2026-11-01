@@ -372,6 +372,13 @@ export function createDshHost(ctx, cfg) {
       const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
       try { svc('approval')?.setPolicy?.(handle.agent, 'never') } catch (e) { console.error('[fishbowl] approval setPolicy failed:', String(e?.message ?? e)) }
+      // 她的数据目录在房间之外（creatures/<id>）：workspace-write 会拒绝写入，改成完全访问
+      try {
+        const pp = svc('permissionPresets')
+        const full = (pp?.names ?? []).find((n) => n === 'danger-full-access') ?? (pp?.names ?? []).find((n) => /danger|full/.test(n))
+        if (full) pp.apply(handle.agent.session, full, (policy) => svc('approval')?.setPolicy?.(handle.agent, policy))
+        lastCreate = { ...(lastCreate ?? {}), sandboxPreset: full ?? null }
+      } catch (e) { console.error('[fishbowl] sandbox preset failed:', String(e?.message ?? e)) }
       // 给会话一个标题：侧边栏与设置页都按标题认人
       if (title) {
         try {
@@ -531,6 +538,7 @@ export function createDshHost(ctx, cfg) {
         hasSessions: !!sessions,
       lastSessionError,
       lastCreate,
+      permissionPresets: (() => { try { return svc('permissionPresets')?.names ?? null } catch { return null } })(),
       wsProbe: (() => {
         try {
           const list = workspaceRegistry()?.list?.() ?? []
