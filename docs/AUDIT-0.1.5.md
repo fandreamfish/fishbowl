@@ -104,7 +104,7 @@ plugin → adapter-dsh   2   ← 形成环
 
 ## 四、下一步
 
-进度：P0 已在 0.2.0 完成；P1/P2 待做。
+进度：P0 在 0.2.0 完成；P1 在 0.2.1 完成（	urn/after.js、wake/plan.js）；P2 待做。
 
 按 P0 → P1 → P2 分三次发布：
 
