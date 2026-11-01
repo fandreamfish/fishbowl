@@ -6,12 +6,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { CONSOLIDATION_SYSTEM_PROMPT, dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../src/core/consolidation.ts'
-import { Creature } from '../../src/core/creature.ts'
-import { salienceOf, toBias } from '../../src/core/engine.ts'
-import { DEFAULT_TEMPERAMENT } from '../../src/core/types.ts'
-import { createAppraiser } from '../../packages/plugin/lib/appraiser.js'
-import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from '../../packages/plugin/lib/identity.js'
-import { summaryText } from '../../packages/plugin/lib/injector.js'
+import { Creature } from '../../packages/being/src/creature.ts'
+import { salienceOf, toBias } from '../../packages/affect/src/engine.ts'
+import { DEFAULT_TEMPERAMENT } from '../../packages/affect/src/types.ts'
+import { createAppraiser } from '../../packages/app/src/appraiser.js'
+import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from '../../packages/app/src/identity.js'
+import { summaryText } from '../../packages/app/src/injector.js'
 import { chat } from './llm.ts'
 
 const TMP = path.join(process.cwd(), 'm2-tmp')

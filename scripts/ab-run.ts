@@ -13,12 +13,12 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { Creature } from '../src/core/creature.ts'
-import { toBias } from '../src/core/engine.ts'
-import { DEFAULT_TEMPERAMENT } from '../src/core/types.ts'
-import { createAppraiser } from '../packages/plugin/lib/appraiser.js'
-import { summaryText } from '../packages/plugin/lib/injector.js'
-import { VOICE_RULES } from '../packages/plugin/lib/voice.js'
+import { Creature } from '../packages/being/src/creature.ts'
+import { toBias } from '../packages/affect/src/engine.ts'
+import { DEFAULT_TEMPERAMENT } from '../packages/affect/src/types.ts'
+import { createAppraiser } from '../packages/app/src/appraiser.js'
+import { summaryText } from '../packages/app/src/injector.js'
+import { VOICE_RULES } from '../packages/voice/src/voice.js'
 import { chat } from './llm.ts'
 
 const OUT = path.join(process.cwd(), 'ab-results')

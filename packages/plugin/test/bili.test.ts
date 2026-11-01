@@ -7,7 +7,7 @@ import { Creature } from '../../being/src/creature.ts'
 import { DEFAULT_TEMPERAMENT } from '../../affect/src/types.ts'
 import { browseDayKey, slimItem } from '../../bilibili/src/browse.ts'
 import { normalizeConfig } from '../../app/src/config.js'
-import { authPath, clearCookie, mentionPrefix, parseCookieInput, publicAuth, readAuth, saveAccount, saveAuth } from '../lib/browse/auth.js'
+import { authPath, clearCookie, mentionPrefix, parseCookieInput, publicAuth, readAuth, saveAccount, saveAuth } from '../../bilibili/src/auth.js'
 import { createClient, normalizeCookie } from '../../bilibili/src/client.js'
 import {
   commentCountToday, commentStatus, herCommentsRecent, postComment, postReply, renderReplies,

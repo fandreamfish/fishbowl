@@ -8,9 +8,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Creature } from '../src/core/creature.ts'
+import { Creature } from '../packages/being/src/creature.ts'
 import { Memory } from '../packages/memory/src/memory.ts'
-import { toBias } from '../src/core/engine.ts'
+import { toBias } from '../packages/affect/src/engine.ts'
 
 function arg(name, dflt) {
   const i = process.argv.indexOf(name)
