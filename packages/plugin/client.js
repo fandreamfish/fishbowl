@@ -74,6 +74,10 @@ function makeFactory() {
       if (m) return 's-' + m[1] + '…'
       return s.length > 14 ? s.slice(0, 14) + '…' : s
     }
+    const samePath = (a, b) => {
+      const n = (v) => String(v ?? '').replace(/[\\/]+/g, '/').replace(/\/+$/, '').toLowerCase()
+      return !!a && !!b && n(a) === n(b)
+    }
     const wsName = (names, p) => (names && names[p]) || (String(p).split(/[\\\\/]/).filter(Boolean).pop() || String(p))
     const sessName = (s) => (s && s.title) || shortId((s && s.id) || '')
     const occText = (occ) => {
@@ -1272,7 +1276,7 @@ function makeFactory() {
           onClick: () => { if (!disabled) onClick() },
           children: label,
         })
-        const roomsOf = (w) => sessions.filter((s2) => (s2.workspace || '') === (w || ''))
+        const roomsOf = (w) => sessions.filter((s2) => samePath(s2.workspace, w))
         // 占用判定要把"自己"排除：这屋子只有她住时，她可以重新选这个屋子
         const wsOthers = (w) => {
           const owner = occupiedWs[w]

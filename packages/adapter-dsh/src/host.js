@@ -365,17 +365,23 @@ export function createDshHost(ctx, cfg) {
       }
       // 会话列表以 DSH 工作区的 sessionIds 为准，和侧边栏保持一致
       const regs = workspaceRegistry()?.list?.() ?? []
+      const byNorm = new Map()
+      for (const w of regs) if (w?.path) byNorm.set(normPath(w.path), String(w.title ?? ''))
+      // 键必须和返回给界面的 workspaces 完全一致（注册表里的写法可能小写/正斜杠）
+      const workspaceNames = {}
+      const nativeOf = new Map()
+      for (const p of scopes.workspaces) {
+        workspaceNames[p] = byNorm.get(normPath(p)) ?? ''
+        nativeOf.set(normPath(p), p)
+      }
       const sessions = []
       const seenSess = new Set()
-      const workspaceNames = {}
       for (const w of regs) {
-        if (!w?.path) continue
-        workspaceNames[w.path] = String(w.title ?? '')
         for (const sid of (w.sessionIds ?? [])) {
           const id = String(sid)
           if (seenSess.has(id)) continue
           seenSess.add(id)
-          sessions.push({ id, workspace: w.path, title: titleOf(id) })
+          sessions.push({ id, workspace: nativeOf.get(normPath(w.path)) ?? w.path, title: titleOf(id) })
         }
       }
       // 没有注册表时退回枚举，至少能列出来
