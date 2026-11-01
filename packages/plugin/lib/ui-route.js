@@ -283,6 +283,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
   const stateDir = cfg.stateDir
 
   function fishView(c, sessions) {
+    const fcfg = fishConfigView(cfg, c)
     const affect = c.fold().affect
     const events = c.store.readEvents()
     const mv = memoryDetail(c, cfg)
