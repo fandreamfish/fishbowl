@@ -8,7 +8,8 @@ import { workspaceOf } from '../../../app/src/index.js'
 import { configFor } from '../../../app/src/index.js'
 
 const ACTIONS = {
-  'comment.post': { label: '在 B 站说一句话', uses: 1, ttlMs: 2 * 60 * 60_000 },
+  'comment.post': { label: '在 B 站说一句话', uses: 1, ttlMs: 2 * 60 * 60_000, gate: 'comment' },
+  'browse': { label: '看一次 B 站', uses: 1, ttlMs: 2 * 60 * 60_000, gate: 'browse' },
 }
 
 export function createPermissionTool(binding, cfg) {
@@ -46,10 +47,13 @@ export function createPermissionTool(binding, cfg) {
         const spec = ACTIONS[args?.action]
         if (!spec) return { ok: false, note: '这件事不能申请。' }
         const fcfg = configFor(cfg, creature)
-        if (fcfg.comment?.enabled !== true) {
+        if (spec.gate === 'comment' && fcfg.comment?.enabled !== true) {
           return { ok: false, note: '现在还不能在外面说话（他没开这个口子）。' }
         }
-        if (fcfg.comment?.autoApprove === true) {
+        if (spec.gate === 'browse' && fcfg.browse?.enabled !== true) {
+          return { ok: false, note: '现在打不开 B 站（他没开这个口子）。' }
+        }
+        if (spec.gate === 'comment' && fcfg.comment?.autoApprove === true) {
           return { ok: true, note: '他之前说过这类事不用每次问，直接说就行。' }
         }
         const target = String(args?.target ?? '').trim()

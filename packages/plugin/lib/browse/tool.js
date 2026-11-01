@@ -14,6 +14,7 @@
 import { workspaceOf } from '../../../app/src/index.js'
 import { inSelfTime, lookForCreature } from '../../../bilibili/src/index.js'
 import { configFor } from '../../../app/src/index.js'
+import { activeGrants, consumePermit, findPermit, recordBreach } from '../../../being/src/index.ts'
 
 export function createBrowseTool(binding, cfg) {
   return {
@@ -63,6 +64,14 @@ export function createBrowseTool(binding, cfg) {
         const fcfg = configFor(cfg, creature)
     if (fcfg.capabilities?.browse === false) return { ok: false, text: '', note: '我现在不上网。' }
     const selfTime = inSelfTime(creature.meta.creatureId)
+        // 他说过"需要申请"：没许可也让她看，但会被记下来（约定，不是围墙）
+        const grants = activeGrants(creature, 'browse')
+        const needsAsk = grants.some((g) => /申请/.test(String(g.text ?? '')))
+        let browsePermit = null
+        if (needsAsk) {
+          browsePermit = findPermit(creature, 'browse', '')
+          if (browsePermit) consumePermit(creature, browsePermit)
+        }
         const r = await lookForCreature(creature, configFor(cfg, creature), {
           what,
           keyword: args?.keyword,
@@ -73,6 +82,7 @@ export function createBrowseTool(binding, cfg) {
           // 用户让她现在看，就不受「上网时段」限制；硬开关与风控仍然生效。
           force: true,
         })
+        if (r.ok && needsAsk && !browsePermit) recordBreach(creature, { action: 'browse', target: String(what), detail: '没等他同意就看了' })
         return { ok: !!r.ok, text: String(r.text ?? ''), note: String(r.note ?? '') }
       } catch (err) {
         return { ok: false, text: '', note: String(err?.message ?? err).slice(0, 120) }
