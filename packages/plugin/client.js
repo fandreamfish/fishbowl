@@ -1104,7 +1104,7 @@ function makeFactory() {
               e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '清醒节律' }, 'h'),
               e(Toggle, { on: wake.enabled, onChange: () => setWake('enabled', !wake.enabled), k: 'sw' }),
             ] }, 'head'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。' }, 'hint'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。活动时段之外算睡着：不想念，也不会来叫你。' }, 'hint'),
             e('div', { style: { ...rowS, marginBottom: 6 }, children: [
               e('span', { style: lab, children: '活动时段' }, 'l'),
               e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [

@@ -19,7 +19,7 @@ import {
   recordWake as recordWakeOf,
   selfWakeTimes as selfWakeTimesOf,
 } from './signals.ts'
-import { uid } from './util.ts'
+import { uid, wakingSecondsBetween } from './util.ts'
 
 export class Creature {
   readonly store: Store
@@ -27,11 +27,14 @@ export class Creature {
 
   /** 半衰期可以按鱼配置（设置页里改）；默认见 engine.HALF_LIFE_DAYS。 */
   readonly halfLives: HalfLives
+  /** 清醒时段；配了就让想念只在这几小时里涨。 */
+  waking: { window: [string, string]; timezone: string } | null = null
 
-  constructor(store: Store, meta: CreatureMeta, halfLives: HalfLives = HALF_LIFE_DAYS) {
+  constructor(store: Store, meta: CreatureMeta, halfLives: HalfLives = HALF_LIFE_DAYS, waking: { window: [string, string]; timezone: string } | null = null) {
     this.store = store
     this.meta = meta
     this.halfLives = halfLives
+    this.waking = waking
   }
 
   get temperament(): Temperament { return this.meta.temperament }
@@ -40,9 +43,9 @@ export class Creature {
     return new Creature(Store.create(dir, meta), meta, halfLives)
   }
 
-  static open(dir: string, opts: { halfLives?: HalfLives } = {}): Creature {
+  static open(dir: string, opts: { halfLives?: HalfLives; waking?: { window: [string, string]; timezone: string } | null } = {}): Creature {
     const store = new Store(dir)
-    return new Creature(store, store.readMeta(), opts.halfLives)
+    return new Creature(store, store.readMeta(), opts.halfLives, opts.waking ?? null)
   }
 
   /**
@@ -56,7 +59,9 @@ export class Creature {
       if ((e.t === 'turn' || e.t === 'episode' || e.t === 'contact') && Number(e.ts) > last) last = Number(e.ts)
     }
     if (!last) return this.fold().affect.longing
-    const hours = Math.max(0, (now - last) / 3_600_000)
+    const hours = this.waking
+      ? wakingSecondsBetween(last, now, this.waking.window, this.waking.timezone) / 3600
+      : Math.max(0, (now - last) / 3_600_000)
     // 半天的空档就开始明显想念；两天左右到顶（不是几分钟就满）
     return Math.min(1, 0.35 * Math.log1p(hours / 2))
   }

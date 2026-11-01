@@ -155,3 +155,11 @@ export function halfLivesFor(cfg, creatureId) {
   const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
   return { guilt: days(a.guiltDays, 3), longing: days(a.longingDays, 2), negative: days(a.negativeDays ?? a.namedDays, 2) }
 }
+/** 这条鱼的清醒时段（想念只在这段时间里涨）。 */
+export function wakingFor(cfg, creatureId) {
+  const over = readFishConfig(cfg.stateDir, creatureId)
+  const w = over?.wake?.activeWindow || cfg.wake?.activeWindow
+  const window = Array.isArray(w) && w.length === 2 ? [String(w[0]), String(w[1])] : null
+  if (!window) return null
+  return { window, timezone: cfg.timezone || 'Asia/Shanghai' }
+}

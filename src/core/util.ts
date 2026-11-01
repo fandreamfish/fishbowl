@@ -52,3 +52,23 @@ export function mulberry32(seed: number): () => number {
 export function uid(): string {
   return globalThis.crypto.randomUUID()
 }
+
+/**
+ * 两个时刻之间，有多少秒落在"清醒时段"里。
+ * 睡着的那几个小时不该算进想念——否则一觉睡醒她会显得比睡前更想你。
+ * 用 5 分钟采样（够准，且有上限），不依赖第三方时区库。
+ */
+export function wakingSecondsBetween(fromMs: number, toMs: number, window: [string, string], timezone: string): number {
+  if (!(toMs > fromMs)) return 0
+  const ws = parseHm(window[0])
+  const we = parseHm(window[1])
+  const inWindow = (m: number) => (ws <= we ? m >= ws && m < we : m >= ws || m < we)
+  const stepMs = 5 * 60_000
+  const maxSteps = 200_000
+  let sum = 0
+  let steps = 0
+  for (let t = fromMs; t < toMs && steps < maxSteps; t += stepMs, steps++) {
+    if (inWindow(wallClockMinutes(t, timezone))) sum += Math.min(stepMs, toMs - t)
+  }
+  return sum / 1000
+}

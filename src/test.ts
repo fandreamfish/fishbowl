@@ -9,6 +9,7 @@ import { Creature } from './core/creature.ts'
 import { applyElapse, toBias } from './core/engine.ts'
 import { freshAffect } from './core/types.ts'
 import { Scheduler } from './core/scheduler.ts'
+import { wakingSecondsBetween } from './core/util.ts'
 import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from './core/types.ts'
 import type { Bias, CreatureMeta } from './core/types.ts'
 import * as sc from './scenarios.ts'
@@ -150,6 +151,19 @@ check('重逢：想念释放 60%', near(back.longing, 0.40, 0.01), `longing=${ba
   sl.recordEpisode('turn', sc.neutral(), 'user: 我回来了 assistant: 嗯', T1 + 48 * 3_600_000)
   const after = sl.affectNow(T1 + 48 * 3_600_000).longing
   check('互动后想念回落', after < 0.05, `after=${after.toFixed(2)}`)
+}
+// ---------------------------------------------------------------- 想念只算清醒时段
+{
+  const T = new Date('2026-11-01T00:00:00+08:00').getTime()
+  const h = wakingSecondsBetween(T, T + 86_400_000, ['08:00', '23:30'], 'Asia/Shanghai') / 3600
+  check('一整天有 15.5 小时清醒', near(h, 15.5, 0.1), `h=${h.toFixed(2)}`)
+  const sw = mk('sw')
+  const Tw = T + 20 * 3_600_000 // 当天 20:00
+  sw.recordEpisode('turn', sc.neutral(), 'x', Tw)
+  const awake = sw.affectNow(T + 32 * 3_600_000).longing // 次日 08:00：只醒了 3.5h
+  sw.waking = { window: ['08:00', '23:30'], timezone: 'Asia/Shanghai' }
+  const slept = sw.affectNow(T + 32 * 3_600_000).longing
+  check('睡着的时间不算想念', slept < awake - 0.1, `with=${awake.toFixed(2)} without=${slept.toFixed(2)}`)
 }
 // ---------------------------------------------------------------- 死区
 const db = mk('db')

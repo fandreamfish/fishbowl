@@ -180,6 +180,8 @@ if (|arousal − baseline_arousal| < 0.12 && |valence − mood| < 0.15) → 瞬�
 
 关系型情绪**不能**用纯衰减建模。纯衰减的结果是：你走一周，它变得毫无波澜——那不是想念，那是遗忘。
 
+想念是「距离上次互动多久」的函数（`0.35·ln(1+清醒小时/2)`）：越久越想，见到就回落，睡着的那几小时不算。
+
 ```
 longing = clamp( k·ln(1 + hours_absent), 0, 1 ) · intimacy_weight
 Δvalence_absence = −0.6·longing
