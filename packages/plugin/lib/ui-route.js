@@ -50,6 +50,7 @@ export function summarizeEvent(e) {
     case 'note': return { text: e.text, meta: '小纸条' }
     case 'request': return { text: e.text, meta: '请求' }
     case 'request-answered': return { text: e.ref.slice(0, 8), meta: e.answer === 'yes' ? '同意' : '不同意' }
+    case 'repair': return { text: '被原谅了一次', meta: '愧疚 -' + Number(e.amount ?? 0).toFixed(2) }
     case 'grant': return { text: e.text, meta: e.allowed ? `允许：${e.topic}` : `撤销：${e.topic}` }
     case 'wake': return { text: e.mode === 'self' ? '自己醒来' : '想找他', meta: e.reason ?? '' }
     case 'reinforce': return { text: e.ref.slice(0, 8), meta: '又提到' }

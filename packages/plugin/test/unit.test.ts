@@ -10,6 +10,7 @@ import { appraiseScripted, APPRAISER_SYSTEM_PROMPT } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
 import { normalizeConfig } from '../lib/config.js'
 import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerdict, createConstraints } from '../lib/constraints.js'
+import { forgivenessOf } from '../lib/collector.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
@@ -555,6 +556,19 @@ console.log('== M26：唤醒循环能真的叫醒（集成） ==')
   const st = JSON.parse(fs.readFileSync(path.join(sdW, 'wake-state.json'), 'utf8'))
   check('状态文件写下她的由头', Array.isArray(st.entries) && st.entries.some((e) => e.reason))
   fs.rmSync(sdW, { recursive: true, force: true })
+}
+console.log('== M28：被原谅 → 愧疚下降 ==')
+check('原谅的话能认出来', forgivenessOf('没事，别往心里去') && forgivenessOf('算了，翻篇了') && !forgivenessOf('今天天气不错'))
+{
+  const sdR = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-'))
+  const cR = createBinding(normalizeConfig({ stateDir: sdR })).birth('愧疚鱼')
+  cR.recordEpisode('test', { goalCongruence: -0.5, agency: 0.5, certainty: 0.5, normViolation: 0.8, relationalImpact: -0.5, stake: 0.5, attribution: 'self' } as any)
+  const g1 = cR.fold().affect.guilt
+  check('违诺让愧疚升高', g1 > 0.5, 'guilt=' + g1.toFixed(2))
+  cR.recordRepair(0.35)
+  const g2 = cR.fold().affect.guilt
+  check('修复让愧疚下降', g2 < g1 && Math.abs(g1 - g2 - 0.35) < 1e-6, 'guilt=' + g2.toFixed(2))
+  fs.rmSync(sdR, { recursive: true, force: true })
 }
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

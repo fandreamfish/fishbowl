@@ -48,6 +48,11 @@ export function buildTranscript(items, limit = 2400) {
 }
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
+/** 被原谅：这些话说出来，愧疚才能真正降下去。 */
+const REPAIR_RE = /(没事|不要紧|没关系|算了|原谅|别(?:往心里去|在意|自责)|不怪你|翻篇)/
+export function forgivenessOf(text) {
+  return REPAIR_RE.test(String(text ?? ''))
+}
 export function createCollector(ctx, binding, cfg, host, memorySource) {
   host = host ?? createDshHost(ctx, cfg)
   const appraise = createAppraiser(cfg)
@@ -317,6 +322,11 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         }
         if (a.normViolation >= 0.2) {
           void checkBroken(session.id, creature, transcript)
+        }
+        // 被原谅：愧疚才有出口（设计上只有 repair 能减）
+        if (forgivenessOf(lastUserText) && creature.fold().affect.guilt > 0.2) {
+          creature.recordRepair(0.35)
+          trace({ ts: Date.now(), sessionId: session.id, creatureId: creature.meta.creatureId, event: 'repair', amount: 0.35 })
         }
         // —— M3.2：共享活动 ——
         if (ACTIVITY_RE.test(transcript)) {
