@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Creature } from '../src/core/creature.ts'
+import { Memory } from '../packages/memory/src/memory.ts'
 import { toBias } from '../src/core/engine.ts'
 
 function arg(name, dflt) {
@@ -19,24 +20,24 @@ function arg(name, dflt) {
 const stateDir = arg('--state-dir', path.join(os.homedir(), '.fishbowl', 'creatures'))
 const [cmd, target] = process.argv.slice(2).filter(a => !a.startsWith('--'))
 
-function loadBindings() {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(stateDir, 'bindings.json'), 'utf8'))
-  } catch {
-    return {}
+function allCreatures() {
+  const out = []
+  let names = []
+  try { names = fs.readdirSync(stateDir).filter((n) => fs.existsSync(path.join(stateDir, n, 'meta.json'))) } catch { return out }
+  for (const n of names) {
+    try { out.push(Creature.open(path.join(stateDir, n))) } catch { /* 坏目录跳过 */ }
   }
+  return out
 }
 
 function resolveCreature(target) {
-  const bindings = loadBindings()
-  // 先按会话 id，再按个体 id，最后按名字
-  if (bindings[target]) return Creature.open(path.join(stateDir, bindings[target]))
-  if (fs.existsSync(path.join(stateDir, target, 'meta.json'))) return Creature.open(path.join(stateDir, target))
-  for (const [sid, cid] of Object.entries(bindings)) {
-    const c = Creature.open(path.join(stateDir, String(cid)))
-    if (c.meta.name === target) return c
-  }
-  return null
+  const all = allCreatures()
+  // 先按个体 id，再按住处（会话/工作区），最后按名字
+  const byId = all.find((c) => c.meta.creatureId === target)
+  if (byId) return byId
+  const byOcc = all.find((c) => c.meta.occupancy && (c.meta.occupancy.id === target || c.meta.occupancy.workspace === target))
+  if (byOcc) return byOcc
+  return all.find((c) => c.meta.name === target) ?? null
 }
 
 function fmtBias(c) {
@@ -49,31 +50,32 @@ function fmtBias(c) {
 }
 
 if (cmd === 'list') {
-  const bindings = loadBindings()
   console.log(`状态目录: ${stateDir}\n`)
-  if (Object.keys(bindings).length === 0) { console.log('（空）'); process.exit(0) }
-  for (const [sid, cid] of Object.entries(bindings)) {
-    try {
-      const c = Creature.open(path.join(stateDir, String(cid)))
-      const episodes = c.store.readEvents().filter(e => e.t === 'episode').length
-      console.log(`会话 ${sid}`)
-      console.log(`  个体 ${cid.slice(0, 8)}  名字: ${c.meta.name}  出生: ${c.meta.bornAt.slice(0, 10)}  轮次: ${episodes}`)
-      console.log(`  ${fmtBias(c)}`)
-    } catch (err) {
-      console.log(`会话 ${sid} → ${cid.slice(0, 8)}: 读取失败 ${String(err?.message ?? err)}`)
-    }
+  const all = allCreatures()
+  if (all.length === 0) { console.log('（空）'); process.exit(0) }
+  for (const c of all) {
+    const turns = c.store.readEvents().filter((e) => e.t === 'episode' || e.t === 'turn').length
+    const occ = c.meta.occupancy ? `${c.meta.occupancy.kind}:${c.meta.occupancy.id}` : '（没住处）'
+    console.log(`个体 ${c.meta.creatureId.slice(0, 8)}  名字: ${c.meta.name}  出生: ${String(c.meta.bornAt).slice(0, 10)}  轮次: ${turns}`)
+    console.log(`  住处 ${occ}`)
+    console.log(`  ${fmtBias(c)}`)
   }
 } else if (cmd === 'status' && target) {
   const c = resolveCreature(target)
   if (!c) { console.error(`找不到：${target}`); process.exit(1) }
-  const mem = c.memorySummary()
-  console.log(`名字: ${mem.name ?? '（未命名）'}  个体: ${c.meta.creatureId.slice(0, 8)}  时区: ${c.meta.timezone}`)
+  const m = new Memory({ dir: path.join(stateDir, c.meta.creatureId), lock: 'off' })
+  const v = m.view()
+  const active = v.memories.filter((x) => x.status === 'active')
+  const ofKind = (k) => active.filter((x) => x.kind === k).slice(0, 3).map((x) => x.claim)
+  const name = c.meta.name && !c.meta.name.startsWith('fish-') ? c.meta.name : null
+  console.log(`名字: ${name ?? '（未命名）'}  个体: ${c.meta.creatureId.slice(0, 8)}  时区: ${c.meta.timezone}`)
   console.log(fmtBias(c))
-  console.log('记得的事:', mem.semantics.join('；') || '（无）')
-  console.log('教训:', mem.procedures.join('；') || '（无）')
-  console.log('自我认知:', mem.self.join('；') || '（还没有足够的经历）')
-  console.log('未完成的承诺:', mem.commitments.join('；') || '（无）')
-  console.log('正在一起做的事:', mem.activity || '（无）')
+  console.log('记得的事:', ofKind('fact').join('；') || '（无）')
+  console.log('教训:', ofKind('lesson').join('；') || '（无）')
+  console.log('自我认知:', ofKind('self').join('；') || '（还没有足够的经历）')
+  console.log('未完成的承诺:', c.openCommitments().slice(-2).map((x) => x.text).join('；') || '（无）')
+  console.log('正在一起做的事:', c.currentActivity() || '（无）')
+  m.close?.()
   const pending = c.store.readOutbox().filter(o => !o.delivered)
   console.log('待投递:', pending.length === 0 ? '（无）' : `${pending.length} 条`)
 } else if ((cmd === 'freeze' || cmd === 'unfreeze') && target) {

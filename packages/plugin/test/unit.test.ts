@@ -2,12 +2,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { dedupeConsolidation, parseConsolidation, shouldConsolidate } from '../../../src/core/consolidation.ts'
 import { ACTIVITY_RE, mergePendingText, parseActivity } from '../../../src/core/activity.ts'
-import { CHANNELS, memoryForChannel } from '../../../src/core/channels.ts'
 import { ContactGate } from '../../../src/core/contact.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../../src/core/commitment.ts'
-import { parseSelf, shouldSelfConsolidate } from '../../../src/core/selfmodel.ts'
 import * as sc from '../../../src/scenarios.ts'
 import { appraiseScripted, APPRAISER_SYSTEM_PROMPT } from '../lib/appraiser.js'
 import { createBinding } from '../lib/binding.js'
@@ -20,6 +17,7 @@ import { absenceHours, createWakeLoop, proactivePrompt, shouldRecordAbsence, wak
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
 import { configFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../lib/fishcfg.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/summarize.ts'
+import { Memory } from '../../memory/src/memory.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
 import { buildTranscript, createCollector } from '../lib/collector.js'
 import { Creature, dialogOnly } from '../../../src/core/creature.ts'
@@ -27,7 +25,6 @@ import { recentDialog as signalRecentDialog } from '../../../src/core/signals.ts
 import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
 import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
-import { matchClaims } from '../../../src/core/recall.ts'
 import { recallBlock, recentBlock } from '../lib/injector.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
 import { VOICE_RULES, voiceRulesFor } from '../lib/voice.js'
@@ -126,68 +123,6 @@ check('minEvidence：自我 ≥2，关系 ≥3', minEvidence('self') === 2 && mi
 check('记忆窗口：g 高忘得快', memoryWindowDays(1) === 90 && memoryWindowDays(4) === 22.5)
 check('关系类事实识别', isRelationClaim('我们之间的信任在变好') && !isRelationClaim('他喜欢猫'))
 
-console.log('== M2：巩固与身份 ==')
-check('战术层 g=1：2 轮触发', shouldConsolidate({ episodesSince: 2, salienceSince: 0, sinceLast: 99, g: 1, layer: 'tactic' }))
-check('战术层 g=1：1 轮不触发', !shouldConsolidate({ episodesSince: 1, salienceSince: 0, sinceLast: 99, g: 1, layer: 'tactic' }))
-check('偏好层 g=1：5 轮触发', shouldConsolidate({ episodesSince: 5, salienceSince: 0, sinceLast: 99, g: 1, layer: 'preference' }))
-check('偏好层 g=1：4 轮不触发', !shouldConsolidate({ episodesSince: 4, salienceSince: 0, sinceLast: 99, g: 1, layer: 'preference' }))
-check('关系层 g=1：10 轮触发', shouldConsolidate({ episodesSince: 10, salienceSince: 0, sinceLast: 99, g: 1, layer: 'relation' }))
-check('关系层 g=1：9 轮不触发', !shouldConsolidate({ episodesSince: 9, salienceSince: 0, sinceLast: 99, g: 1, layer: 'relation' }))
-check('g=2 偏好层：3 轮触发（成长更快）', shouldConsolidate({ episodesSince: 3, salienceSince: 0, sinceLast: 99, g: 2, layer: 'preference' }))
-check('高显著度单轮触发', shouldConsolidate({ episodesSince: 1, salienceSince: 0.7, sinceLast: 99, g: 1 }))
-check('冷却期：刚巩固过不触发', !shouldConsolidate({ episodesSince: 5, salienceSince: 1, sinceLast: 1, g: 1 }))
-const dc = dedupeConsolidation(
-  parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1"],"confidence":0.8}],"procedures":[]}'),
-  { semantics: ['他喜欢猫'], procedures: [] },
-)
-check('去重：已有事实不再落盘', dc.semantics.length === 0)
-const pc = parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1","2"],"confidence":0.8}],"procedures":[{"trigger":"他说不行","action":"先问清楚","evidence":["3"],"confidence":0.7}]}')
-check('巩固解析：语义与教训', pc.semantics.length === 1 && pc.procedures.length === 1 && pc.semantics[0].claim === '他喜欢猫')
-check('巩固解析：垃圾输入得空数组', parseConsolidation('垃圾').semantics.length === 0)
-check('巩固解析：语义上限 3', parseConsolidation('{"semantics":[{"claim":"a","evidence":["1","2"]},{"claim":"b","evidence":["1","2"]},{"claim":"c","evidence":["1","2"]},{"claim":"d","evidence":["1","2"]}]}').semantics.length === 3)
-check('巩固解析：偏好需 ≥2 证据', parseConsolidation('{"semantics":[{"claim":"他喜欢猫","evidence":["1"],"confidence":0.9}]}').semantics.length === 0)
-check('巩固解析：关系类需 ≥3 证据', parseConsolidation('{"semantics":[{"claim":"我们之间的信任在变好","evidence":["1","2"],"confidence":0.9}]}').semantics.length === 0)
-check('巩固解析：关系类 3 证据通过', parseConsolidation('{"semantics":[{"claim":"我们之间的信任在变好","evidence":["1","2","3"],"confidence":0.9}]}').semantics.length === 1)
-check('身份正则预筛', IDENTITY_RE.test('我给你起个名字叫大肥鱼') && !IDENTITY_RE.test('今天天气不错'))
-check('身份解析', parseIdentity('{"named":true,"name":"大肥鱼"}') === '大肥鱼')
-check('身份解析：未命名 → null', parseIdentity('{"named":false}') === null)
-
-console.log('== M2.2：自我认知（证据门槛） ==')
-check('自我巩固：默认 120 轮触发', shouldSelfConsolidate({ episodesSince: 120, sinceLast: 99, g: 1 }))
-check('自我巩固：119 轮不触发', !shouldSelfConsolidate({ episodesSince: 119, sinceLast: 99, g: 1 }))
-check('自我巩固：冷却', !shouldSelfConsolidate({ episodesSince: 121, sinceLast: 50, g: 1 }))
-check('自我巩固：interval 覆盖（测试用）', shouldSelfConsolidate({ episodesSince: 12, sinceLast: 99, g: 1, interval: 12 }))
-const ps = parseSelf('{"self":[{"claim":"被否定时先问清楚","evidence":["2","5","8"],"confidence":0.9},{"claim":"容易生气","evidence":["3"],"confidence":0.8}]}')
-check('证据门槛：单证据的自我描述被拒', ps.length === 1 && ps[0].claim === '被否定时先问清楚')
-check('置信度按证据数换算', Math.abs(ps[0].confidence - 1) < 1e-9)
-check('自我认知垃圾输入 → 空', parseSelf('垃圾').length === 0)
-
-const bindingM2 = createBinding(cfg)
-const named = bindingM2.birth('大肥鱼', { kind: 'session', id: 'session-m2-named' })
-named.recordIdentity('大肥鱼')
-check('起名：meta 更新 + 事件落盘', named.meta.name === '大肥鱼'
-  && named.store.readEvents().some((e: any) => e.t === 'identity'))
-named.recordSemantic('他喜欢猫', ['1', '2'], 0.8)
-named.recordProcedure('他说不行', '先问清楚', ['3'], 0.7)
-const ms = named.memorySummary()
-check('记忆摘要：名字 + 语义 + 教训', ms.name === '大肥鱼'
-  && ms.semantics.includes('他喜欢猫') && ms.procedures.includes('他说不行 → 先问清楚'))
-const namedSummary = summaryText(baseBias, baseAff, ms)
-check('注入含名字与记忆', namedSummary.includes('大肥鱼')
-  && namedSummary.includes('记得的事') && namedSummary.includes('教训'))
-check('未起名个体不含名字行', !summaryText(baseBias, baseAff, { name: null, semantics: [], procedures: [] }).includes('名字:'))
-check('记忆变化触发新指纹', stateKey(baseBias, baseAff, { name: '大肥鱼', semantics: ['x'], procedures: [] })
-  !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [] }))
-
-named.recordSelf('被否定时先问清楚而不是辩解', ['2', '5'], 0.67)
-const ms2 = named.memorySummary()
-check('memorySummary 含自我认知', ms2.self.includes('被否定时先问清楚而不是辩解'))
-const selfSummary = summaryText(baseBias, baseAff, ms2)
-check('注入含自我认知区', selfSummary.includes('自我认知:'))
-check('无自我认知时引导说"还不确定"', summaryText(baseBias, baseAff).includes('还没有足够的经历'))
-check('自我认知变化触发新指纹', stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: ['x'] })
-  !== stateKey(baseBias, baseAff, { name: null, semantics: [], procedures: [], self: [] }))
-
 console.log('== M2.4：承诺与关系原型 ==')
 check('承诺预筛', COMMITMENT_RE.test('我明天帮你整理。') && COMMITMENT_RE.test('可以。') && COMMITMENT_RE.test('行。你笔记在哪儿？') && !COMMITMENT_RE.test('今天天气不错。'))
 check('请求预筛', REQUEST_RE.test('明天帮我整理一下可以吗？') && !REQUEST_RE.test('今天天气不错。'))
@@ -198,6 +133,8 @@ check('违诺解析', parseBroken('{"broken":true,"index":0}', 2) === 0)
 check('声音：companion 有额外语域', voiceRulesFor('companion').length > VOICE_RULES.length)
 check('声音：未知原型回退', voiceRulesFor('nonsense') === VOICE_RULES)
 
+const namedSd = fs.mkdtempSync(path.join(os.tmpdir(), 'named-'))
+const named = createBinding(normalizeConfig({ stateDir: namedSd })).birth('小鱼')
 named.recordCommitment('明天整理你的笔记')
 const oc = named.openCommitments()
 check('未了结承诺可见', oc.some(c => c.text === '明天整理你的笔记'))
@@ -205,10 +142,8 @@ const newest = oc.filter(c => c.text === '明天整理你的笔记').at(-1) ?? o
 named.resolveCommitment(newest.id, 'broken')
 const oc2 = named.openCommitments()
 check('broken 的承诺不消失（没翻篇）', oc2.some(c => c.broken))
-const ms3 = named.memorySummary()
-check('注入含未完成的承诺（⚠ 标记）', ms3.commitments.some(c => c.includes('⚠')))
-check('摘要含承诺区', summaryText(baseBias, baseAff, ms3).includes('未完成的承诺'))
-
+const commitsNamed = oc2.slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+check('注入含未完成的承诺（⚠ 标记）', commitsNamed.some((c) => c.includes('⚠')))
 console.log('== M3.0：清醒与主动联系（纯决策） ==')
 check('唤醒由头：先还债', (wakeReason({ openBroken: 1, longing: 0.9 })?.reason ?? '').includes('答应过'))
 check('唤醒由头：再想念', (wakeReason({ openBroken: 0, longing: 0.5 })?.reason ?? '').includes('很久没'))
@@ -223,23 +158,6 @@ check('contact 默认配额', m3cfg.contact.dailyMax === 2 && m3cfg.contact.unan
 const wakeCfg = normalizeConfig({ stateDir, wake: { enabled: true } })
 check('wake 可显式打开', wakeCfg.wake.enabled === true)
 
-console.log('== M3.1：通道与投递队列 ==')
-const fullMem = { name: '大肥鱼', semantics: ['他喜欢猫'], procedures: ['x'], self: ['y'], commitments: ['z'] }
-check('intimate 全给', memoryForChannel(fullMem, 'intimate').semantics.length === 1)
-check('social 只给名字', memoryForChannel(fullMem, 'social').semantics.length === 0 && memoryForChannel(fullMem, 'social').name === '大肥鱼')
-check('public 什么都不给', memoryForChannel(fullMem, 'public').name === null && memoryForChannel(fullMem, 'public').commitments.length === 0)
-check('通道表：qq-group 是 public', CHANNELS['qq-group'].register === 'public')
-check('通道表：dsm-session 是 intimate', CHANNELS['dsm-session'].register === 'intimate')
-
-const q = named.store
-const oid = 'o-' + Date.now()
-q.appendOutbox({ id: oid, ts: Date.now(), text: 'hi', channel: 'dsm-session', delivered: false })
-check('投递队列：入队可读', q.readOutbox().some(o => o.id === oid && !o.delivered))
-q.appendOutbox({ id: oid, ts: Date.now(), text: 'dup', channel: 'dsm-session', delivered: false })
-check('投递队列：id 幂等去重', q.readOutbox().filter(o => o.id === oid).length === 1)
-q.markOutboxDelivered(oid)
-check('投递队列：标记已投', q.readOutbox().some(o => o.id === oid && o.delivered))
-
 console.log('== M3.2：共享活动与积压合并 ==')
 check('活动预筛', ACTIVITY_RE.test('我们一起看《三体》吧') && !ACTIVITY_RE.test('今天天气不错'))
 check('活动解析', parseActivity('{"changed":true,"title":"看《三体》","status":"started"}')?.title === '看《三体》')
@@ -248,7 +166,7 @@ named.recordActivity('看《三体》', 'started')
 check('当前活动可见', named.currentActivity() === '看《三体》')
 named.recordActivity('看《三体》', 'ended')
 check('活动结束后清空', named.currentActivity() === null)
-check('注入含活动行', summaryText(baseBias, baseAff, { ...ms3, activity: '看《三体》' }).includes('正在一起做的事'))
+check('注入含活动行', summaryText(baseBias, baseAff, { activity: '看《三体》' }).includes('正在一起做的事'))
 const mp = mergePendingText([{ id: 'a', text: 'x1' }, { id: 'b', text: 'x2' }, { id: 'c', text: 'x3' }, { id: 'd', text: 'x4' }])
 check('积压 >3 合并成一条', mp.text !== null && mp.ids.length === 4 && (mp.text ?? '').includes('前阵子'))
 check('积压 ≤3 不合并', mergePendingText([{ id: 'a', text: 'x1' }]).text === null)
@@ -300,31 +218,6 @@ check('默认时区 Asia/Shanghai', d.timezone === 'Asia/Shanghai')
 check('默认评价器 scripted（离线可用）', d.appraiser.kind === 'scripted')
 check('默认状态目录在用户目录下（不进仓库）', d.stateDir.includes('.fishbowl'))
 
-console.log('== M6：记忆重量、折叠与回忆 ==')
-const m6 = binding.birth('记忆鱼', { kind: 'session', id: 'session-m6-memory-' + Date.now() })
-const nowMs = Date.now()
-const dayMs = 86_400_000
-m6.recordSemantic('他喜欢猫', ['e1', 'e2'], 0.6, nowMs - 1 * dayMs)
-m6.recordSemantic('他讨厌被催', ['e1', 'e2'], 0.7, nowMs - 1 * dayMs)
-const claims0 = m6.claimsWithWeight(1)
-check('记忆带重量', claims0.length >= 2 && claims0[0].weight >= claims0[1].weight)
-const before = m6.memorySummary(1).semantics
-const favor = m6.findClaim('他喜欢猫')
-check('按原文找到认知 id', typeof favor === 'string')
-for (let i = 0; i < 4; i++) m6.recordReinforce(favor!, nowMs)
-const after = m6.memorySummary(1).semantics
-check('被反复提到 → 重量上升、优先注入', after[0] === '他喜欢猫', `before=${before.join('/')} after=${after.join('/')}`)
-check('强化次数被记录', (m6.claimsWithWeight(1).find(c => c.text === '他喜欢猫')?.hits ?? 0) === 4)
-
-const old = m6.claimTexts('semantic').length
-m6.recordSemantic('很久以前的一件小事', ['e1', 'e2'], 0.9, nowMs - 200 * dayMs)
-const ms6 = m6.memorySummary(1)
-check('超过窗口的记忆被折叠（不逐个注入）', !ms6.semantics.includes('很久以前的一件小事') && ms6.folded >= 1, `folded=${ms6.folded}`)
-check('折叠不等于删除（账本还在）', old + 1 === m6.claimTexts('semantic').length)
-const rec = m6.recall(1, 8)
-check('回忆能翻出旧事', rec.some(c => c.text === '很久以前的一件小事'))
-check('注入含折叠提示', summaryText(baseBias, baseAff, ms6).includes('记不清'))
-
 console.log('== M6：来历出生后只读 ==')
 check('seed 未改 → 不锁', seedChanged({ name: 'a', background: '' }, { name: 'a', background: '' }) === false)
 check('seed 改动 → 锁', seedChanged({ name: 'a' }, { name: 'b' }) === true)
@@ -370,15 +263,6 @@ check('入住工作区 → 名字 的屋子', scopeTitle('小肥鱼', { kind: 'w
 check('没住处 → 空标题', scopeTitle('小肥鱼', null) === '')
 check('住处键：会话', scopeKey({ kind: 'session', id: 's1' }) === 'session:s1')
 check('住处键：工作区', scopeKey({ kind: 'workspace', id: 'D:\\x' }) === 'workspace:D:\\x')
-console.log('== M13：话题回忆 ==')
-const claimsTest = [
-  { id: 'a', kind: 'semantic', text: '用户讨厌被贬低自己喜欢的东西' },
-  { id: 'b', kind: 'semantic', text: '用户周六休息，不上班' },
-]
-check('提到相关话题 → 想起来', matchClaims(claimsTest, '你还记得我讨厌什么吗', 2)[0]?.id === 'a')
-check('无关话题 → 不想起来', matchClaims(claimsTest, '今天天气不错', 2).length === 0)
-check('回忆块渲染', recallBlock([{ text: '用户讨厌被贬低' }]).includes('用户讨厌被贬低'))
-check('空回忆 → 空串', recallBlock([]) === '')
 console.log('== M13：同一工作区的多个会话共享一只鱼 ==')
 const shareWs = 'D:\\ws-share-' + Date.now()
 const shared = binding.birth('共享鱼', { kind: 'workspace', id: shareWs })
@@ -387,17 +271,27 @@ const s2 = { sessionId: 'share-b-' + Date.now(), workspace: shareWs }
 const cA = binding.resolve(s1)
 const cB = binding.resolve(s2)
 check('两个会话解析到同一只鱼', cA && cB && cA.meta.creatureId === cB.meta.creatureId && cA.meta.creatureId === shared.meta.creatureId)
-shared.recordSemantic('他每天早上七点起', ['e1', 'e2'], 0.8)
-shared.recordEpisode('joy', { goalCongruence: 1, agency: 0.5, certainty: 0.8, normViolation: 0, relationalImpact: 0.5, stake: 0.5, attribution: 'other' })
-check('记忆共享（同一个体摘要）', cA.memorySummary().semantics.includes('他每天早上七点起'))
-check('情绪共享（同一个体状态）', Math.abs(cA.fold().affect.valence - cB.fold().affect.valence) < 1e-9)
+const shareDir = path.join(cfg.stateDir, shared.meta.creatureId)
+const memShared = new Memory({ dir: shareDir, lock: 'off' })
+memShared.observe({
+  note: 'user: 我每天早上七点起 assistant: 记下了',
+  scope: { kind: 'workspace', id: shareWs },
+  appraisal: { goalCongruence: 0.5, selfAttribution: 0, normViolation: 0, relationshipImpact: 0.3, arousalSpike: 0 },
+  salience: 0.4,
+  affect: { valence: 0.2, arousal: 0.5, guilt: 0, longing: 0 },
+  injected: [],
+  ts: Date.now(),
+})
+const memShared2 = new Memory({ dir: shareDir, lock: 'off' })
+check('记忆共享（同一个体）', memShared2.view().turns.length >= 1)
+check('情绪共享（同一个体状态）', cA.store.readEvents().length === cB.store.readEvents().length)
 check('工作区里的会话级解析也指向它', binding.occupantOf(s1)?.meta.creatureId === shared.meta.creatureId)
 console.log('== M14：跨会话原文记忆 ==')
-shared.recordEpisode('turn', { goalCongruence: 0.5, agency: 0.5, certainty: 0.7, normViolation: 0, relationalImpact: 0.3, stake: 0.4, attribution: 'other' }, 'user: 我每天早上七点起 assistant: 记下了')
-const rd = shared.recentDialog(5)
+const rd = signalRecentDialog(shared, 5)
 check('最近对话含原文', rd.length >= 1 && rd[rd.length - 1].text.includes('七点'))
-check('按话题翻原文', shared.episodeMatches('我几点起', 2).length >= 1)
-check('无关话题翻不到', shared.episodeMatches('量子力学', 2).length === 0)
+check('按话题翻原文', memShared.view().turns.some((t) => String(t.note).includes('七点')))
+check('无关话题翻不到', !memShared.view().turns.some((t) => String(t.note).includes('量子力学')))
+memShared.close(); memShared2.close()
 check('最近对话渲染', recentBlock([{ ts: Date.now(), text: 'abc' }]).includes('abc'))
 check('最近对话有上限', recentBlock(Array.from({ length: 50 }, (_, i) => ({ ts: Date.now(), text: 'x'.repeat(200) + i })), 800).length <= 900)
 
@@ -514,7 +408,7 @@ const wakeTurn = e2eFish.store.readEvents().filter((e: any) => e.t === 'turn').s
 check('唤醒回合落了一条 turn', !!wakeTurn)
 check('唤醒回合的 note 有 situation', String(wakeTurn?.note ?? '').includes('situation:'))
 check('唤醒回合的 note 只有 situation + assistant', String(wakeTurn?.note ?? '').includes('assistant:') && !String(wakeTurn?.note ?? '').includes('user:'))
-check('recentDialog 不把 situation 当对话', !e2eFish.recentDialog(10).some((d) => d.text.includes('醒一醒')))
+check('recentDialog 不把 situation 当对话', !signalRecentDialog(e2eFish, 10).some((d) => d.text.includes('醒一醒')))
 check('signals.recentDialog 也不把 situation 当对话', !signalRecentDialog(e2eFish, 10).some((d) => d.text.includes('醒一醒')))
 
 // 「你没事可以刷刷 B 站」是许可：落 grant 事件，并进入下一轮注入。

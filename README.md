@@ -10,6 +10,7 @@
 | [docs/MEMORY.md](docs/MEMORY.md) | 记忆系统设计（账本、合并记忆、检索、注入） |
 | [docs/BROWSE.md](docs/BROWSE.md) | 上网与说话设计（B 站、自处、许可、登录/@/评论/回复、风控与设置） |
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
+| [docs/BROWSE.md](docs/BROWSE.md) | 上网（B 站只读浏览 / 评论闸门 / 自处节律） |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
 | [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
@@ -22,6 +23,7 @@ src/core/          认知内核：评价→情绪→偏置、事件日志、成�
                    另有 browse.ts：上网的时段/配额/过滤/排序/素材渲染（纯逻辑）
 src/scenarios.ts   脚本化评价（测试/离线用）
 packages/memory/   记忆模块：只追加账本、合并记忆、检索、渲染（纯 TS，可独立使用）
+creatures/<id>/   一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）
 packages/plugin/   DSH 插件
   host/dsh.js       唯一碰 DSH 的地方（事件流/注入/唤醒/工具钩子/标题/枚举/HTTP 路由）
   memory/           记忆模块的进程内实例与 memory_search 工具

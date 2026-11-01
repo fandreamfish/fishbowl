@@ -17,7 +17,6 @@ import {
   recordWake as recordWakeOf,
   selfWakeTimes as selfWakeTimesOf,
 } from './signals.ts'
-import { matchClaims, matchTexts } from './recall.ts'
 import { uid } from './util.ts'
 
 export class Creature {
@@ -333,113 +332,8 @@ export class Creature {
     return null
   }
 
-  /**
-   * 记忆重量（M6）：
-   *   重量 = 置信度 × (1 + 0.4·ln(1+强化次数)) × 0.5^(ageDays / 半衰期)
-   * 半衰期 = 记忆窗口/3；超过窗口的不再逐个显示，折叠成"记不清了"，
-   * 但事件原文永远在账本里——recall 能翻回去（遗忘是折叠，不是删除）。
-   */
-  claimsWithWeight(g = 1, now = Date.now()): MemoryClaim[] {
-    const events = this.store.readEvents()
-    const hits = new Map<string, number>()
-    const lastHit = new Map<string, number>()
-    for (const e of events) {
-      if (e.t !== 'reinforce') continue
-      hits.set(e.ref, (hits.get(e.ref) ?? 0) + 1)
-      lastHit.set(e.ref, Math.max(lastHit.get(e.ref) ?? 0, e.ts))
-    }
-    const windowMs = memoryWindowDays(g) * 86_400_000
-    const halfLifeDays = Math.max(1, memoryWindowDays(g) / 3)
-    const out: MemoryClaim[] = []
-    for (const e of events) {
-      if ((e.t !== 'semantic' && e.t !== 'procedure' && e.t !== 'self') || e.status !== 'active') continue
-      const text = e.t === 'procedure' ? `${e.trigger} → ${e.action}` : e.claim
-      const confidence = e.confidence ?? 0.5
-      const n = hits.get(e.id) ?? 0
-      const lastSeen = Math.max(e.ts, lastHit.get(e.id) ?? 0)
-      const ageDays = Math.max(0, (now - lastSeen) / 86_400_000)
-      const weight = confidence * (1 + 0.4 * Math.log(1 + n)) * Math.pow(0.5, ageDays / halfLifeDays)
-      out.push({ id: e.id, kind: e.t, text, confidence, hits: n, lastSeen, weight, folded: now - lastSeen > windowMs })
-    }
-    return out.sort((a, b) => b.weight - a.weight)
-  }
-
-  /** 按话题匹配她记得的事（用户这句话提到了什么）。 */
-  recallMatches(text: string, g = 1, limit = 3): { id: string; kind: MemoryClaim['kind']; text: string; score: number }[] {
-    return matchClaims(this.claimsWithWeight(g), text, limit)
-  }
-
-  /** 最近说过的话（原文，按时间正序）：跨会话共享同一份。 */
-  recentDialog(limit = 6): { ts: number; text: string }[] {
-    const out: { ts: number; text: string }[] = []
-    for (const e of this.store.readEvents()) {
-      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') {
-        const text = dialogOnly(e.note)
-        if (text) out.push({ ts: e.ts, text })
-      }
-    }
-    return out.slice(-limit)
-  }
-
-  /** 按话题翻原始对话（整个历史，不限时间）。 */
-  episodeMatches(text: string, limit = 3): { ts: number; text: string; score: number }[] {
-    const items: { ts: number; text: string }[] = []
-    for (const e of this.store.readEvents()) {
-      if ((e.t === 'episode' || e.t === 'turn') && typeof e.note === 'string') {
-        const line = dialogOnly(e.note)
-        if (line) items.push({ ts: e.ts, text: line })
-      }
-    }
-    return matchTexts(items, text, limit)
-  }
-  /** 回忆（M6）：按重量翻出记忆，含已折叠的旧事。 */
-  recall(g = 1, limit = 8): MemoryClaim[] {
-    return this.claimsWithWeight(g).slice(0, limit)
-  }
-
-  /** 注入用记忆摘要：名字 + 重量最高的活跃语义/教训/自我认知 + 折叠计数。 */
-  memorySummary(g = 1): {
-    name: string | null
-    semantics: string[]
-    procedures: string[]
-    self: string[]
-    commitments: string[]
-    activity: string | null
-    folded: number
-    requests: { pending: string[]; answered: { text: string; answer: 'yes' | 'no' }[] }
-  } {
-    const name = this.meta.name && !this.meta.name.startsWith('fish-') ? this.meta.name : null
-    const claims = this.claimsWithWeight(g)
-    const active = (kind: MemoryClaim['kind'], limit: number, minConf = 0) =>
-      claims
-        .filter(c => c.kind === kind && !c.folded && c.confidence >= minConf)
-        .slice(0, limit)
-        .map(c => c.text)
-    const commitments = this.openCommitments(g).slice(-2).map(c => (c.broken ? '⚠ ' : '') + c.text)
-    const activity = this.currentActivity(g)
-    return {
-      name,
-      semantics: active('semantic', 3),
-      procedures: active('procedure', 2),
-      self: active('self', 2, 0.5),
-      commitments,
-      activity,
-      folded: claims.filter(c => c.folded).length,
-      requests: this.requestDigest(),
-    }
-  }
 }
 
-export interface MemoryClaim {
-  id: string
-  kind: 'semantic' | 'procedure' | 'self'
-  text: string
-  confidence: number
-  hits: number
-  lastSeen: number
-  weight: number
-  folded: boolean
-}
 
 /**
  * 只要对话行（实现见 signals.ts）。

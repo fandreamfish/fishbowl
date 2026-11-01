@@ -95,6 +95,7 @@ creatures/
   <id>/browse/scan.json  上次扫评论楼的时间与待回素材
   <id>/projection.json   情绪投影缓存（可删可重算）
   <id>/outbox.json       会话关着时攒着的话
+  <id>/config.json       这条鱼自己的配置（作息/记忆/上网/评论/成长率）；没写就继承默认
 ```
 
 新记忆模块的 `buildView` 只认自己的事件类型，旧事件共存不冲突。
