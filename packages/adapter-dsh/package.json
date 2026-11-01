@@ -1,0 +1,3 @@
+﻿{ "name": "@fishbowl/adapter-dsh", "version": "0.1.0", "private": true, "type": "module",
+  "description": "DSH adapter: session events, injection, wake, tool registration, HTTP settings API.",
+  "exports": { "./host": "./src/host.js", "./http": "./src/http.js" }, "files": ["src/**/*.js"] }
