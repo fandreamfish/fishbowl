@@ -901,6 +901,24 @@ function makeFactory() {
           e('div', { style: { ...rowS, marginTop: 8 }, children: [
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
             e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
+            e('button', {
+              style: { ...btnS, padding: '7px 14px', marginLeft: 8 },
+              onClick: async () => {
+                try {
+                  const dry = await postJson(API + '/cleanup/rooms', { dryRun: true })
+                  const rooms = (dry.rooms || []).filter((r) => (r.candidates || []).length)
+                  const total = rooms.reduce((n, r) => n + r.candidates.length, 0)
+                  if (!total) { window.alert('没有需要清理的房间。'); return }
+                  const lines = rooms.map((r) => base(r.path) + '：' + r.candidates.map((c) => c.title || c.id.slice(0, 12)).join('、'))
+                  if (!window.confirm('这些房间没有鱼住，删除后不可恢复：\n\n' + lines.join('\n') + '\n\n继续？')) return
+                  const done = await postJson(API + '/cleanup/rooms', { dryRun: false })
+                  const n = (done.rooms || []).reduce((a, x) => a + (x.removed || []).length, 0)
+                  await load()
+                  window.alert('清理了 ' + n + ' 个房间。')
+                } catch (x) { setErr(String((x && x.message) || x)) }
+              },
+              children: '清理空房间',
+            }, 'cleanup'),
           ] }, 'add'),
           fp ? e(FolderPicker, { start: fp.start, onPick: (p) => setNewHouse({ ...newHouse, path: p }), onClose: () => setFp(null) }, 'fp') : null,
           newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
@@ -1367,19 +1385,6 @@ function makeFactory() {
               e('div', { style: { fontWeight: 600, fontSize: 14 }, children: f.name + '的房间' }, 'rn'),
               e('div', { style: { display: 'flex', gap: 6 }, children: [
                 e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 500 }, onClick: () => { setMoveOpen(true); setPick(null); setPickWs(null); setMoveErr('') }, children: '搬家' }),
-                wsPath ? e('button', {
-                  style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' },
-                  onClick: () => act(async () => {
-                    const dry = await postJson(API + '/cleanup/rooms', { path: wsPath, dryRun: true })
-                    const list = (dry.candidates || [])
-                    if (!list.length) { window.alert('这个屋子里没有需要清理的房间。'); return }
-                    const names = list.map((c) => c.title || c.id.slice(0, 12)).join('、')
-                    if (!window.confirm('这些房间没有鱼住，删除后不可恢复：\n' + names + '\n\n继续？')) return
-                    const r = await postJson(API + '/cleanup/rooms', { path: wsPath, dryRun: false })
-                    window.alert('清理了 ' + (r.removed || []).length + ' 个房间。')
-                  }, '清理完成'),
-                  children: '清理空房间',
-                }, 'clean') : null,                f.occupancy ? e('button', { style: { ...btnS, fontSize: 12, padding: '3px 12px', fontWeight: 400, color: 'var(--dsw-alias-text-2, #666)' }, onClick: () => act(async () => { await postJson(API + '/fish/' + f.id + '/release') }, '搬出来了'), children: '搬出' }) : null,
               ] }, 'btns'),
             ] }, 'head'),
             e('div', { style: { display: 'grid', gridTemplateColumns: '52px 1fr', rowGap: 4, fontSize: 12.5, marginBottom: 4 }, children: [
