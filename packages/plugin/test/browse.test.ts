@@ -207,12 +207,16 @@ console.log('== 设置页接口（假 host，不发网络） ==')
 const routeDir = path.join(TMP, 'route')
 const routeCfg = normalizeConfig({ stateDir: routeDir, browse: { enabled: false } })
 const routeBinding = createBinding(routeCfg)
+const transferSessions: any[] = []
 const routeFish = routeBinding.birth('路由鱼', { kind: 'session', id: 'sr', workspace: 'D:\\ws-route' })
 let routeHandler: any = null
 const routeAgents: any[] = []
 createUiRoute(null, routeCfg, routeBinding, {
   registerRoute: (r: any) => { routeHandler = r.handler; return () => {} },
-  listScopes: () => ({ workspaces: [], sessions: [] }),
+  listScopes: () => ({ workspaces: ['D:\\ws-route'], sessions: transferSessions.map((s) => ({ id: s.id, workspace: s.workspace })) }),
+  workspaceByPath: () => null,
+  createWorkspace: async (dir: string) => ({ id: 'w-new', path: dir, registryId: 'w-new' }),
+  createSession: async (o: any) => { const s = { id: 'session-imported-' + (transferSessions.length + 1), workspace: o?.path ?? '' }; transferSessions.push(s); return s },
   listAgents: () => routeAgents,
   wake: async () => {},
   services: () => ({}),
@@ -281,5 +285,17 @@ routeAgents.push({ session: { id: 'sr', header: { cwd: 'D:\\ws-route' } } })
 const ws = await callRoute('POST', '/fishbowl-ui/wake/now', { mode: 'self' })
 check('手动自处唤醒成功并记账', ws.code === 200 && JSON.parse(ws.body).mode === 'self' && routeFish.selfWakeTimes().length === 1)
 
+// 导出 / 导入
+const expOut = await callRoute('POST', '/fishbowl-ui/export', { path: TMP })
+const expDir = expOut.code === 200 ? JSON.parse(expOut.body).dir : ''
+check('导出生成包', !!expDir && fs.existsSync(expDir + '/manifest.json'))
+const imp1 = await callRoute('POST', '/fishbowl-ui/import', { path: expDir })
+const imp1Body = imp1.code === 200 ? JSON.parse(imp1.body) : {}
+check('导入给没住处的鱼建房', (imp1Body.housed ?? []).length >= 1 && (transferSessions.length >= 1))
+const roomCount = transferSessions.length
+const imp2 = await callRoute('POST', '/fishbowl-ui/import', { path: expDir })
+const imp2Body = imp2.code === 200 ? JSON.parse(imp2.body) : {}
+check('重复导入不重复建房（幂等）', imp2.code === 200 && transferSessions.length === roomCount && (imp2Body.housed ?? []).length === 0)
+check('重复导入不重复追加事件', routeBinding.listCreatures().find((c: any) => c.meta.creatureId === routeFish.meta.creatureId)?.store.readEvents().filter((e: any) => e.t === 'turn').length >= 0)
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 if (failures) process.exit(1)

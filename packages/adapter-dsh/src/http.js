@@ -9,6 +9,7 @@ import { handleBrowse } from './resources/browse.js'
 import { handleConfig } from './resources/config.js'
 import { handleFs } from './resources/fs.js'
 import { handleCleanup } from './resources/cleanup.js'
+import { handleTransfer } from './resources/transfer.js'
 
 export { mergeUiConfig, saveUiConfig, seedChanged, uiConfigPath, validateMemoryConfig } from './settings.js'
 export { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from '../../app/src/index.js'
@@ -54,6 +55,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
           if (await handleConfig(rctx, req, res, parts, sub)) return
           if (await handleFs(rctx, req, res, parts, sub)) return
           if (await handleCleanup(rctx, req, res, parts)) return
+          if (await handleTransfer(rctx, req, res, parts)) return
 
           res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
           res.end('not found')

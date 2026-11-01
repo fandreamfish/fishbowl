@@ -835,6 +835,7 @@ function makeFactory() {
       const [newHouse, setNewHouse] = useState({ mode: 'new-session', id: '', path: '' })
       const [fp, setFp] = useState(null)
       const [cleanOpen, setCleanOpen] = useState(false)
+      const [xf, setXf] = useState(null)
       const [cleanWs, setCleanWs] = useState('')
       const [cleanMsg, setCleanMsg] = useState('')
       const [nameInput, setNameInput] = useState('')
@@ -900,8 +901,26 @@ function makeFactory() {
               onClick: () => { setCleanOpen(true); setCleanWs(''); setCleanMsg('') },
               children: '清理空房间',
             }, 'cleanup'),
+            e('button', { style: { ...btnS, padding: '7px 14px', marginLeft: 8 }, onClick: () => setXf({ mode: 'export', start: '' }), children: '导出' }, 'exportbtn'),
+            e('button', { style: { ...btnS, padding: '7px 14px', marginLeft: 8 }, onClick: () => setXf({ mode: 'import', start: '' }), children: '导入' }, 'importbtn'),
           ] }, 'add'),
           fp ? e(FolderPicker, { start: fp.start, onPick: (p) => setNewHouse({ ...newHouse, path: p }), onClose: () => setFp(null) }, 'fp') : null,
+          xf ? e(FolderPicker, {
+            start: xf.start,
+            onPick: async (dir) => {
+              try {
+                if (xf.mode === 'export') {
+                  const r = await postJson(API + '/export', { path: dir })
+                  window.alert('导出到：' + r.dir + '（' + r.count + ' 条鱼）')
+                } else {
+                  const r = await postJson(API + '/import', { path: dir })
+                  await load()
+                  window.alert('导入 ' + (r.housed || []).length + ' 条鱼\n屋子：' + r.house)
+                }
+              } catch (x) { window.alert('失败：' + String((x && x.message) || x)) }
+            },
+            onClose: () => setXf(null),
+          }, 'xf') : null,
           cleanOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setCleanOpen(false), children: [
             e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 430, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
               e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 }, children: '清理空房间' }, 'h'),
