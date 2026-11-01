@@ -870,8 +870,7 @@ function makeFactory() {
         ['persona', '人设'], ['memory', '记忆'],
       ]
 
-      let body = null
-      if (page === 'status') {
+      function renderStatus() {
         const capRow = (key, label) => e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, children: [
           e('span', { style: { fontSize: 12.5 }, children: label }, 'l'),
           e('button', { style: caps[key] === false ? btnS : { ...btnP, padding: '3px 12px', fontSize: 12 }, onClick: () => act(async () => {
@@ -889,7 +888,7 @@ function makeFactory() {
         if (mem.commitments?.length) lines.push('承诺: ' + mem.commitments.join('；'))
         if (mem.activity) lines.push('一起在做: ' + mem.activity)
         if (mem.folded) lines.push('记不清的旧事: ' + mem.folded + ' 件')
-        body = e('div', { children: [
+        return e('div', { children: [
           e('div', { style: box, children: [
             e('div', { style: { ...lab, marginBottom: 4 }, children: occText(f.occupancy) }, 'o'),
             e('div', { style: lab, children: '效价 ' + fmt(f.affect.v) + ' · 唤醒 ' + fmt(f.affect.a) + ' · 愧疚 ' + fmt(f.affect.guilt) + ' · 想念 ' + fmt(f.affect.longing) + ' · ' + f.episodes + ' 轮' }, 'a'),
@@ -903,7 +902,216 @@ function makeFactory() {
             ...capRows,
           ] }, 'caps'),
         ] }, 'status')
-      } else if (page === 'home') {
+      }
+
+      function renderRoutine() {
+        const r = routine || { wake: {}, contact: {}, selfTime: {} }
+        const wake = r.wake || {}
+        const contact = r.contact || {}
+        const selfTime = r.selfTime || {}
+        const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
+        const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const diary = r.diary || {}
+        const setDiary = (k, v) => setRoutine({ ...r, diary: { ...diary, [k]: v } })
+        const affectCfg = r.affect || {}
+        const setAffect = (k, v) => setRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
+        const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
+        const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
+        const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
+        // 最近一次检查：她为什么没开口
+        const ws = (data && data.wakeState) || null
+        const entry = ws && Array.isArray(ws.entries) ? ws.entries[0] : null
+        const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回', disabled: '自处没开', browse_quota: '今天上网次数用完', busy: '正在说话' }
+        const lastCheck = entry ? new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '—'
+        const selfLine = entry?.self
+          ? ' · 自处：' + (entry.self.enabled ? (gateLabel[entry.self.gate?.reason] || entry.self.gate?.reason || '—') + `（今天上网 ${entry.self.usedToday}/${entry.self.perDay}）` : '没开')
+          : ''
+        const statusLine = entry
+          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—') + selfLine
+          : '还没有检查记录（节律没开或刚启动）'
+        const statusCard = e('div', { style: box, children: [
+          e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '现在的状态' }, 'h'),
+            e('span', { style: { display: 'flex', gap: 6 }, children: [
+              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
+                const r = await postJson(API + '/wake/now', {})
+                setMsg('她开口了：' + (r.text || ''))
+              }, '已叫她一次'), children: '叫一次（联系）' }, 'now'),
+              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
+                const r = await postJson(API + '/wake/now', { mode: 'self' })
+                setMsg('她醒了：' + (r.text || ''))
+              }, '让她自己待了一会儿'), children: '自己待一会儿（测试）' }, 'selfnow'),
+            ] }, 'btns'),
+          ] }, 'head'),
+          e('div', { style: { ...lab, fontSize: 12 }, children: statusLine }, 'line'),
+        ] }, 'wstatus')
+        return e('div', { children: [
+          e('div', { style: box, children: [
+            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '清醒节律' }, 'h'),
+              e(Toggle, { on: wake.enabled, onChange: () => setWake('enabled', !wake.enabled), k: 'sw' }),
+            ] }, 'head'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。活动时段之外算睡着：不想念，也不会来叫你。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '活动时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((wake.activeWindow ?? [])[0], (v) => setWake('activeWindow', [v, (wake.activeWindow ?? [])[1] ?? '23:30']), 'a'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((wake.activeWindow ?? [])[1], (v) => setWake('activeWindow', [(wake.activeWindow ?? [])[0] ?? '08:00', v]), 'b'),
+              ] }, 'w'),
+            ] }, 'r1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '间隔' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                e('select', { style: { ...inp, width: 92 }, value: wake.interval?.mode ?? 'fixed', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), mode: ev.target.value }), children: [e('option', { value: 'fixed', children: '固定' }), e('option', { value: 'random', children: '随机' })] }, 'm'),
+                e('input', { style: { ...inp, width: 76 }, value: wake.interval?.min ?? '60m', placeholder: '60m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), min: ev.target.value }) }, 'min'),
+                (wake.interval?.mode === 'random') ? e('input', { style: { ...inp, width: 76 }, value: wake.interval?.max ?? '', placeholder: '120m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), max: ev.target.value }) }, 'max') : null,
+              ] }, 'v'),
+            ] }, 'r2'),
+
+          ] }, 'wake'),
+          e('div', { style: box, children: [
+            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '自己待一会儿' }, 'h'),
+              e(Toggle, { on: selfTime.enabled, onChange: () => setSelf('enabled', !selfTime.enabled), k: 'sw' }),
+            ] }, 'head'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '醒来但不为了找你。她可以上网、写日记，也可以什么都不做；不算主动联系配额。他若说过「没事可以刷刷 B 站」，且上网开关开着，即使这里关着，也会为这条许可醒一次。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((selfTime.window ?? [])[0], (v) => setSelf('window', [v, (selfTime.window ?? [])[1] ?? '23:00']), 'sa'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((selfTime.window ?? [])[1], (v) => setSelf('window', [(selfTime.window ?? [])[0] ?? '09:00', v]), 'sb'),
+              ] }, 'v'),
+            ] }, 's1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '每天最多' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(selfTime.dailyMax ?? 1, (v) => setSelf('dailyMax', v), 'n', 0, 6),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 's2'),
+            e('div', { style: rowS, children: [
+              e('span', { style: lab, children: '最短间隔' }, 'l'),
+              e('input', { style: { ...inp, width: 90 }, value: selfTime.minGap ?? '90m', onInput: (ev) => setSelf('minGap', ev.target.value) }, 'v'),
+            ] }, 's3'),
+          ] }, 'self'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '主动联系' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '去敲你之前要过这几道闸；没必要的联系不如不联系。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '时段' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                timeInput((contact.window ?? [])[0], (v) => setContact('window', [v, (contact.window ?? [])[1] ?? '22:30']), 'a'),
+                e('span', { style: lab, children: '到' }, 'sep'),
+                timeInput((contact.window ?? [])[1], (v) => setContact('window', [(contact.window ?? [])[0] ?? '09:00', v]), 'b'),
+              ] }, 'v'),
+            ] }, 'c1'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '每天最多' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(contact.dailyMax ?? 2, (v) => setContact('dailyMax', v), 'n', 0, 10),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 'c2'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
+              e('span', { style: lab, children: '最短间隔' }, 'l'),
+              e('input', { style: { ...inp, width: 90 }, value: contact.minGap ?? '3h', onInput: (ev) => setContact('minGap', ev.target.value) }, 'v'),
+            ] }, 'c3'),
+            e('div', { style: { ...rowS }, children: [
+              e('span', { style: lab, children: '连发没回就停' }, 'l'),
+              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
+                numInput(contact.unansweredStop ?? 3, (v) => setContact('unansweredStop', v), 'n', 1, 10),
+                e('span', { style: lab, children: '次' }, 'u'),
+              ] }, 'v'),
+            ] }, 'c4'),
+          ] }, 'contact'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '日记' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '日记是一天的最后一件事。这个时间窗之外不写；第二天发现昨天的还没写，会先补昨天的。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '每天写日记的时间' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [timeInput(diary.start ?? '21:30', (v) => setDiary('start', v), 's'), e('span', { style: lab, children: '到' }, 'sep'), timeInput(diary.end ?? '23:59', (v) => setDiary('end', v), 'e')] }, 'v')] }, 'd1'),
+            e('div', { style: rowS, children: [e('span', { style: lab, children: '第二天补写昨天' }, 'l'), e('button', { style: diary.catchUp !== false ? { ...btnP, padding: '3px 12px', fontSize: 12 } : btnS, onClick: () => setDiary('catchUp', diary.catchUp === false), children: diary.catchUp !== false ? '开' : '关' }, 'd2')] }, 'd3'),
+          ] }, 'diary'),
+          e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '心情半衰期' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '负面情绪会随时间淡下去。半衰期越短，忘得越快；正面状态（温暖、好奇）不在这里调。想念相反：你不理她会慢慢涨上来，见了面就回落。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '愧疚' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.guiltDays ?? 3, (v) => setAffect('guiltDays', v), 'a', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a1'),
+            
+            e('div', { style: rowS, children: [e('span', { style: lab, children: '负面情绪（警惕、烦躁）' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.negativeDays ?? 2, (v) => setAffect('negativeDays', v), 'c', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a3'),
+          ] }, 'affect'),
+          statusCard,
+          e('div', { style: rowS, children: [
+            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
+            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
+              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg, diary })
+            }, '作息已保存'), children: '保存' }, 'save'),
+          ] }, 'act'),
+        ] }, 'routine')
+      }
+
+      function renderBrowse() {
+        return e(BrowsePanel, { fish: f }, 'browse-panel')
+      }
+
+      function renderPersona() {
+        const isDefaultName = /^fish-/.test(f.name)
+        return e('div', { children: [
+          born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
+          isDefaultName ? e('div', { style: box, children: [
+            e('div', { style: { ...lab, marginBottom: 6 }, children: '这条鱼还没有名字（创建时没写上）。现在给她起一个：' }, 'h'),
+            e('div', { style: { display: 'flex', gap: 8 }, children: [
+              e('input', { style: { ...inp, flex: 1 }, value: nameInput, placeholder: '例：大肥鱼', onInput: (ev) => setNameInput(ev.target.value) }, 'i'),
+              e('button', { style: { ...btnP, padding: '6px 14px', fontSize: 13 }, onClick: () => act(async () => {
+                await postJson(API + '/fish/' + f.id + '/name', { name: nameInput.trim() })
+                setNameInput('')
+              }, '名字定下了') , children: '改名' }, 'ok'),
+            ] }, 'row'),
+          ] }, 'namebox') : null,
+          e('div', { style: box, children: [
+
+            e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
+            e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, disabled: born, onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
+          ] }, 'seed'),
+          e('div', { style: box, children: [
+            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
+              e('span', { style: lab, children: '成长率' }, 'l'),
+              e('span', { style: { fontSize: 12, color: 'var(--dsw-alias-text-2, #666)' }, children: growth.toFixed(2) + ' · 学得快也忘得快' }, 'v'),
+            ] }, 'r'),
+            e('input', { type: 'range', min: '0.25', max: '4', step: '0.05', value: growth, style: { width: '100%' }, onInput: (ev) => setGrowth(Number(ev.target.value)) }, 's'),
+          ] }, 'growth'),
+          e('div', { style: rowS, children: [
+            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
+            e('button', { style: btnP, onClick: () => act(async () => {
+              const body2 = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
+              await postJson(API + '/fish/' + f.id + '/config', body2)
+            }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
+          ] }, 'act'),
+          e('div', { style: { ...box, marginTop: 4 }, children: [
+            e('div', { style: { ...lab, marginBottom: 6 }, children: '放生会删掉她的全部记忆和日记，不可恢复。' }, 'h'),
+            delConfirm
+              ? e('div', { style: { display: 'flex', gap: 8, alignItems: 'center' }, children: [
+                  e('span', { style: { ...lab, color: 'var(--dsw-alias-danger, #d33)' }, children: '确定？' }, 'q'),
+                  e('button', { style: { ...btnS, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => act(async () => {
+                    await postJson(API + '/fish/' + f.id + '/delete')
+                    setDelConfirm(false)
+                    setView({ level: 'list' })
+                  }, '放生了') , children: '确定放生' }, 'yes'),
+                  e('button', { style: btnS, onClick: () => setDelConfirm(false), children: '算了' }, 'no'),
+                ] }, 'confirm')
+              : e('button', { style: { ...btnS, fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => setDelConfirm(true), children: '放生这条鱼' }, 'del'),
+          ] }, 'danger'),
+        ] }, 'persona')
+      }
+
+      function renderMemory() {
+        const memCfg = (f.config && f.config.memory) || (data.config && data.config.memory) || null
+        return e('div', { children: [
+          e(MemoryConfigCard, { cfg: memCfg, fishId: f.id }, 'mcfg'),
+          e(MemoryDetail, { fishId: f.id }, 'mdet'),
+        ] }, 'memory')
+      }
+
+      function renderHome() {
         const workspaces = (data.scopes && data.scopes.workspaces) || []
         const sessions = (data.scopes && data.scopes.sessions) || []
         const occupiedWs = {}     // 整个屋子被占（workspace 级）
@@ -1025,7 +1233,7 @@ function makeFactory() {
           ] }, 'modal'),
         ] }) : null
 
-        body = e('div', { children: [
+        return e('div', { children: [
           e('div', { style: box, children: [
             e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }, children: [
               e('div', { style: { fontWeight: 600, fontSize: 14 }, children: f.name + '的房间' }, 'rn'),
@@ -1075,204 +1283,22 @@ function makeFactory() {
               ? f.notes.map((n, i) => e('div', { style: { marginBottom: 8, fontSize: 13 }, children: '「' + n.text + '」' }, 'n' + i))
               : e('div', { style: lab, children: '还没有小纸条' }),
           ] }, 'notes'),
-        ] }, 'home-root')      } else if (page === 'routine') {
-        const r = routine || { wake: {}, contact: {}, selfTime: {} }
-        const wake = r.wake || {}
-        const contact = r.contact || {}
-        const selfTime = r.selfTime || {}
-        const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
-        const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
-        const diary = r.diary || {}
-        const setDiary = (k, v) => setRoutine({ ...r, diary: { ...diary, [k]: v } })
-        const affectCfg = r.affect || {}
-        const setAffect = (k, v) => setRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
-        const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
-        const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
-        const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
-        // 最近一次检查：她为什么没开口
-        const ws = (data && data.wakeState) || null
-        const entry = ws && Array.isArray(ws.entries) ? ws.entries[0] : null
-        const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回', disabled: '自处没开', browse_quota: '今天上网次数用完', busy: '正在说话' }
-        const lastCheck = entry ? new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '—'
-        const selfLine = entry?.self
-          ? ' · 自处：' + (entry.self.enabled ? (gateLabel[entry.self.gate?.reason] || entry.self.gate?.reason || '—') + `（今天上网 ${entry.self.usedToday}/${entry.self.perDay}）` : '没开')
-          : ''
-        const statusLine = entry
-          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—') + selfLine
-          : '还没有检查记录（节律没开或刚启动）'
-        const statusCard = e('div', { style: box, children: [
-          e('div', { style: { ...rowS, marginBottom: 4 }, children: [
-            e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '现在的状态' }, 'h'),
-            e('span', { style: { display: 'flex', gap: 6 }, children: [
-              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
-                const r = await postJson(API + '/wake/now', {})
-                setMsg('她开口了：' + (r.text || ''))
-              }, '已叫她一次'), children: '叫一次（联系）' }, 'now'),
-              e('button', { style: { ...btnS, padding: '3px 12px' }, onClick: () => act(async () => {
-                const r = await postJson(API + '/wake/now', { mode: 'self' })
-                setMsg('她醒了：' + (r.text || ''))
-              }, '让她自己待了一会儿'), children: '自己待一会儿（测试）' }, 'selfnow'),
-            ] }, 'btns'),
-          ] }, 'head'),
-          e('div', { style: { ...lab, fontSize: 12 }, children: statusLine }, 'line'),
-        ] }, 'wstatus')
-        body = e('div', { children: [
-          e('div', { style: box, children: [
-            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
-              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '清醒节律' }, 'h'),
-              e(Toggle, { on: wake.enabled, onChange: () => setWake('enabled', !wake.enabled), k: 'sw' }),
-            ] }, 'head'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '打开后她会按间隔醒来；只有有由头（还没做完的承诺、很久没说话）才开口，否则继续睡。活动时段之外算睡着：不想念，也不会来叫你。' }, 'hint'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '活动时段' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                timeInput((wake.activeWindow ?? [])[0], (v) => setWake('activeWindow', [v, (wake.activeWindow ?? [])[1] ?? '23:30']), 'a'),
-                e('span', { style: lab, children: '到' }, 'sep'),
-                timeInput((wake.activeWindow ?? [])[1], (v) => setWake('activeWindow', [(wake.activeWindow ?? [])[0] ?? '08:00', v]), 'b'),
-              ] }, 'w'),
-            ] }, 'r1'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '间隔' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                e('select', { style: { ...inp, width: 92 }, value: wake.interval?.mode ?? 'fixed', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), mode: ev.target.value }), children: [e('option', { value: 'fixed', children: '固定' }), e('option', { value: 'random', children: '随机' })] }, 'm'),
-                e('input', { style: { ...inp, width: 76 }, value: wake.interval?.min ?? '60m', placeholder: '60m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), min: ev.target.value }) }, 'min'),
-                (wake.interval?.mode === 'random') ? e('input', { style: { ...inp, width: 76 }, value: wake.interval?.max ?? '', placeholder: '120m', onInput: (ev) => setWake('interval', { ...(wake.interval || {}), max: ev.target.value }) }, 'max') : null,
-              ] }, 'v'),
-            ] }, 'r2'),
+        ] }, 'home-root')
+      }
 
-          ] }, 'wake'),
-          e('div', { style: box, children: [
-            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
-              e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '自己待一会儿' }, 'h'),
-              e(Toggle, { on: selfTime.enabled, onChange: () => setSelf('enabled', !selfTime.enabled), k: 'sw' }),
-            ] }, 'head'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '醒来但不为了找你。她可以上网、写日记，也可以什么都不做；不算主动联系配额。他若说过「没事可以刷刷 B 站」，且上网开关开着，即使这里关着，也会为这条许可醒一次。' }, 'hint'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '时段' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                timeInput((selfTime.window ?? [])[0], (v) => setSelf('window', [v, (selfTime.window ?? [])[1] ?? '23:00']), 'sa'),
-                e('span', { style: lab, children: '到' }, 'sep'),
-                timeInput((selfTime.window ?? [])[1], (v) => setSelf('window', [(selfTime.window ?? [])[0] ?? '09:00', v]), 'sb'),
-              ] }, 'v'),
-            ] }, 's1'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '每天最多' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                numInput(selfTime.dailyMax ?? 1, (v) => setSelf('dailyMax', v), 'n', 0, 6),
-                e('span', { style: lab, children: '次' }, 'u'),
-              ] }, 'v'),
-            ] }, 's2'),
-            e('div', { style: rowS, children: [
-              e('span', { style: lab, children: '最短间隔' }, 'l'),
-              e('input', { style: { ...inp, width: 90 }, value: selfTime.minGap ?? '90m', onInput: (ev) => setSelf('minGap', ev.target.value) }, 'v'),
-            ] }, 's3'),
-          ] }, 'self'),
-          e('div', { style: box, children: [
-            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '主动联系' }, 'h'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '去敲你之前要过这几道闸；没必要的联系不如不联系。' }, 'hint'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '时段' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                timeInput((contact.window ?? [])[0], (v) => setContact('window', [v, (contact.window ?? [])[1] ?? '22:30']), 'a'),
-                e('span', { style: lab, children: '到' }, 'sep'),
-                timeInput((contact.window ?? [])[1], (v) => setContact('window', [(contact.window ?? [])[0] ?? '09:00', v]), 'b'),
-              ] }, 'v'),
-            ] }, 'c1'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '每天最多' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                numInput(contact.dailyMax ?? 2, (v) => setContact('dailyMax', v), 'n', 0, 10),
-                e('span', { style: lab, children: '次' }, 'u'),
-              ] }, 'v'),
-            ] }, 'c2'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [
-              e('span', { style: lab, children: '最短间隔' }, 'l'),
-              e('input', { style: { ...inp, width: 90 }, value: contact.minGap ?? '3h', onInput: (ev) => setContact('minGap', ev.target.value) }, 'v'),
-            ] }, 'c3'),
-            e('div', { style: { ...rowS }, children: [
-              e('span', { style: lab, children: '连发没回就停' }, 'l'),
-              e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
-                numInput(contact.unansweredStop ?? 3, (v) => setContact('unansweredStop', v), 'n', 1, 10),
-                e('span', { style: lab, children: '次' }, 'u'),
-              ] }, 'v'),
-            ] }, 'c4'),
-          ] }, 'contact'),
-          e('div', { style: box, children: [
-            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '日记' }, 'h'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '日记是一天的最后一件事。这个时间窗之外不写；第二天发现昨天的还没写，会先补昨天的。' }, 'hint'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '每天写日记的时间' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [timeInput(diary.start ?? '21:30', (v) => setDiary('start', v), 's'), e('span', { style: lab, children: '到' }, 'sep'), timeInput(diary.end ?? '23:59', (v) => setDiary('end', v), 'e')] }, 'v')] }, 'd1'),
-            e('div', { style: rowS, children: [e('span', { style: lab, children: '第二天补写昨天' }, 'l'), e('button', { style: diary.catchUp !== false ? { ...btnP, padding: '3px 12px', fontSize: 12 } : btnS, onClick: () => setDiary('catchUp', diary.catchUp === false), children: diary.catchUp !== false ? '开' : '关' }, 'd2')] }, 'd3'),
-          ] }, 'diary'),
-          e('div', { style: box, children: [
-            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '心情半衰期' }, 'h'),
-            e('div', { style: { ...lab, marginBottom: 10 }, children: '负面情绪会随时间淡下去。半衰期越短，忘得越快；正面状态（温暖、好奇）不在这里调。想念相反：你不理她会慢慢涨上来，见了面就回落。' }, 'hint'),
-            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '愧疚' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.guiltDays ?? 3, (v) => setAffect('guiltDays', v), 'a', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a1'),
-            
-            e('div', { style: rowS, children: [e('span', { style: lab, children: '负面情绪（警惕、烦躁）' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.negativeDays ?? 2, (v) => setAffect('negativeDays', v), 'c', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a3'),
-          ] }, 'affect'),
-          statusCard,
-          e('div', { style: rowS, children: [
-            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
-            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg, diary })
-            }, '作息已保存'), children: '保存' }, 'save'),
-          ] }, 'act'),
-        ] }, 'routine')      } else if (page === 'browse') {
-        body = e(BrowsePanel, { fish: f }, 'browse-panel')
+      let body = null
+      if (page === 'status') {
+        body = renderStatus()
+      } else if (page === 'home') {
+        body = renderHome()
+      } else if (page === 'routine') {
+        body = renderRoutine()
+      } else if (page === 'browse') {
+        body = renderBrowse()
       } else if (page === 'persona') {
-        const isDefaultName = /^fish-/.test(f.name)
-        body = e('div', { children: [
-          born ? e('div', { style: { ...lab, marginBottom: 8 }, children: '她已经出生了：来历只读（历史会被铭记，只能说服，不能修改）。' }, 'born') : null,
-          isDefaultName ? e('div', { style: box, children: [
-            e('div', { style: { ...lab, marginBottom: 6 }, children: '这条鱼还没有名字（创建时没写上）。现在给她起一个：' }, 'h'),
-            e('div', { style: { display: 'flex', gap: 8 }, children: [
-              e('input', { style: { ...inp, flex: 1 }, value: nameInput, placeholder: '例：大肥鱼', onInput: (ev) => setNameInput(ev.target.value) }, 'i'),
-              e('button', { style: { ...btnP, padding: '6px 14px', fontSize: 13 }, onClick: () => act(async () => {
-                await postJson(API + '/fish/' + f.id + '/name', { name: nameInput.trim() })
-                setNameInput('')
-              }, '名字定下了') , children: '改名' }, 'ok'),
-            ] }, 'row'),
-          ] }, 'namebox') : null,
-          e('div', { style: box, children: [
-
-            e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
-            e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, disabled: born, onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
-          ] }, 'seed'),
-          e('div', { style: box, children: [
-            e('div', { style: { ...rowS, marginBottom: 4 }, children: [
-              e('span', { style: lab, children: '成长率' }, 'l'),
-              e('span', { style: { fontSize: 12, color: 'var(--dsw-alias-text-2, #666)' }, children: growth.toFixed(2) + ' · 学得快也忘得快' }, 'v'),
-            ] }, 'r'),
-            e('input', { type: 'range', min: '0.25', max: '4', step: '0.05', value: growth, style: { width: '100%' }, onInput: (ev) => setGrowth(Number(ev.target.value)) }, 's'),
-          ] }, 'growth'),
-          e('div', { style: rowS, children: [
-            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
-            e('button', { style: btnP, onClick: () => act(async () => {
-              const body2 = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
-              await postJson(API + '/fish/' + f.id + '/config', body2)
-            }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
-          ] }, 'act'),
-          e('div', { style: { ...box, marginTop: 4 }, children: [
-            e('div', { style: { ...lab, marginBottom: 6 }, children: '放生会删掉她的全部记忆和日记，不可恢复。' }, 'h'),
-            delConfirm
-              ? e('div', { style: { display: 'flex', gap: 8, alignItems: 'center' }, children: [
-                  e('span', { style: { ...lab, color: 'var(--dsw-alias-danger, #d33)' }, children: '确定？' }, 'q'),
-                  e('button', { style: { ...btnS, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => act(async () => {
-                    await postJson(API + '/fish/' + f.id + '/delete')
-                    setDelConfirm(false)
-                    setView({ level: 'list' })
-                  }, '放生了') , children: '确定放生' }, 'yes'),
-                  e('button', { style: btnS, onClick: () => setDelConfirm(false), children: '算了' }, 'no'),
-                ] }, 'confirm')
-              : e('button', { style: { ...btnS, fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, onClick: () => setDelConfirm(true), children: '放生这条鱼' }, 'del'),
-          ] }, 'danger'),
-        ] }, 'persona')
+        body = renderPersona()
       } else if (page === 'memory') {
-        const memCfg = (f.config && f.config.memory) || (data.config && data.config.memory) || null
-        body = e('div', { children: [
-          e(MemoryConfigCard, { cfg: memCfg, fishId: f.id }, 'mcfg'),
-          e(MemoryDetail, { fishId: f.id }, 'mdet'),
-        ] }, 'memory')
+        body = renderMemory()
       }
 
       return e('div', { className: 'fb', children: [

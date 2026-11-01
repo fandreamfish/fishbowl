@@ -104,7 +104,7 @@ plugin → adapter-dsh   2   ← 形成环
 
 ## 四、下一步
 
-进度：P0 在 0.2.0 完成；P1 在 0.2.1 完成（	urn/after.js、wake/plan.js）；兼容层在 0.2.2 删除；http.js 视图在 0.2.4 抽出（666→384）；client.js 拆分待做。
+进度：P0 在 0.2.0 完成；P1 在 0.2.1 完成（	urn/after.js、wake/plan.js）；兼容层在 0.2.2 删除；http.js 视图在 0.2.4 抽出（666→384）；client.js 在 0.3.0 做了文件内组件化（受 DSH 单文件加载限制，不能拆成多文件）。
 
 按 P0 → P1 → P2 分三次发布：
 
