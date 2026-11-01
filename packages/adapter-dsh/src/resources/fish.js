@@ -1,10 +1,9 @@
 /** /fish 资源：列表、新生、单条鱼的一切操作（含它下面的上网/评论子路径）。 */
 import fs from 'node:fs'
 import path from 'node:path'
-import { renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
+import { housingToOccupancy, injectMessage, moveInText, renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
 import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
-import { housingToOccupancy } from '../../../app/src/index.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
 import { history as browseHistory } from '../../../bilibili/src/index.js'
 import { commentStatus, scanDueReplies } from '../../../bilibili/src/index.js'
@@ -31,6 +30,18 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     }
     const c = binding.birth(name, occ)
     if (occ) renameScopeAsync(host, stateDir, occ, name)
+    // 新会话是空的会被侧边栏忽略：搬进去后先让她在自己的房间里说一句话
+    if (occ && occ.kind === 'session') {
+      try {
+        let agent = null
+        for (let i = 0; i < 4 && !agent; i++) {
+          if (i) await new Promise((r) => setTimeout(r, 500))
+          agent = host.agentFor?.(occ.id) ?? null
+        }
+        if (agent) await host.wake(agent, injectMessage(moveInText({ name, occupancy: occ }), { mode: 'self', reason: null }))
+        else console.error('[fishbowl] move-in wake skipped: no live agent for', occ.id)
+      } catch (e) { console.error('[fishbowl] move-in wake failed:', String(e?.message ?? e)) }
+    }
     send(res, { ok: true, fish: fishView(c) })
     return true
   }

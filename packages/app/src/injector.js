@@ -86,3 +86,18 @@ export function stateKey(bias, affect, memory) {
   const memPart = `${memory?.name ?? ''}|${memory?.semantics?.length ?? 0}:${memory?.procedures?.length ?? 0}:${memory?.self?.length ?? 0}:${memory?.commitments?.length ?? 0}:${memory?.activity ?? ''}:${memory?.folded ?? 0}:${memory?.requests?.pending?.length ?? 0}`
   return `${knobs}|${affectPart}|${guiltPart}|${memPart}`
 }
+
+/**
+ * 刚搬进来时的处境说明：告诉她这是她的家、她叫什么。
+ * 用舞台提示的口气，不是用户对她说话。
+ */
+export function moveInText({ name, occupancy }) {
+  const room = occupancy?.workspace ? String(occupancy.workspace) : ''
+  const where = occupancy?.kind === 'workspace'
+    ? `整个工作区 ${occupancy.id}`
+    : room ? `${room} 里的这间房间` : '这间新房间'
+  return [
+    `（你刚搬进来。你的名字是「${name}」。以后${where}就是你的家：只有你住在这儿，按你的习惯待着就行。）`,
+    '四处看看，熟悉一下。不用刻意对谁说话；想说什么也可以。',
+  ].join('\n')
+}
