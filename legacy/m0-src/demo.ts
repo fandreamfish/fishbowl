@@ -1,12 +1,12 @@
 /** 演示：四组剧本 + 死区 + 联系限流 + 清醒节律。输出格式对齐 Python 原型。 */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ContactGate } from '../packages/schedule/src/index.ts'
-import { Creature } from '../packages/being/src/index.ts'
-import { toBias } from '../packages/affect/src/index.ts'
-import { Scheduler } from '../packages/schedule/src/index.ts'
-import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from '../packages/affect/src/index.ts'
-import type { Bias, CreatureMeta } from '../packages/affect/src/index.ts'
+import { ContactGate } from '../../packages/schedule/src/index.ts'
+import { Creature } from '../../packages/being/src/index.ts'
+import { toBias } from '../../packages/affect/src/index.ts'
+import { Scheduler } from '../../packages/schedule/src/index.ts'
+import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from '../../packages/affect/src/index.ts'
+import type { Bias, CreatureMeta } from '../../packages/affect/src/index.ts'
 import * as sc from './scenarios.ts'
 
 const TMP = path.join(process.cwd(), 'demo-tmp')

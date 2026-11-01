@@ -42,7 +42,7 @@ function stamp() {
 
 export async function handleTransfer({ cfg, binding, host, send, readBody }, req, res, parts) {
   const creaturesRoot = cfg.stateDir
-  const homeRoot = path.dirname(path.resolve(creaturesRoot))
+  const homeRoot = cfg.dataRoot || path.dirname(path.resolve(creaturesRoot))
 
   // —— 导出 ——
   if (parts[0] === 'export' && req.method === 'POST') {

@@ -3,11 +3,13 @@
  * 其它包只能从这里 import，不要直接引用内部文件。
  */
 export * from './config.js'
+export * from './plugin-config.js'
 export * from './cfgkeys.js'
 export * from './fishcfg.js'
 export * from './appraiser.js'
 export * from './llm.js'
 export * from './injector.js'
+export * from './state.js'
 export * from './extract.js'
 export * from './identity.js'
 export * from './rename.js'

@@ -10,9 +10,15 @@ import { normalizeBrowseConfig, normalizeComment } from '../../bilibili/src/inde
 /** @returns {import('./types.js').FishbowlConfig} */
 export function normalizeConfig(raw = {}) {
   const a = raw.appraiser || {}
+  // 兼容旧配置：只给 stateDir 时，把它的父目录当作数据根
+  const dataRoot = raw.dataRoot || (raw.stateDir ? path.dirname(raw.stateDir) : path.join(os.homedir(), '.fishbowl'))
+  const stateDir = raw.stateDir || path.join(dataRoot, 'creatures')
   const c = {
     // 个体状态目录：creatures/<creatureId>/（记忆永远不进会话日志，也永远不进 git）
-    stateDir: raw.stateDir || path.join(os.homedir(), '.fishbowl', 'creatures'),
+    // 数据根目录（~/.fishbowl）：creatures/、home/、配置文件都在它下面
+    dataRoot,
+    stateDir,
+    homeRoot: raw.homeRoot || path.join(dataRoot, 'home'),
     // 四条不变量之一：时区显式配置，不用系统时区
     timezone: raw.timezone || 'Asia/Shanghai',
     // 四条不变量之一：模型随个体绑定

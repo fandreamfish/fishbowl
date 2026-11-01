@@ -5,7 +5,7 @@ import path from 'node:path'
 import { ACTIVITY_RE, mergePendingText, parseActivity } from '../../being/src/index.ts'
 import { ContactGate } from '../../schedule/src/index.ts'
 import { COMMITMENT_RE, parseBroken, parseCommitment, REQUEST_RE } from '../../being/src/index.ts'
-import * as sc from '../../../src/scenarios.ts'
+import * as sc from '../../../legacy/m0-src/scenarios.ts'
 import { appraiseScripted, APPRAISER_SYSTEM_PROMPT } from '../../app/src/index.js'
 import { createBinding } from '../../app/src/index.js'
 import { normalizeConfig } from '../../app/src/index.js'
@@ -211,7 +211,7 @@ const T0 = 0
 for (let i = 0; i < 3; i++) c1.recordEpisode('rejected', sc.rejection(), undefined, T0)
 check('三连否定后耐心显著下降', c1.bias().patience < 0.30, `pati=${c1.bias().patience.toFixed(2)}`)
 check('个体目录已落盘', fs.existsSync(path.join(stateDir, c1.meta.creatureId, 'log.ndjson')))
-check('住处表已落盘（scopes.json）', fs.existsSync(path.join(stateDir, 'scopes.json')))
+check('住处表已落盘（scopes.json）', fs.existsSync(path.join(path.dirname(stateDir), 'scopes.json')))
 
 console.log('== 配置默认值 ==')
 const d = normalizeConfig({})
@@ -332,6 +332,27 @@ memFish.recordDiary('2026-11-01', '第二篇', new Date(2026, 10, 1, 11, 0).getT
 const diaryFiles = fs.readdirSync(path.join(memDir, 'home', 'diary'))
 check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'home', 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
 check('家目录与日记目录已创建', fs.existsSync(path.join(memDir, 'home', 'diary')))
+// 配置持久化与许可策略
+{
+  const { savePluginConfig, readPluginConfig } = await import('../../app/src/index.js')
+  const { checkPermission, usePermit } = await import('../../being/src/index.ts')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'plugincfg-'))
+  savePluginConfig(root, { wake: { enabled: true }, appraiser: { kind: 'deepseek', apiKey: 'secret' } })
+  const back = readPluginConfig(root)
+  check('本地配置快照去掉了 apiKey', back.appraiser?.apiKey === undefined && back.wake?.enabled === true)
+
+  const gateFish = Creature.create(path.join(root, 'g'), {
+    schemaVersion: 1, creatureId: 'gate', name: '门禁鱼', bornAt: new Date(0).toISOString(),
+    timezone: 'Asia/Shanghai', model: { id: 'test', pinned: true }, temperament: DEFAULT_TEMPERAMENT,
+  })
+  check('不要求许可时直接放行', checkPermission(gateFish, 'browse', { required: false }).ok === true)
+  check('要求许可且没有许可时拒绝', checkPermission(gateFish, 'browse', { required: true }).ok === false)
+  const { recordPermit } = await import('../../being/src/index.ts')
+  const p1 = recordPermit(gateFish, { action: 'browse', uses: 1, ttlMs: 60_000 })
+  const g1 = checkPermission(gateFish, 'browse', { required: true })
+  usePermit(gateFish, g1.permit)
+  check('有许可时放行并消费', g1.ok === true && checkPermission(gateFish, 'browse', { required: true }).ok === false && p1.id)
+}
 // 许可与审计
 const { recordPermit, findPermit, consumePermit, activePermits, recordBreach, recentBreaches } = await import('../../being/src/index.ts')
 const permitDir = path.join(stateDir, 'permit-fixture')
@@ -605,7 +626,7 @@ console.log('== M26：唤醒循环能真的叫醒（集成） ==')
   offW()
   check('唤醒真的发生了（不再被异常吞掉）', wakes.length >= 1, 'wakes=' + wakes.length)
   check('唤醒文本是舞台提示', wakes[0]?.includes('醒一醒'))
-  const st = JSON.parse(fs.readFileSync(path.join(sdW, 'wake-state.json'), 'utf8'))
+  const st = JSON.parse(fs.readFileSync(path.join(path.dirname(sdW), 'wake-state.json'), 'utf8'))
   check('状态文件写下她的由头', Array.isArray(st.entries) && st.entries.some((e) => e.reason))
   fs.rmSync(sdW, { recursive: true, force: true })
 }

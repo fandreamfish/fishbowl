@@ -13,7 +13,7 @@ function walk(d, out) {
   }
 }
 const files = []
-for (const d of ['packages', 'src', 'scripts']) walk(path.join(root, d), files)
+for (const d of ['packages', 'scripts']) walk(path.join(root, d), files)
 
 const problems = []
 for (const f of files) {

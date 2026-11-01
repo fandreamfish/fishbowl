@@ -47,7 +47,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
 
   function traceWake(sessionId, creatureId, mode, reason) {
     try {
-      fs.appendFileSync(path.join(cfg.stateDir, 'trace.ndjson'), JSON.stringify({
+      fs.appendFileSync(path.join(cfg.dataRoot || path.dirname(cfg.stateDir), 'trace.ndjson'), JSON.stringify({
         ts: Date.now(), sessionId, creatureId, event: 'wake', mode, reason,
       }) + '\n')
     } catch { /* 忽略 */ }

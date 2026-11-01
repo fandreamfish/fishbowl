@@ -1,6 +1,6 @@
 /** 脚本化评价。真实系统里由异步 LLM 评价调用产出；这里手写，只测情绪→偏置链路。 */
-import { appraisal } from '../packages/affect/src/index.ts'
-import type { Appraisal } from '../packages/affect/src/index.ts'
+import { appraisal } from '../../packages/affect/src/index.ts'
+import type { Appraisal } from '../../packages/affect/src/index.ts'
 
 export function rejection(): Appraisal {
   // "这个方案不行，重做。"

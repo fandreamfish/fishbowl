@@ -11,7 +11,7 @@
 import { workspaceOf } from '../../../app/src/index.js'
 import { postComment, postReply } from '../../../bilibili/src/index.js'
 import { configFor } from '../../../app/src/index.js'
-import { consumePermit, findPermit, recordBreach } from '../../../being/src/index.ts'
+import { checkPermission, recordBreach, usePermit } from '../../../being/src/index.ts'
 
 export function createSpeakTool(binding, cfg) {
   return {
@@ -66,11 +66,14 @@ export function createSpeakTool(binding, cfg) {
         }
         const fcfg = configFor(cfg, creature)
         const target = String(args?.bvid ?? '')
-        const permit = fcfg.comment?.autoApprove === true ? null : findPermit(creature, 'comment.post', target)
-        if (fcfg.comment?.requirePermit === true && fcfg.comment?.autoApprove !== true && !permit) {
-          return { ok: false, said: '', note: '需要许可才能调用：先用 fish_ask_permission(action=comment.post) 问他。' }
-        }
-        if (permit) consumePermit(creature, permit)
+        const gate = checkPermission(creature, 'comment.post', {
+          required: fcfg.comment?.requirePermit === true,
+          autoApprove: fcfg.comment?.autoApprove === true,
+          target,
+        })
+        if (!gate.ok) return { ok: false, said: '', note: String(gate.reason ?? '现在不能说。') }
+        const permit = gate.permit ?? null
+        usePermit(creature, permit)
         const r = args.kind === 'reply'
           ? await postReply(creature, configFor(cfg, creature), {
             bvid: args?.bvid,

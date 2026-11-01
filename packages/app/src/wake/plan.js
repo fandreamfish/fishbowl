@@ -48,7 +48,8 @@ export function shouldRecordAbsence(events, now, thresholdHours = 8) {
 
 /** 唤醒状态文件：给设置页看「她现在为什么没开口」。 */
 export function wakeStatePath(stateDir) {
-  return path.join(stateDir, 'wake-state.json')
+  // 数据根 = creatures/ 的父目录
+  return path.join(path.dirname(path.resolve(stateDir)), 'wake-state.json')
 }
 
 /**

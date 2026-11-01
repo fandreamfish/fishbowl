@@ -161,7 +161,7 @@ ctx.sessionProjections                     // 纯函数折叠：apply(state,even
 - 注入：下一轮开始时 `agent.inject()` 送入**结构化状态摘要**
   （当前 bias 数值 + 一条最相关的教训 + 未完成承诺；不写“你现在有点难过”）
 - 约束通道：`ctx.tools.guard()` 实现拒绝底线；`tools/pre-execute` 实现“验证门槛”（返回 `ask`）
-- 纯函数层全部沿用原型参数（`.prototype/engine.py` 已校准的数值）
+- 纯函数层全部沿用原型参数（`legacy/prototype/engine.py` 已校准的数值）
 
 ### 不做（M2 以后）
 

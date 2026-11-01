@@ -31,7 +31,13 @@ export function validateMemoryConfig(c) {
 }
 
 export function uiConfigPath(stateDir) {
-  return path.join(stateDir, 'ui-config.json')
+  const dataRoot = path.dirname(path.resolve(stateDir))
+  const next = path.join(dataRoot, 'ui-config.json')
+  try {
+    const legacy = path.join(stateDir, 'ui-config.json')
+    if (!fs.existsSync(next) && fs.existsSync(legacy)) fs.renameSync(legacy, next)
+  } catch { /* 搬不动就用新的 */ }
+  return next
 }
 
 /** 读-改-写 UI 配置（保留不认识的键，避免存记忆配置时把成长率冲掉）。 */

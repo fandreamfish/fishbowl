@@ -37,22 +37,22 @@ packages/
   plugin/          DSH 插件入口与前端（index.js / client.js / 工具薄封装）
   bridge-qq/       QQ 桥（OneBot v11，独立进程）
 creatures/<id>/    一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）、她的家（home/）
-src/               demo / 测试 / 兼容层（旧路径 re-export，下一版删除）
-scripts/           CLI、dev 工具（分层检查 / 迁移 / 调试）、smoke
-prototype/         Python 原型（已冻结）
+legacy/            M0 验收与 Python 原型（已冻结，不再维护）
+scripts/           CLI、dev 工具（分层检查 / 调试 / 会话排查）、smoke
+.github/           CI：分层/接口/导入检查 + 七套测试
 ```
 
 ## 运行
 
 ```sh
-node src/test.ts                        # 内核验收
+npm run test:all                         # 分层/接口/导入检查 + 七套测试
 node packages/memory/test/unit.test.ts  # 记忆模块
 node packages/plugin/test/unit.test.ts  # 插件
 node packages/plugin/test/browse.test.ts # 上网（纯逻辑 + 假 fetch）
 node packages/plugin/test/bili.test.ts   # 登录 / 评论 / 回复（假 fetch）
 node packages/bridge-qq/test/unit.test.ts
 node scripts/smoke/m7-apply-smoke.ts    # 插件激活冒烟（假宿主）
-node src/demo.ts                        # 四组剧本演示
+node legacy/m0-src/demo.ts               # 四组剧本演示（历史）
 ```
 
 `npm run test:all` 跑前六套。

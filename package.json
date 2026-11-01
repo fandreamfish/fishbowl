@@ -1,20 +1,20 @@
 {
   "name": "fishbowl-core",
-  "version": "0.1.0",
+  "version": "0.13.0",
   "private": true,
   "type": "module",
   "description": "fishbowl: memory is the material, personality is the trajectory, emotion is the real-time bias.",
   "engines": { "node": ">=22.18" },
   "scripts": {
-    "demo": "node src/demo.ts",
-    "test": "node src/test.ts",
+    "test": "node scripts/dev/test-all.mjs",
     "test:memory": "node packages/memory/test/unit.test.ts",
     "test:plugin": "node packages/plugin/test/unit.test.ts",
     "test:browse": "node packages/plugin/test/browse.test.ts",
     "test:bili": "node packages/plugin/test/bili.test.ts",
     "test:bridge": "node packages/bridge-qq/test/unit.test.ts",
     "check:layers": "node scripts/dev/check-layers.mjs",
-    "check:imports": "node scripts/dev/check-imports.mjs",`r`n    "check:interfaces": "node scripts/dev/check-interfaces.mjs",`r`n    "test:all": "node scripts/dev/check-layers.mjs && node scripts/dev/check-interfaces.mjs && node scripts/dev/check-imports.mjs && node scripts/dev/test-all.mjs",
-    "smoke": "node scripts/smoke/m7-apply-smoke.ts"
+    "check:imports": "node scripts/dev/check-imports.mjs",
+    "check:interfaces": "node scripts/dev/check-interfaces.mjs",
+    "test:all": "node scripts/dev/check-layers.mjs && node scripts/dev/check-interfaces.mjs && node scripts/dev/check-imports.mjs && node scripts/dev/test-all.mjs"
   }
 }

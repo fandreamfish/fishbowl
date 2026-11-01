@@ -14,7 +14,7 @@
 import { workspaceOf } from '../../../app/src/index.js'
 import { inSelfTime, lookForCreature } from '../../../bilibili/src/index.js'
 import { configFor } from '../../../app/src/index.js'
-import { activeGrants, consumePermit, findPermit, recordBreach } from '../../../being/src/index.ts'
+import { activeGrants, checkPermission, recordBreach, usePermit } from '../../../being/src/index.ts'
 
 export function createBrowseTool(binding, cfg) {
   return {
@@ -65,20 +65,14 @@ export function createBrowseTool(binding, cfg) {
     if (fcfg.capabilities?.browse === false) return { ok: false, text: '', note: '我现在不上网。' }
     const selfTime = inSelfTime(creature.meta.creatureId)
         // 需要许可时硬拦：没有许可就返回「需要许可才能调用」
-        let browsePermit = null
         const requirePermit = fcfg.browse?.requirePermit === true
-        if (requirePermit) {
-          browsePermit = findPermit(creature, 'browse', '')
-          if (!browsePermit) return { ok: false, text: '', note: '需要许可才能调用：先用 fish_ask_permission(action=browse) 问他。' }
-          consumePermit(creature, browsePermit)
-        }
+        const gate = checkPermission(creature, 'browse', { required: requirePermit })
+        if (!gate.ok) return { ok: false, text: '', note: String(gate.reason ?? '现在不能看。') }
+        const browsePermit = gate.permit ?? null
+        usePermit(creature, browsePermit)
         // 没有强制开关、但他说过「需要申请」：没许可也让她看，只记一笔
         const grants = activeGrants(creature, 'browse')
         const needsAsk = !requirePermit && grants.some((g) => /申请/.test(String(g.text ?? '')))
-        if (needsAsk) {
-          browsePermit = findPermit(creature, 'browse', '')
-          if (browsePermit) consumePermit(creature, browsePermit)
-        }
         const r = await lookForCreature(creature, configFor(cfg, creature), {
           what,
           keyword: args?.keyword,

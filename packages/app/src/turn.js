@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ACTIVITY_RE, breachLine, homeDir, mergePendingText, permitLine } from '../../being/src/index.ts'
+import { ACTIVITY_RE, homeDir, mergePendingText } from '../../being/src/index.ts'
 import { COMMITMENT_RE, REQUEST_RE } from '../../being/src/index.ts'
 import { applyAppraisal, salienceOf, toBias } from '../../affect/src/index.ts'
 import { createMemoryStore } from './memory-store.js'
@@ -13,11 +13,11 @@ import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE } from './identity.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
-import { recentDialog } from '../../being/src/index.ts'
-import { injectMessage, recallBlock, recentBlock } from './injector.js'
+import { injectMessage, recallBlock } from './injector.js'
 import { callLLM } from './llm.js'
 import { voiceRulesFor } from '../../voice/src/index.js'
 import { grantLine } from './grant.js'
+import { composeState } from './state.js'
 import { createAfterTurn, forgivenessOf } from './turn/after.js'
 export { forgivenessOf } from './turn/after.js'
 
@@ -48,7 +48,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   const buffers = new Map() // sessionId -> { items: {role,text}[] }
   const lastKey = new Map() // sessionId -> 指纹（肉眼可见的变化才注入）
   const injectedBy = new Map() // sessionId -> 这一轮上下文里注入过的记忆 id
-  const tracePath = path.join(binding.dir, 'trace.ndjson')
+  const tracePath = path.join(cfg.dataRoot || path.dirname(cfg.stateDir), 'trace.ndjson')
   const disposers = []
 
   const after = createAfterTurn({ cfg, binding, trace, callLLM, configFor })
@@ -79,6 +79,24 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   /** 记忆系统的模型调用：吃 cfg.appraiser 那套配置；配额与优先级在 tick 里。 */
   function memLlm() {
     return (req) => callLLM(cfg, req.system, req.user, { maxTokens: req.maxTokens, json: true, model: req.model })
+  }
+
+  // 同一只鱼同时只跑一个 tick：每轮结束、空闲清扫、打开房间三处都可能触发
+  const tickingMemory = new Set()
+  function tickMemory(creature, { maxCalls = 12, sessionId } = {}) {
+    const cid = creature?.meta?.creatureId
+    if (!cid || tickingMemory.has(cid)) return
+    let fcfg
+    try { fcfg = configFor(cfg, creature) } catch { return }
+    if (fcfg.appraiser?.kind !== 'deepseek') return
+    tickingMemory.add(cid)
+    void memoryFor(creature).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls })
+      .then((r) => {
+        const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
+        if (bad.length) trace({ ts: Date.now(), sessionId, creatureId: cid, warn: `memory tick: ${bad.slice(0, 3).join(' | ')}` })
+      })
+      .catch((err) => trace({ ts: Date.now(), sessionId, creatureId: cid, warn: `memory tick failed: ${String(err?.message || err)}` }))
+      .finally(() => tickingMemory.delete(cid))
   }
 
   /** 空壳鱼（默认名 + 没轮次 + 没记忆）就别注入中性数字了，纯噪音。 */
@@ -166,12 +184,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       if (cfg.appraiser.kind === 'deepseek') {
         // 双总结 + 到点整理：异步、有预算、失败可重试；绝不阻塞对话
-        void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model }, maxCalls: 12 })
-          .then((r) => {
-            const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
-            if (bad.length) trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick: ${bad.slice(0, 3).join(' | ')}` })
-          })
-          .catch((err) => trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick failed: ${String(err?.message || err)}` }))
+        tickMemory(creature, { maxCalls: 12, sessionId: session.id })
         if (IDENTITY_RE.test(transcript)) {
           void after.detectIdentity(session.id, creature, transcript)
         }
@@ -223,19 +236,9 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
-      const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: Date.now() })
+      const snap = composeState({ creature, mem, affect, bias, commitments, channel: 'dsh' })
       injectedBy.set(session.id, snap.picked)
-      const grant = grantLine(creature)
-      const recent = recentBlock(recentDialog(creature, 6))
-      const req = creature.requestDigest()
-      const reqLines = []
-      if (req.pending.length) reqLines.push(`还在等回音: ${req.pending.join('；')}`)
-      if (req.answered.length) reqLines.push(`他答过的: ${req.answered.map((r) => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
-      const reqText = reqLines.length ? '\n' + reqLines.join('\n') : ''
-      const perm = permitLine(creature)
-      const breach = breachLine(creature)
-      const extra = (perm ? `\n你现在被允许: ${perm}` : '') + (breach ? `\n${breach}` : '')
-      const out = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
+      const out = snap.text
       stateCache.set(session?.id, { key, text: out })
       return out
     } catch (err) {
@@ -287,12 +290,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine + dataLine)
       host.stateSection?.(agent, (context) => buildStateText(context?.agent?.session ?? agent?.session ?? { id: sid }))
       // 打开房间时补一轮总结：积压不必等到下次对话或十分钟清扫
-      try {
-        const fcfg = configFor(cfg, creature)
-        if (fcfg.appraiser?.kind === 'deepseek') {
-          void memoryFor(creature).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 12 }).catch(() => {})
-        }
-      } catch { /* 补总结失败不影响对话 */ }
+      tickMemory(creature, { maxCalls: 12, sessionId: sid })
     } catch { /* 声音注册失败不影响功能 */ }
 
     // 第二天打开会话：先把昨天的日记补上
@@ -355,14 +353,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
     try {
       for (const c of binding.listCreatures()) {
         try {
-          const fcfg = configFor(cfg, c)
-          if (fcfg.appraiser?.kind !== 'deepseek') continue
-          void memoryFor(c).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 12 })
-            .then((r) => {
-              const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
-              if (bad.length) trace({ ts: Date.now(), sessionId: c.meta.occupancy?.id, creatureId: c.meta.creatureId, warn: `memory sweep: ${bad.slice(0, 3).join(' | ')}` })
-            })
-            .catch(() => { /* 下轮再试 */ })
+          tickMemory(c, { maxCalls: 12 })
         } catch { /* 单条失败不影响其它鱼 */ }
       }
     } catch { /* 绝不外抛 */ }

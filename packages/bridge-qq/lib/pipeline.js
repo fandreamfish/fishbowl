@@ -10,7 +10,7 @@ import { applyAppraisal, salienceOf, toBias } from '../../affect/src/index.ts'
 import { Memory } from '../../memory/src/index.ts'
 import { createAppraiser } from '../../app/src/index.js'
 import { configFor } from '../../app/src/index.js'
-import { summaryText } from '../../app/src/index.js'
+import { composeState, summaryText } from '../../app/src/index.js'
 import { callLLM } from '../../app/src/index.js'
 import { voiceRulesFor } from '../../voice/src/index.js'
 
@@ -67,7 +67,7 @@ export async function reply({ cfg, creature, userText, register }) {
         .openCommitments(fcfg.growth)
         .slice(-2)
         .map((x) => (x.broken ? '⚠ ' : '') + x.text)
-      block = mem.render({ affect, bias, name: creature.meta.name, commitments }).text
+      block = composeState({ creature, mem, affect, bias, commitments, channel: 'qq' }).text
     } catch {
       mem = null
     }

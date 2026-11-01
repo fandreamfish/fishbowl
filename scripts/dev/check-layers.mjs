@@ -38,7 +38,7 @@ function walk(d, out) {
 }
 
 const files = []
-for (const d of ['src', 'packages']) walk(d, files)
+for (const d of ['packages']) walk(d, files)
 const problems = []
 for (const f of files) {
   const rel = path.relative(root, f).replace(/\\/g, '/')

@@ -1499,13 +1499,10 @@ function makeFactory() {
       const refresh = async () => {
         if (disposed) return
         try {
-          const d = await getJson(API + '/fish')
+          const d = await getJson(API + '/requests')
           box.textContent = ''
-          for (const f of (d.fish || [])) {
-            for (const r of (f.pendingRequests || [])) {
-              if (!r.action) continue
-              box.appendChild(card(f, r))
-            }
+          for (const item of (d.requests || [])) {
+            box.appendChild(card({ id: item.fishId, name: item.name }, item.request))
           }
         } catch { /* 宿主没起来：下一轮再试 */ }
       }

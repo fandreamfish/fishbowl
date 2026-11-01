@@ -19,7 +19,13 @@ import { halfLivesFor, wakingFor } from './fishcfg.js'
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createBinding(cfg) {
   fs.mkdirSync(cfg.stateDir, { recursive: true })
-  const scopesPath = path.join(cfg.stateDir, 'scopes.json')
+  const dataRoot = cfg.dataRoot || path.dirname(cfg.stateDir)
+  // 旧版本把 scopes.json 放在 creatures/ 里：搬一次
+  const scopesPath = path.join(dataRoot, 'scopes.json')
+  try {
+    const legacy = path.join(cfg.stateDir, 'scopes.json')
+    if (!fs.existsSync(scopesPath) && fs.existsSync(legacy)) fs.renameSync(legacy, scopesPath)
+  } catch { /* 搬不动就继续用新的空表 */ }
   const cache = new Map() // creatureId -> Creature
   const biasCache = new Map() // creatureId -> { ts, bias }
   /** 见过的住处（工作区路径 / 会话），供设置页选择。 */

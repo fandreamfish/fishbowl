@@ -2,7 +2,6 @@
 import { spawnSync } from 'node:child_process'
 
 const suites = [
-  'src/test.ts',
   'packages/memory/test/unit.test.ts',
   'packages/plugin/test/unit.test.ts',
   'packages/plugin/test/browse.test.ts',
