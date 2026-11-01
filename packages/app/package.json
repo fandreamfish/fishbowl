@@ -1,0 +1,6 @@
+﻿{ "name": "@fishbowl/app", "version": "0.1.0", "private": true, "type": "module",
+  "description": "shared application services: per-fish config, appraiser, LLM port, injection rendering, identity, grants, renaming.",
+  "exports": {
+    "./config": "./src/config.js", "./cfgkeys": "./src/cfgkeys.js", "./fishcfg": "./src/fishcfg.js",
+    "./appraiser": "./src/appraiser.js", "./llm": "./src/llm.js", "./injector": "./src/injector.js"
+  }, "files": ["src/**/*.js"] }

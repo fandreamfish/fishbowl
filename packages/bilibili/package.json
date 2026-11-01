@@ -1,0 +1,3 @@
+﻿{ "name": "@fishbowl/bilibili", "version": "0.1.0", "private": true, "type": "module",
+  "description": "read-only Bilibili browsing: windows, quota plans, day keys.",
+  "exports": { ".": "./src/browse.ts" }, "files": ["src/**/*.ts"] }
