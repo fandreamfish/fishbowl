@@ -12,6 +12,7 @@
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层分析：核心 / 能力 / 工具 / 可抽取模块与重构路线 |
 | [docs/RELEASE-0.1.0.md](docs/RELEASE-0.1.0.md) | 0.1.0 发布说明：包清单、能力、不变量与留白 |
+| [docs/VERSIONING.md](docs/VERSIONING.md) | 版本规范：patch/minor 怎么涨、提交/打标/推送流程 |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
 | [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
