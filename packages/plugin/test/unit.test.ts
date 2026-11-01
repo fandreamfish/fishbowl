@@ -24,7 +24,7 @@ import { buildTranscript, createCollector } from '../lib/collector.js'
 import { Creature, dialogOnly } from '../../../src/core/creature.ts'
 import { recentDialog as signalRecentDialog } from '../../../src/core/signals.ts'
 import { DEFAULT_TEMPERAMENT } from '../../../src/core/types.ts'
-import { canAsk, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
+import { canAsk, inDiaryWindow, localDate, parseDiary, parseNote, parseRequest } from '../lib/journal.js'
 import { scopeKey, scopeTitle } from '../lib/rename.js'
 import { recallBlock, recentBlock } from '../lib/injector.js'
 import { findConflict, resolveOccupant } from '../../../src/core/tenancy.ts'
@@ -587,6 +587,25 @@ console.log('== M31：半衰期可配 ==')
   const other = bH.birth('对照鱼')
   check('另一条鱼不受影响', halfLivesFor(baseH, other.meta.creatureId).guilt === 3)
   fs.rmSync(sdH, { recursive: true, force: true })
+}
+console.log('== M35：日记时间窗 ==')
+{
+  const at = (hm) => new Date(`2026-11-01T${hm}:00+08:00`).getTime()
+  check('22:00 在日记时间窗里', inDiaryWindow(at('22:00'), '21:30', '23:59', 'Asia/Shanghai'))
+  check('09:00 不在日记时间窗里', !inDiaryWindow(at('09:00'), '21:30', '23:59', 'Asia/Shanghai'))
+  check('跨午夜的时间窗也能用', inDiaryWindow(at('01:00'), '23:00', '02:00', 'Asia/Shanghai'))
+  check('日记默认开、补写默认开', normalizeConfig({}).diary.enabled === true && normalizeConfig({}).diary.catchUp === true)
+  check('日记时间可配置且被校验', normalizeConfig({ diary: { start: '25:00' } }).diary.start === '21:30')
+  check('按鱼配置日记窗', (() => {
+    const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'diary-'))
+    const c = normalizeConfig({ stateDir: sd })
+    const b = createBinding(c)
+    const f = b.birth('日记鱼')
+    writeFishConfig(sd, f.meta.creatureId, { diary: { start: '23:00', end: '23:30' } })
+    const ok = configFor(c, f).diary.start === '23:00'
+    fs.rmSync(sd, { recursive: true, force: true })
+    return ok
+  })())
 }
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

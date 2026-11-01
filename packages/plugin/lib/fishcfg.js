@@ -54,6 +54,15 @@ export function pickFishPatch(body) {
   if (body.browse && typeof body.browse === 'object') out.browse = normalizeBrowseConfig(body.browse)
   const comment = pickCommentConfig(body.comment)
   if (comment && Object.keys(comment).length) out.comment = comment
+  if (body.diary && typeof body.diary === 'object') {
+    const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)
+    out.diary = {
+      enabled: body.diary.enabled !== false,
+      start: hm(body.diary.start, '21:30'),
+      end: hm(body.diary.end, '23:59'),
+      catchUp: body.diary.catchUp !== false,
+    }
+  }
   if (body.affect && typeof body.affect === 'object') {
     const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
     out.affect = {
@@ -98,6 +107,7 @@ export function configFor(cfg, creature) {
   if (over.browse) out.browse = { ...cfg.browse, ...over.browse }
   if (over.comment) out.comment = { ...cfg.comment, ...over.comment }
   if (over.relation) out.relation = { ...cfg.relation, ...over.relation }
+  if (over.diary) out.diary = { ...cfg.diary, ...over.diary }
   if (over.affect) out.affect = { ...cfg.affect, ...over.affect }
   if (over.memory) out.memory = normalizeMemory({ ...cfg.memory, ...over.memory })
   return out
@@ -113,6 +123,7 @@ export function fishConfigView(cfg, creature) {
     selfTime: f.selfTime,
     memory: f.memory,
     affect: f.affect,
+    diary: f.diary,
     browse: f.browse,
     comment: f.comment,
     relation: f.relation,

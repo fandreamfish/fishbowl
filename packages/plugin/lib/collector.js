@@ -12,7 +12,7 @@ import { configFor } from './fishcfg.js'
 import { createAppraiser } from './appraiser.js'
 import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf, workspaceOf } from './extract.js'
 import { IDENTITY_RE, IDENTITY_SYSTEM_PROMPT, parseIdentity } from './identity.js'
-import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
+import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, inDiaryWindow, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from './journal.js'
 import { renameScopeAsync, restoreOriginalAsync } from './rename.js'
 import { todayItems } from './browse/store.js'
 import { browseDayKey } from '../../../src/core/browse.ts'
@@ -206,21 +206,51 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   }
 
   /** 日记（M7）：一天一篇；只在今天还没写时生成。 */
-  async function maybeDiary(sessionId, creature, transcript, affect) {
+  /** 某一天的聊天转录（从账本里取，不再只看当前这一轮）。 */
+  function transcriptOfDay(creature, date) {
+    const lines = []
+    for (const e of creature.store.readEvents()) {
+      if (e.t !== 'turn' && e.t !== 'episode') continue
+      if (localDate(Number(e.ts), cfg.timezone) !== date) continue
+      const note = String(e.note ?? '').replace(/situation:[^]*?(?=\n|$)/, '').trim()
+      if (note) lines.push(note.slice(0, 400))
+    }
+    return lines.slice(-20).join('\n').slice(-4000)
+  }
+
+  async function writeDiary(sessionId, creature, date) {
+    const transcript = transcriptOfDay(creature, date)
+    if (!transcript) return
+    const now = Date.now()
+    const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
+    const affectLine = `效价 ${affect.valence.toFixed(2)}，唤醒 ${affect.arousal.toFixed(2)}${affect.guilt > 0.05 ? `，愧疚 ${affect.guilt.toFixed(2)}` : ''}`
+    const seen = todayItems(creature, date).slice(0, 6)
+    const seenLine = seen.length
+      ? '那天你自己在网上翻到过（只有标题和 UP，没有画面）：\n' + seen.map((x) => `- ${x.title}${x.up ? `（UP：${x.up}）` : ''}`).join('\n')
+      : ''
+    const raw = await callLLM(configFor(cfg, creature), DIARY_SYSTEM_PROMPT, buildDiaryPrompt(transcript, affectLine, seenLine), { json: false, maxTokens: 400 })
+    const text = parseDiary(raw)
+    if (!text) return
+    creature.recordDiary(date, text, now)
+    trace({ ts: now, sessionId, event: 'diary', date })
+  }
+
+  /**
+   * 日记：当天的最后一件事。
+   *   - 在写日记的时间窗里、今天还没写 → 写今天的
+   *   - 不管几点，昨天的没写 → 先补昨天的（第二天第一件事）
+   */
+  async function runDiary(sessionId, creature) {
     try {
       const now = Date.now()
+      const dcfg = configFor(cfg, creature).diary || {}
+      if (dcfg.enabled === false) return
       const today = localDate(now, cfg.timezone)
-      if (creature.hasDiary(today)) return
-      const affectLine = `效价 ${affect.valence.toFixed(2)}，唤醒 ${affect.arousal.toFixed(2)}${affect.guilt > 0.05 ? `，愧疚 ${affect.guilt.toFixed(2)}` : ''}`
-      const seen = todayItems(creature, browseDayKey(now, cfg.timezone)).slice(0, 6)
-      const seenLine = seen.length
-        ? '今天你自己在网上翻到过（只有标题和 UP，没有画面）：\n' + seen.map((x) => `- ${x.title}${x.up ? `（UP：${x.up}）` : ''}`).join('\n')
-        : ''
-      const raw = await callLLM(cfg, DIARY_SYSTEM_PROMPT, buildDiaryPrompt(transcript, affectLine, seenLine), { json: false, maxTokens: 400 })
-      const text = parseDiary(raw)
-      if (!text) return
-      creature.recordDiary(today, text, now)
-      trace({ ts: now, sessionId, event: 'diary', date: today })
+      const yesterday = localDate(now - 86_400_000, cfg.timezone)
+      if (dcfg.catchUp !== false && !creature.hasDiary(yesterday)) await writeDiary(sessionId, creature, yesterday)
+      if (!creature.hasDiary(today) && inDiaryWindow(now, dcfg.start ?? '21:30', dcfg.end ?? '23:59', cfg.timezone)) {
+        await writeDiary(sessionId, creature, today)
+      }
     } catch (err) {
       trace({ ts: Date.now(), sessionId, warn: `diary failed: ${String(err && err.message || err)}` })
     }
@@ -333,7 +363,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
           void detectActivity(session.id, creature, transcript)
         }
         // —— M7：日记 / 小纸条 / 请求 ——
-        void maybeDiary(session.id, creature, transcript, affect)
+        void runDiary(session.id, creature)
         void maybeNote(session.id, creature, affect)
         void maybeRequest(session.id, creature, transcript)
       }
@@ -424,6 +454,9 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
         host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine)
       } catch { /* 声音注册失败不影响功能 */ }
+
+      // 第二天打开会话：先把昨天的日记补上
+      void runDiary(sid, creature)
 
       // 入住时如果会话没开着就改不了名，开房时补一次（「<名字>的房间」）
       if (creature.meta.occupancy) renameScopeAsync(host, cfg.stateDir, creature.meta.occupancy, creature.meta.name)

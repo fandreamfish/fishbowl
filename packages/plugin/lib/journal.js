@@ -89,3 +89,17 @@ export function parseRequest(text) {
     return null
   }
 }
+
+/** 现在是否在写日记的时间窗里（支持跨午夜）。 */
+export function inDiaryWindow(now, start = '21:30', end = '23:59', timezone = 'Asia/Shanghai') {
+  const fmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: timezone })
+  const [h, m] = fmt.format(new Date(now)).split(':').map(Number)
+  const cur = h * 60 + m
+  const toMin = (s) => {
+    const [a, b] = String(s).split(':').map(Number)
+    return a * 60 + b
+  }
+  const ws = toMin(start)
+  const we = toMin(end)
+  return ws <= we ? cur >= ws && cur <= we : cur >= ws || cur <= we
+}

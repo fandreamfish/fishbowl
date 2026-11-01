@@ -61,6 +61,12 @@ export function normalizeConfig(raw = {}) {
       ? { name: String(raw.seed.name ?? ''), background: String(raw.seed.background ?? '') }
       : null,
 
+    // 日记：当天最后一件事；没写就第二天补
+    diary: (() => {
+      const d = raw.diary || {}
+      const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)
+      return { enabled: d.enabled !== false, start: hm(d.start, '21:30'), end: hm(d.end, '23:59'), catchUp: d.catchUp !== false }
+    })(),
     // 心情半衰期（天）：每条鱼可单独改；0.1–60
     affect: (() => {
       const a = raw.affect || {}

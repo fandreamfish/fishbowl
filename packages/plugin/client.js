@@ -796,7 +796,7 @@ function makeFactory() {
           setGrowth(d.config.growth)
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
-          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {}, affect: d.config.affect ?? {} })
+          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {}, affect: d.config.affect ?? {}, diary: d.config.diary ?? {} })
           setErr('')
         } catch (x) {
           setErr(String((x && x.message) || x))
@@ -817,7 +817,7 @@ function makeFactory() {
 
       const openFish = (id) => {
         const f0 = ((data && data.fish) || []).find((x) => x.id === id)
-        if (f0 && f0.config) { setRoutine({ wake: f0.config.wake ?? {}, contact: f0.config.contact ?? {}, selfTime: f0.config.selfTime ?? {}, affect: f0.config.affect ?? {} }); if (typeof f0.config.growth === 'number') setGrowth(f0.config.growth) }
+        if (f0 && f0.config) { setRoutine({ wake: f0.config.wake ?? {}, contact: f0.config.contact ?? {}, selfTime: f0.config.selfTime ?? {}, affect: f0.config.affect ?? {}, diary: f0.config.diary ?? {} }); if (typeof f0.config.growth === 'number') setGrowth(f0.config.growth) }
         setView({ level: 'fish', id, page: 'home' }); setWs(''); setSess(''); setMsg(''); setMoveOpen(false); setPick(null)
       }
 
@@ -1066,6 +1066,8 @@ function makeFactory() {
         const selfTime = r.selfTime || {}
         const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
         const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const diary = r.diary || {}
+        const setDiary = (k, v) => setRoutine({ ...r, diary: { ...diary, [k]: v } })
         const affectCfg = r.affect || {}
         const setAffect = (k, v) => setRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
         const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
@@ -1180,6 +1182,12 @@ function makeFactory() {
             ] }, 'c4'),
           ] }, 'contact'),
           e('div', { style: box, children: [
+            e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '日记' }, 'h'),
+            e('div', { style: { ...lab, marginBottom: 10 }, children: '日记是一天的最后一件事。这个时间窗之外不写；第二天发现昨天的还没写，会先补昨天的。' }, 'hint'),
+            e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '每天写日记的时间' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [timeInput(diary.start ?? '21:30', (v) => setDiary('start', v), 's'), e('span', { style: lab, children: '到' }, 'sep'), timeInput(diary.end ?? '23:59', (v) => setDiary('end', v), 'e')] }, 'v')] }, 'd1'),
+            e('div', { style: rowS, children: [e('span', { style: lab, children: '第二天补写昨天' }, 'l'), e('button', { style: diary.catchUp !== false ? { ...btnP, padding: '3px 12px', fontSize: 12 } : btnS, onClick: () => setDiary('catchUp', diary.catchUp === false), children: diary.catchUp !== false ? '开' : '关' }, 'd2')] }, 'd3'),
+          ] }, 'diary'),
+          e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '心情半衰期' }, 'h'),
             e('div', { style: { ...lab, marginBottom: 10 }, children: '负面情绪会随时间淡下去。半衰期越短，忘得越快；正面状态（温暖、好奇）不在这里调。想念相反：你不理她会慢慢涨上来，见了面就回落。' }, 'hint'),
             e('div', { style: { ...rowS, marginBottom: 6 }, children: [e('span', { style: lab, children: '愧疚' }, 'l'), e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [numInput(affectCfg.guiltDays ?? 3, (v) => setAffect('guiltDays', v), 'a', 0.1, 60), e('span', { style: lab, children: '天' }, 'u')] }, 'v')] }, 'a1'),
@@ -1190,7 +1198,7 @@ function makeFactory() {
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
             e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg })
+              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg, diary })
             }, '作息已保存'), children: '保存' }, 'save'),
           ] }, 'act'),
         ] }, 'routine')      } else if (page === 'browse') {
