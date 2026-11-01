@@ -21,7 +21,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
 export { workspaceOf, findAgent, decodeWorkspace, enumerateScopes } from './host/scopes.js'
-import { findAgent, normPath, workspaceOf } from './host/scopes.js'
+import { enumerateScopes, findAgent, normPath, scopesRoots, workspaceOf } from './host/scopes.js'
 
 /** @param {any} ctx 插件根上下文 @param {{stateDir: string, timezone?: string}} cfg */
 export function createDshHost(ctx, cfg) {

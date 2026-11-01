@@ -332,6 +332,14 @@ memFish.recordDiary('2026-11-01', '第二篇', new Date(2026, 10, 1, 11, 0).getT
 const diaryFiles = fs.readdirSync(path.join(memDir, 'home', 'diary'))
 check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'home', 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
 check('家目录与日记目录已创建', fs.existsSync(path.join(memDir, 'home', 'diary')))
+// host 拆分后的回归：这些方法以前在 host.js 里，拆出去时漏了导入
+{
+  const { createDshHost } = await import('../../adapter-dsh/src/index.js')
+  const h = createDshHost({ get: () => undefined } as any, normalizeConfig({ stateDir }))
+  check('host.listScopes 可用', Array.isArray(h.listScopes().sessions))
+  check('host.sessionDirsOf 可用', Array.isArray(h.sessionDirsOf('session-none')))
+  check('host.workspaceByPath 可用', h.workspaceByPath(stateDir) === null)
+}
 // 配置持久化与许可策略
 {
   const { savePluginConfig, readPluginConfig } = await import('../../app/src/index.js')

@@ -64,7 +64,7 @@ export function decodeWorkspace(dirName) {
   return full && fs.existsSync(full) ? full : null
 }
 
-function scopesRoots() {
+export function scopesRoots() {
   const out = []
   if (process.env.DSH_HOME) out.push(path.join(process.env.DSH_HOME, 'sessions'))
   out.push(path.join(os.homedir(), '.dsh', 'sessions'))
