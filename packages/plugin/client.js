@@ -783,6 +783,7 @@ function makeFactory() {
       const [newOpen, setNewOpen] = useState(false)
       const [newName, setNewName] = useState('')
       const [newErr, setNewErr] = useState('')
+      const [newHouse, setNewHouse] = useState({ mode: 'none', id: '', path: '' })
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
       const [routine, setRoutine] = useState(null)
@@ -833,13 +834,51 @@ function makeFactory() {
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),
           e('div', { style: { ...rowS, marginTop: 8 }, children: [
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
-            e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr('') }, children: '带一条新的回家' }, 'newbtn'),
+            e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
           ] }, 'add'),
           newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
             e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 400, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
               e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 12 }, children: '给新鱼起个名字' }, 'h'),
               e('input', { style: { ...inp, padding: '9px 12px', boxSizing: 'border-box' }, value: newName, placeholder: '例：大肥鱼', autofocus: true, onInput: (ev) => setNewName(ev.target.value) }, 'i'),
               e('div', { style: { ...lab, fontSize: 12, marginTop: 6 }, children: '名字是她的身份，之后只读（历史会被铭记）。' }, 'hint'),
+              e('div', { style: { ...lab, fontSize: 12, marginTop: 10, marginBottom: 4 }, children: '住处（可选）' }, 'hh'),
+              e('select', {
+                style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%' },
+                value: newHouse.mode,
+                onChange: (ev) => setNewHouse({ mode: ev.target.value, id: '', path: '' }),
+                children: [
+                  e('option', { value: 'none', children: '先不安排（之后在「住所」页再选）' }),
+                  e('option', { value: 'existing-workspace', children: '住进现有工作区' }),
+                  e('option', { value: 'existing-session', children: '住进现有会话' }),
+                  e('option', { value: 'new-workspace', children: '新建一个工作区' }),
+                  e('option', { value: 'new-session', children: '新建一个会话' }),
+                  e('option', { value: 'new-both', children: '新建工作区 + 会话' }),
+                ],
+              }, 'house-select'),
+              (newHouse.mode === 'existing-workspace') ? e('select', {
+                style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%', marginTop: 6 },
+                value: newHouse.id,
+                onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
+                children: [
+                  e('option', { value: '', children: '选一个工作区' }),
+                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
+                ],
+              }, 'house-ws') : null,
+              (newHouse.mode === 'existing-session') ? e('select', {
+                style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%', marginTop: 6 },
+                value: newHouse.id,
+                onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
+                children: [
+                  e('option', { value: '', children: '选一个会话' }),
+                  ...((data && data.scopes && data.scopes.sessions) || []).map((s, i) => e('option', { value: s.id, children: s.id + (s.workspace ? ' · ' + s.workspace : '') }, 's' + i)),
+                ],
+              }, 'house-ss') : null,
+              (newHouse.mode === 'new-workspace' || newHouse.mode === 'new-session' || newHouse.mode === 'new-both')
+                ? e('div', { children: [
+                    e('input', { style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%', marginTop: 6 }, value: newHouse.path, placeholder: '目录（必须已存在），例：D:\\\\fish-home', onInput: (ev) => setNewHouse({ ...newHouse, path: ev.target.value }) }, 'house-path'),
+                    e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: newHouse.mode === 'new-both' ? '会在这个目录建工作区，并在里面建一个会话' : (newHouse.mode === 'new-workspace' ? '会把这个目录登记成工作区' : '会在这个目录里建一个会话') }, 'house-hint'),
+                  ] }, 'house-new')
+                : null,
               newErr ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 6 }, children: newErr }, 'e') : null,
               e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }, children: [
                 e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: () => setNewOpen(false), children: '取消' }, 'c'),
@@ -847,8 +886,15 @@ function makeFactory() {
                   const name = newName.trim()
                   if (!name) { setNewErr('先起个名字'); return }
                   try {
-                    await postJson(API + '/fish', { name })
-                    setNewOpen(false); setNewName(''); setNewErr('')
+                    const housing = newHouse.mode === 'none'
+                      ? { kind: 'none' }
+                      : newHouse.mode === 'existing-workspace'
+                        ? { kind: 'existing', type: 'workspace', id: newHouse.id }
+                        : newHouse.mode === 'existing-session'
+                          ? { kind: 'existing', type: 'session', id: newHouse.id, workspace: (((data && data.scopes && data.scopes.sessions) || []).find(s => s.id === newHouse.id) || {}).workspace }
+                          : { kind: newHouse.mode, path: newHouse.path }
+                    await postJson(API + '/fish', { name, housing })
+                    setNewOpen(false); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' })
                     await load()
                   } catch (x) { setNewErr(String((x && x.message) || x)) }
                 }, children: '创建' }, 'ok'),

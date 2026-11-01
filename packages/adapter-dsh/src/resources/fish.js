@@ -4,6 +4,7 @@ import path from 'node:path'
 import { renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
 import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
+import { housingToOccupancy } from '../../../app/src/index.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
 import { history as browseHistory } from '../../../bilibili/src/index.js'
 import { commentStatus, scanDueReplies } from '../../../bilibili/src/index.js'
@@ -17,9 +18,13 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     const body = JSON.parse(await readBody(req) || '{}')
     const name = String(body.name ?? '').trim()
     if (!name) { send(res, { ok: false, error: '先给它起个名字' }, 400); return true }
-    const occ = body.occupancy && body.occupancy.kind
+    let occ = body.occupancy && body.occupancy.kind
       ? { kind: body.occupancy.kind, id: String(body.occupancy.id ?? ''), workspace: body.occupancy.workspace ? String(body.occupancy.workspace) : undefined }
       : null
+    if (body.housing) {
+      try { occ = await housingToOccupancy(host, body.housing) }
+      catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, 400); return true }
+    }
     if (occ) {
       const conflict = binding.conflictFor('', occ)
       if (conflict) { send(res, { ok: false, error: `这个住处已经住着「${conflict.name}」了` }, 409); return true }

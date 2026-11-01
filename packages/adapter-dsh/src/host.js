@@ -286,6 +286,40 @@ export function createDshHost(ctx, cfg) {
       }
     },
 
+    /** 新建工作区：目录必须已存在。返回 { id, path, title }。 */
+    async createWorkspace(p) {
+      const registry = workspaceRegistry()
+      if (!registry || typeof registry.create !== 'function') throw new Error('宿主没有工作区服务')
+      const abs = normPath(p)
+      if (!fs.existsSync(abs)) throw new Error('目录不存在：' + abs)
+      const w = await registry.create(abs)
+      const id = w?.id ?? w?.workspace?.id
+      if (!id) throw new Error('工作区创建失败')
+      return { id: String(id), path: abs, title: String(w?.title ?? '') }
+    },
+
+    /** 新建会话（可选挂到某个工作区）。返回 { id, workspace }。 */
+    async createSession({ workspaceId, cwd, path: dirPath } = {}) {
+      const reg = ctx.agents
+      const agents = typeof reg?.createSession === 'function' ? reg : get('agents')
+      if (!agents || typeof agents.createSession !== 'function') throw new Error('宿主没有会话服务')
+      const registry = workspaceRegistry()
+      let target = null
+      if (workspaceId) {
+        target = registry?.get?.(workspaceId) ?? null
+        if (!target) throw new Error('工作区不存在：' + workspaceId)
+      }
+      const dir = normPath(cwd || target?.path || dirPath || '')
+      if (!dir) throw new Error('新建会话需要工作区或目录')
+      const created = await agents.createSession({ cwd: dir, reusable: () => false })
+      const id = created?.agent?.id ?? created?.sessionId ?? created?.id
+      if (!id) throw new Error('会话创建失败')
+      if (target && typeof target.attachSession === 'function') {
+        try { target.attachSession(String(id)) } catch { /* 挂不上也不影响会话本身 */ }
+      }
+      return { id: String(id), workspace: dir }
+    },
+
     listScopes() {
       return enumerateScopes()
     },
