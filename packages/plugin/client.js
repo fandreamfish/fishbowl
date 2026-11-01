@@ -834,6 +834,9 @@ function makeFactory() {
       const [newErr, setNewErr] = useState('')
       const [newHouse, setNewHouse] = useState({ mode: 'new-session', id: '', path: '' })
       const [fp, setFp] = useState(null)
+      const [cleanOpen, setCleanOpen] = useState(false)
+      const [cleanWs, setCleanWs] = useState('')
+      const [cleanMsg, setCleanMsg] = useState('')
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
       const [routine, setRoutine] = useState(null)
@@ -889,24 +892,45 @@ function makeFactory() {
             e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
             e('button', {
               style: { ...btnS, padding: '7px 14px', marginLeft: 8 },
-              onClick: async () => {
-                try {
-                  const dry = await postJson(API + '/cleanup/rooms', { dryRun: true })
-                  const rooms = (dry.rooms || []).filter((r) => (r.candidates || []).length)
-                  const total = rooms.reduce((n, r) => n + r.candidates.length, 0)
-                  if (!total) { window.alert('没有需要清理的房间。'); return }
-                  const lines = rooms.map((r) => base(r.path) + '：' + r.candidates.map((c) => c.title || c.id.slice(0, 12)).join('、'))
-                  if (!window.confirm('这些房间没有鱼住，会被归档（侧边栏隐藏，文件保留）：\n\n' + lines.join('\n') + '\n\n继续？')) return
-                  const done = await postJson(API + '/cleanup/rooms', { dryRun: false })
-                  const n = (done.rooms || []).reduce((a, x) => a + (x.removed || []).length, 0)
-                  await load()
-                  window.alert('归档了 ' + n + ' 个房间。')
-                } catch (x) { setErr(String((x && x.message) || x)) }
-              },
+              onClick: () => { setCleanOpen(true); setCleanWs(''); setCleanMsg('') },
               children: '清理空房间',
             }, 'cleanup'),
           ] }, 'add'),
           fp ? e(FolderPicker, { start: fp.start, onPick: (p) => setNewHouse({ ...newHouse, path: p }), onClose: () => setFp(null) }, 'fp') : null,
+          cleanOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setCleanOpen(false), children: [
+            e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 430, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
+              e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 6 }, children: '清理空房间' }, 'h'),
+              e('div', { style: { ...lab, fontSize: 12, marginBottom: 10 }, children: '先选一个屋子：只会清理这个屋子里没有鱼住的房间（归档：侧边栏隐藏，文件保留）。' }, 'hint'),
+              e('div', { style: { maxHeight: 280, overflow: 'auto', border: '1px solid var(--dsw-alias-border, #ddd)', borderRadius: 8, padding: 4 }, children: [
+                ...allWs.map((w, i) => e('div', {
+                  key: 'cw' + i,
+                  style: { padding: '6px 9px', fontSize: 13, cursor: 'pointer', borderRadius: 6, background: cleanWs === w ? 'var(--dsw-alias-bg-2, #eef1f6)' : 'transparent' },
+                  onClick: () => { setCleanWs(w); setCleanMsg('') },
+                  children: (cleanWs === w ? '● ' : '▸ ') + wsName(data.scopes && data.scopes.workspaceNames, w) + '（' + w + '）',
+                }, 'cw' + i)),
+                !allWs.length ? e('div', { style: lab, children: '还没有见过工作区' }, 'nows') : null,
+              ] }, 'list'),
+              cleanMsg ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 8 }, children: cleanMsg }, 'msg') : null,
+              e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }, children: [
+                e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: () => setCleanOpen(false), children: '取消' }, 'c'),
+                e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: async () => {
+                  if (!cleanWs) { setCleanMsg('先选一个屋子'); return }
+                  try {
+                    const dry = await postJson(API + '/cleanup/rooms', { path: cleanWs, dryRun: true })
+                    const cands = (dry.rooms && dry.rooms[0] && dry.rooms[0].candidates) || []
+                    if (!cands.length) { setCleanMsg('这个屋子里没有需要清理的房间'); return }
+                    const names = cands.map((c) => c.title || c.id.slice(0, 12)).join('、')
+                    if (!window.confirm('这些房间会被归档（侧边栏隐藏，文件保留）：\n\n' + names + '\n\n继续？')) return
+                    const done = await postJson(API + '/cleanup/rooms', { path: cleanWs, dryRun: false })
+                    const n = ((done.rooms && done.rooms[0] && done.rooms[0].removed) || []).length
+                    setCleanOpen(false)
+                    await load()
+                    window.alert('归档了 ' + n + ' 个房间。')
+                  } catch (x) { setCleanMsg(String((x && x.message) || x)) }
+                }, children: '开始清理' }, 'ok'),
+              ] }, 'acts'),
+            ] }, 'modal'),
+          ] }) : null,
           newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
             e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 400, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
               e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 12 }, children: '给新鱼起个名字' }, 'h'),
