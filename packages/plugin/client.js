@@ -867,8 +867,7 @@ function makeFactory() {
       const tabs = [
         ['status', '状态'], ['home', '住所'], ['routine', '作息'],
         ...(caps.browse === false ? [] : [['browse', '上网']]),
-        ['persona', '人设'],
-        ...(caps.memory === false ? [] : [['memory', '记忆']]),
+        ['persona', '人设'], ['memory', '记忆'],
       ]
 
       let body = null
@@ -876,12 +875,12 @@ function makeFactory() {
         const capRow = (key, label) => e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }, children: [
           e('span', { style: { fontSize: 12.5 }, children: label }, 'l'),
           e('button', { style: caps[key] === false ? btnS : { ...btnP, padding: '3px 12px', fontSize: 12 }, onClick: () => act(async () => {
-            const next = { browse: caps.browse !== false, memory: caps.memory !== false }
+            const next = { browse: caps.browse !== false }
             next[key] = caps[key] === false
             await postJson(API + '/fish/' + f.id + '/config', { capabilities: next })
           }, '能力已更新'), children: caps[key] === false ? '关' : '开' }, key),
         ] }, key + 'row')
-        const capRows = [capRow('browse', '上网（看视频、在 B 站说话）'), capRow('memory', '记忆（记住、回忆、翻记忆）')]
+        const capRows = [capRow('browse', '上网（看视频、在 B 站说话）')]
         const mem = f.memory || {}
         const lines = []
         if (mem.semantics?.length) lines.push('记得: ' + mem.semantics.join('；'))
@@ -900,7 +899,7 @@ function makeFactory() {
             : e('div', { style: lab, children: '还没有记忆（聊几轮后会开始巩固）' }) }, 'm'),
           e('div', { style: box, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: '能力' }, 'h'),
-            e('div', { style: { ...lab, marginBottom: 8 }, children: '关掉后她就拿不到对应工具，设置页也不再显示那一页。' }, 'hint'),
+            e('div', { style: { ...lab, marginBottom: 8 }, children: '关掉后她拿不到上网的工具，设置页也不再显示「上网」页。记忆不是能力，不能关。' }, 'hint'),
             ...capRows,
           ] }, 'caps'),
         ] }, 'status')

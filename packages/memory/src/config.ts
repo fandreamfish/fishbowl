@@ -59,7 +59,6 @@ export function normalizeMemory(raw) {
       ? r.tags.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim()).slice(0, 40)
       : DEFAULT_TAGS.slice(),
     singleWriter: r.singleWriter === 'off' || r.singleWriter === 'strict' ? r.singleWriter : 'warn',
-    enabled: r.enabled !== false,
     searchTool: r.searchTool !== false,
     embeddings: {
       enabled: r.embeddings?.enabled === true,

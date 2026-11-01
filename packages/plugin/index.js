@@ -98,7 +98,7 @@ export function apply(ctx, config = {}) {
     }
     if (anyFishHas('browse')) add(() => host.registerTool(createBrowseTool(binding, cfg)))
     if (anyFishHas('browse')) add(() => host.registerTool(createSpeakTool(binding, cfg)))
-    if (anyFishHas('memory') && cfg.memory?.searchTool !== false) add(() => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
+    if (cfg.memory?.searchTool !== false) add(() => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
   }
   registerCapabilityTools()
 
