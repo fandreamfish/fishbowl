@@ -469,6 +469,29 @@ function makeFactory() {
       const [comment, setComment] = useState(null)
       const [biliStatus, setBiliStatus] = useState(null)
       const [cookieText, setCookieText] = useState('')
+      // 分开填：SESSDATA / bili_jct / DedeUserID；整段粘贴只是可选快捷方式
+      const [ck, setCk] = useState({ sessdata: '', jct: '', uid: '' })
+      const setCkField = (k, v) => setCk(Object.assign({}, ck, { [k]: v }))
+      const parsePaste = (text) => {
+        const t = String(text || '')
+        const get = (name) => {
+          const m = t.match(new RegExp('(?:^|[;,\\s])' + name + '\\s*=\\s*([^;,\\s]+)', 'i'))
+          return m ? decodeURIComponent(m[1]) : ''
+        }
+        setCk({
+          sessdata: get('SESSDATA') || ck.sessdata,
+          jct: get('bili_jct') || ck.jct,
+          uid: get('DedeUserID') || ck.uid,
+        })
+        setCookieText('')
+      }
+      const cookieOfFields = () => {
+        const parts = []
+        if (ck.sessdata.trim()) parts.push('SESSDATA=' + ck.sessdata.trim())
+        if (ck.jct.trim()) parts.push('bili_jct=' + ck.jct.trim())
+        if (ck.uid.trim()) parts.push('DedeUserID=' + ck.uid.trim())
+        return parts.join('; ')
+      }
       const [ownerMid, setOwnerMid] = useState('')
       const [ownerName, setOwnerName] = useState('')
       const [err, setErr] = useState('')
@@ -561,7 +584,8 @@ function makeFactory() {
         await postJson(API + '/fish/' + f.id + '/config', { comment: cm })
       }, 'B 站设置已保存')
       const saveCookie = () => act(async () => {
-        const r = await postJson(API + '/bili/auth', { cookie: cookieText })
+        const r = await postJson(API + '/bili/auth', { cookie: cookieOfFields() })
+        setCk({ sessdata: '', jct: '', uid: '' })
         setCookieText('')
         setMsg(r.note || '存下了。')
       }, 'cookie 已保存')
@@ -571,6 +595,7 @@ function makeFactory() {
       }, 'cookie 有效')
       const clearCookie = () => act(async () => {
         await postJson(API + '/bili/auth/clear', {})
+        setCk({ sessdata: '', jct: '', uid: '' })
         setCookieText('')
       }, 'cookie 已清除')
       const scanNow = () => act(async () => {
@@ -682,23 +707,39 @@ function makeFactory() {
       }, 'cm-' + k)
       const loginCard = e('div', { style: box, key: 'bili-auth', children: [
         e('div', { style: { fontWeight: 600, fontSize: 13.5, marginBottom: 4 }, children: 'B 站登录（cookie）' }, 'h'),
-        e('div', { style: { ...lab, fontSize: 12, marginBottom: 8, lineHeight: 1.8 }, children: [
+        e('div', { style: { ...lab, fontSize: 12, marginBottom: 8, lineHeight: 1.9 }, children: [
           e('div', { children: au.hasCookie
             ? `已存${au.account?.name ? `，登录账号：${au.account.name}${au.account.mid ? `（uid ${au.account.mid}）` : ''}` : ''}${au.hasCsrf ? '' : '，但少了 bili_jct（不能说话）'}。`
             : '还没存。没存也能看视频，只是不能在评论区说话。' }, 'st'),
-          e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '只落本机 bili-auth.json（0600）；存完不回显。建议用小号。' }, 'hint'),
+          e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '存到本机 bili-auth.json，文件权限 0600。' }, 'hint1'),
+          e('div', { style: { color: 'var(--dsw-alias-text-3, #999)' }, children: '存完不回显；建议用小号，别用主账号。' }, 'hint2'),
         ] }, 'status'),
+        e('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginBottom: 8 }, children: [
+          e('label', { style: { display: 'block' }, children: [
+            e('div', { style: { ...lab, marginBottom: 4 }, children: 'SESSDATA（必填）' }, 'l1'),
+            e('input', { style: inp, value: ck.sessdata, placeholder: '浏览器 Cookie 里的 SESSDATA', onInput: (ev) => setCkField('sessdata', ev.target.value) }, 'sessdata'),
+          ] }, 'sessdata-box'),
+          e('label', { style: { display: 'block' }, children: [
+            e('div', { style: { ...lab, marginBottom: 4 }, children: 'bili_jct（要说话才需要）' }, 'l2'),
+            e('input', { style: inp, value: ck.jct, placeholder: 'Cookie 里的 bili_jct', onInput: (ev) => setCkField('jct', ev.target.value) }, 'jct'),
+          ] }, 'jct-box'),
+          e('label', { style: { display: 'block' }, children: [
+            e('div', { style: { ...lab, marginBottom: 4 }, children: 'DedeUserID（可选，用来标 @ 谁）' }, 'l3'),
+            e('input', { style: inp, value: ck.uid, placeholder: '你的 B 站 uid，可空', onInput: (ev) => setCkField('uid', ev.target.value) }, 'uid'),
+          ] }, 'uid-box'),
+        ] }, 'fields'),
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 4 }, children: '也可以整段粘贴（会自动拆到上面三项）' }, 'paste-label'),
         e('textarea', {
-          rows: 3,
-          style: { ...inp, minHeight: 62, resize: 'vertical', boxSizing: 'border-box' },
+          rows: 2,
+          style: { ...inp, minHeight: 46, resize: 'vertical', boxSizing: 'border-box' },
           value: cookieText,
-          placeholder: 'SESSDATA=...; bili_jct=...',
-          onInput: (ev) => setCookieText(ev.target.value),
+          placeholder: 'SESSDATA=...; bili_jct=...; DedeUserID=...',
+          onInput: (ev) => parsePaste(ev.target.value),
         }, 'cookie'),
         e('div', { style: { ...rowS, marginTop: 8 }, children: [
-          e('span', { style: { ...lab, fontSize: 11.5 }, children: '从浏览器 DevTools 的 Cookie 头整段粘贴；也可以从 cookies.txt 粘。' }, 'h'),
+          e('span', { style: { ...lab, fontSize: 11.5 }, children: '从浏览器 DevTools → Application → Cookies 复制；三项可以只填前两项。' }, 'h'),
           e('span', { style: { display: 'flex', gap: 6 }, children: [
-            e('button', { style: btnS, disabled: busy === 'save' || !cookieText.trim(), onClick: saveCookie, children: '保存 cookie' }, 'saveck'),
+            e('button', { style: btnS, disabled: busy === 'save' || !ck.sessdata.trim(), onClick: saveCookie, children: '保存 cookie' }, 'saveck'),
             e('button', { style: btnS, disabled: busy === 'save' || !au.hasCookie, onClick: testCookie, children: '测试能不能说话' }, 'testck'),
             e('button', { style: btnS, disabled: busy === 'save' || !au.hasCookie, onClick: clearCookie, children: '清除' }, 'clrck'),
           ] }, 'acts'),
