@@ -179,12 +179,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
 
         const fcfg = configFor(cfg, creature)
         if (fcfg.wake?.enabled === false) continue
-        // 长时间没说话 → 记一条缺席（longing 就是这么来的）
-        const events = creature.store.readEvents()
-        if (shouldRecordAbsence(events, now, fcfg.wake.absenceHours ?? 8)) {
-          const hours = absenceHours(events, now)
-          if (hours !== null) creature.recordAbsence(hours)
-        }
+        // 想念不再靠事件攒：longingAt 按「距上次互动多久」算
 
         const broken = creature.openCommitments(fcfg.growth).filter((c) => c.broken).length
         const longing = (creature.affectNow ? creature.affectNow() : creature.fold().affect).longing

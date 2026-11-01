@@ -45,6 +45,21 @@ export class Creature {
     return new Creature(store, store.readMeta(), opts.halfLives)
   }
 
+  /**
+   * 想念 = 距离上次互动过了多久：越久越想，见了面重新算。
+   * 这是时间函数，不靠事件慢慢累积（旧的 absence 事件只是历史痕迹）。
+   */
+  longingAt(now = Date.now()): number {
+    const events = this.store.readEvents()
+    let last = 0
+    for (const e of events) {
+      if ((e.t === 'turn' || e.t === 'episode' || e.t === 'contact') && Number(e.ts) > last) last = Number(e.ts)
+    }
+    if (!last) return this.fold().affect.longing
+    const hours = Math.max(0, (now - last) / 3_600_000)
+    // 半天的空档就开始明显想念；两天左右到顶（不是几分钟就满）
+    return Math.min(1, 0.35 * Math.log1p(hours / 2))
+  }
   /** 从缓存尾重放事件，返回当前情绪。重放是确定性的；封存期间时间不流逝。 */
   fold(): { affect: Affect; fromSeq: number; frozen: boolean } {
     const events = this.store.readEvents()
@@ -93,6 +108,7 @@ export class Creature {
     if (!this.isFrozen() && lastTs > 0 && now > lastTs) {
       applyElapse(out, (now - lastTs) / 1000, this.temperament, this.halfLives)
     }
+    if (!this.isFrozen()) out.longing = this.longingAt(now)
     return out
   }
   bias(): Bias {

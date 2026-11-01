@@ -138,6 +138,19 @@ const back = s4.fold().affect
 check('重逢：效价回升 0.32', near(back.valence, 0.32, 0.03), `v=${back.valence.toFixed(2)}`)
 check('重逢：想念释放 60%', near(back.longing, 0.40, 0.01), `longing=${back.longing.toFixed(2)}`)
 
+// ---------------------------------------------------------------- 想念随时间涨
+{
+  const sl = mk('sl')
+  const T1 = 1_800_000_000_000
+  sl.recordEpisode('turn', sc.neutral(), 'user: 在吗 assistant: 在', T1)
+  const l1 = sl.affectNow(T1 + 1 * 3_600_000).longing
+  const l12 = sl.affectNow(T1 + 12 * 3_600_000).longing
+  const l48 = sl.affectNow(T1 + 48 * 3_600_000).longing
+  check('想念随时间增长', l1 < l12 && l12 < l48, `${l1.toFixed(2)} -> ${l12.toFixed(2)} -> ${l48.toFixed(2)}`)
+  sl.recordEpisode('turn', sc.neutral(), 'user: 我回来了 assistant: 嗯', T1 + 48 * 3_600_000)
+  const after = sl.affectNow(T1 + 48 * 3_600_000).longing
+  check('互动后想念回落', after < 0.05, `after=${after.toFixed(2)}`)
+}
 // ---------------------------------------------------------------- 死区
 const db = mk('db')
 for (let i = 0; i < 20; i++) db.recordEpisode('tiny', sc.tiny(), undefined, T0)
