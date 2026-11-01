@@ -294,7 +294,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
     timer = setTimeout(() => { void tick() }, delay)
   }
 
-  timer = setTimeout(() => { void tick() }, 10_000)
+  timer = setTimeout(() => { void tick() }, Math.max(20, Number(cfg.wake.firstDelayMs) || 10_000))
   return () => {
     stopped = true
     if (timer) clearTimeout(timer)

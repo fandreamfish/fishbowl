@@ -16,7 +16,7 @@ import { guardVerdict, refuseReason, verifyDecision, askableDecision, budgetVerd
 import { isFishbowlInjection, messageText, textOf, toolNameOf, wakeOf } from '../lib/extract.js'
 import { IDENTITY_RE, parseIdentity } from '../lib/identity.js'
 import { injectMessage, stateKey, summaryText } from '../lib/injector.js'
-import { absenceHours, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
+import { absenceHours, createWakeLoop, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../lib/life.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../lib/ui-route.js'
 import { configFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../lib/fishcfg.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/summarize.ts'
@@ -633,6 +633,34 @@ console.log('== M25：每条鱼的配置互相独立 ==')
   check('迁移后各自有一份', readFishConfig(sdF, fc.meta.creatureId).wake.absenceHours === 9)
   check('已有配置的鱼不被覆盖', configFor(base, fa).wake.absenceHours === 3)
   fs.rmSync(sdF, { recursive: true, force: true })
+}
+console.log('== M26：唤醒循环能真的叫醒（集成） ==')
+{
+  const sdW = fs.mkdtempSync(path.join(os.tmpdir(), 'wake-'))
+  const cfgW = normalizeConfig({ stateDir: sdW, timezone: 'Asia/Shanghai', wake: { enabled: true, firstDelayMs: 20, activeWindow: ['00:00', '23:59'], interval: { mode: 'fixed', min: '1m' } }, contact: { window: ['00:00', '23:59'], dailyMax: 5, minGap: '1m', burst: { max: 5, per: '1m' } } })
+  const bW = createBinding(cfgW)
+  const fW = bW.birth('唤醒鱼')
+  bW.assign(fW.meta.creatureId, { kind: 'session', id: 'sw' })
+  fW.recordAbsence(24) // 攒够想念，制造一个有由头的场景
+  const wakes = []
+  const hostW = {
+    listAgents: () => [{ session: { id: 'sw', header: { cwd: 'D:\\wake-ws' } } }],
+    wake: async (_a, msg) => { wakes.push(msg.content[0].text) },
+    inject: async () => {},
+    agentFor: () => ({ session: { id: 'sw' } }),
+    voice: () => {},
+    listScopes: () => ({ workspaces: [], sessions: [] }),
+    registerRoute: () => () => {},
+    guard: () => {}, preExecute: () => {}, titleOf: () => '', nameScope: () => ({ ok: true }), services: () => ({}),
+  }
+  const offW = createWakeLoop({}, bW, cfgW, hostW)
+  await new Promise((r) => setTimeout(r, 500))
+  offW()
+  check('唤醒真的发生了（不再被异常吞掉）', wakes.length >= 1, 'wakes=' + wakes.length)
+  check('唤醒文本是舞台提示', wakes[0]?.includes('醒一醒'))
+  const st = JSON.parse(fs.readFileSync(path.join(sdW, 'wake-state.json'), 'utf8'))
+  check('状态文件写下她的由头', Array.isArray(st.entries) && st.entries.some((e) => e.reason))
+  fs.rmSync(sdW, { recursive: true, force: true })
 }
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)
