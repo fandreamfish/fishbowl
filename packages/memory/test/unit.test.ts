@@ -187,6 +187,13 @@ const beforeCount = mem.view().memories.length
 await mem.tick({ llm, by: { model: 'fake' } })
 check('水位线推进后不再重复整理', mem.view().memories.length === beforeCount)
 
+console.log('== 积压也会整理（不必等满 20 轮） ==')
+const idle = new Memory({ dir: path.join(TMP, 'fish-idle'), cfg: { memory: { consolidateCap: 20 } } })
+for (let i = 0; i < 3; i++) idle.observe({ note: `用户: 第${i}次\n助手: 嗯`, salience: 0.3, ts: Date.now() - 11 * 60_000 - i })
+let idleRep: any = { merged: 0 }
+for (let i = 0; i < 12 && !idleRep.merged; i++) idleRep = await idle.tick({ llm, by: { model: 'fake' }, maxCalls: 4 })
+check('三轮积压十分钟后自动整理', idleRep.merged >= 1, JSON.stringify(idleRep))
+check('水位线推进到 3', idle.view().watermark === 3)
 console.log('== 失败不丢批 ==')
 const flaky = async (req: any) => {
   if (req.kind === 'merge') throw new Error('429')

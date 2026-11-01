@@ -276,12 +276,16 @@ export class Memory {
       }
     }
 
-    // 2) 到点整理
+    // 2) 到点整理：攒够上限，或者积压了一段时间（避免新鱼一直"未总结"）
     view = this.view()
-    const pending = view.turns.length - view.watermark
-    if (pending >= this.cfg.consolidateCap && calls < max) {
+    const pendingTurns = view.turns.slice(view.watermark)
+    const pending = pendingTurns.length
+    const oldestPendingTs = Number(pendingTurns[0]?.ts ?? now)
+    const idleFlush = pending >= 3 && now - oldestPendingTs > 10 * 60_000
+    if ((pending >= this.cfg.consolidateCap || idleFlush) && calls < max) {
       const from = view.watermark + 1
-      const batch = view.turns.slice(view.watermark, view.watermark + Math.max(1, this.cfg.consolidateCap))
+      const size = Math.min(Math.max(1, this.cfg.consolidateCap), pending)
+      const batch = pendingTurns.slice(0, size)
       const to = from + batch.length - 1
       const last = [...view.attempts].reverse().find((a) => a.from === from && a.to === to)
       const attempts = view.attempts.filter((a) => a.from === from && a.to === to).length

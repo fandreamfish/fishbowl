@@ -344,6 +344,22 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   })
   if (offCreated) disposers.push(offCreated)
 
+  // 空闲整理：不聊天的时候也把攒着的轮次整理掉（否则新鱼一直"未总结"）
+  const flushTimer = setInterval(() => {
+    try {
+      for (const c of binding.listCreatures()) {
+        try {
+          const fcfg = configFor(cfg, c)
+          if (fcfg.appraiser?.kind !== 'deepseek') continue
+          void memoryFor(c).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 8 })
+            .catch(() => { /* 下轮再试 */ })
+        } catch { /* 单条失败不影响其它鱼 */ }
+      }
+    } catch { /* 绝不外抛 */ }
+  }, 10 * 60_000)
+  try { flushTimer.unref?.() } catch { /* 忽略 */ }
+  disposers.push(() => clearInterval(flushTimer))
+
   return () => {
     for (const d of disposers) { try { d() } catch { /* 尽力清理 */ } }
   }
