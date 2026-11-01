@@ -1,6 +1,6 @@
 {
   "name": "fishbowl-core",
-  "version": "0.14.7",
+  "version": "0.14.8",
   "private": true,
   "type": "module",
   "description": "fishbowl: memory is the material, personality is the trajectory, emotion is the real-time bias.",

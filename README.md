@@ -42,6 +42,10 @@ scripts/           CLI、dev 工具（分层检查 / 调试 / 会话排查）、
 .github/           CI：分层/接口/导入检查 + 七套测试
 ```
 
+## 学习文档
+
+从零读懂整个项目：[docs/LEARNING.md](docs/LEARNING.md)（按包讲解、精确到行）。
+
 ## 运行
 
 ```sh
