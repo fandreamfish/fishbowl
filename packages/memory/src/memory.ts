@@ -210,6 +210,31 @@ export class Memory {
     let view = this.view()
     const memById = new Map(view.memories.map((m) => [m.id, m]))
 
+    // 0) 先整理：记忆先长出来（一次调用），总结再用剩下的预算补。
+    //    顺序反过来的话，积压多时预算全被总结吃掉，合并永远轮不到。
+    {
+      const pendingTurns = view.turns.slice(view.watermark)
+      const pending = pendingTurns.length
+      const oldestPendingTs = Number(pendingTurns[0]?.ts ?? now)
+      const idleFlush = pending >= 3 && now - oldestPendingTs > 10 * 60_000
+      if ((pending >= this.cfg.consolidateCap || idleFlush) && calls < max) {
+        const from = view.watermark + 1
+        const size = Math.min(Math.max(1, this.cfg.consolidateCap), pending)
+        const batch = pendingTurns.slice(0, size)
+        const to = from + batch.length - 1
+        const last = [...view.attempts].reverse().find((a) => a.from === from && a.to === to)
+        const attempts = view.attempts.filter((a) => a.from === from && a.to === to).length
+        if (!opts.force && (attempts >= 3 || (last && !last.ok && now - last.ts < 10 * 60_000))) {
+          report.skipped.push(`merge ${from}-${to}（退避中）`)
+        } else {
+          calls += 1
+          report.merged = await this.merge(batch, view.memories, { from, to }, opts)
+          if (report.merged) this.maybeSaveSnapshot()
+          view = this.view()
+        }
+      }
+    }
+
     // 1) 最老的未完成轮次
     for (const t of view.turns) {
       if (calls >= max) break
@@ -276,27 +301,6 @@ export class Memory {
           this.bump(t.id)
           report.errors.push(`her ${t.id.slice(0, 8)}: ${String((e as any)?.message || e)}`)
         }
-      }
-    }
-
-    // 2) 到点整理：攒够上限，或者积压了一段时间（避免新鱼一直"未总结"）
-    view = this.view()
-    const pendingTurns = view.turns.slice(view.watermark)
-    const pending = pendingTurns.length
-    const oldestPendingTs = Number(pendingTurns[0]?.ts ?? now)
-    const idleFlush = pending >= 3 && now - oldestPendingTs > 10 * 60_000
-    if ((pending >= this.cfg.consolidateCap || idleFlush) && calls < max) {
-      const from = view.watermark + 1
-      const size = Math.min(Math.max(1, this.cfg.consolidateCap), pending)
-      const batch = pendingTurns.slice(0, size)
-      const to = from + batch.length - 1
-      const last = [...view.attempts].reverse().find((a) => a.from === from && a.to === to)
-      const attempts = view.attempts.filter((a) => a.from === from && a.to === to).length
-      if (!opts.force && (attempts >= 3 || (last && !last.ok && now - last.ts < 10 * 60_000))) {
-        report.skipped.push(`merge ${from}-${to}（退避中）`)
-      } else {
-        report.merged = await this.merge(batch, view.memories, { from, to }, opts)
-        if (report.merged) this.maybeSaveSnapshot()
       }
     }
 

@@ -166,7 +166,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       if (cfg.appraiser.kind === 'deepseek') {
         // 双总结 + 到点整理：异步、有预算、失败可重试；绝不阻塞对话
-        void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model } })
+        void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model }, maxCalls: 12 })
           .then((r) => {
             const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
             if (bad.length) trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick: ${bad.slice(0, 3).join(' | ')}` })
@@ -276,6 +276,13 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const dataLine = `\n\n你的东西都在 ${creature.store.dir}：日记（diary/）、小纸条（notes/）、记忆账本都在那里。你想写下、创建、保存的任何东西都放到这个文件夹里，不要写到别处；房间只是你住的地方。你的账本一开始是空的：不要从 .fishbowl\\\\trash、旧系统目录、或别人的房间文件里认领过去或日记。`
       host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine + dataLine)
       host.stateSection?.(agent, (context) => buildStateText(context?.agent?.session ?? agent?.session ?? { id: sid }))
+      // 打开房间时补一轮总结：积压不必等到下次对话或十分钟清扫
+      try {
+        const fcfg = configFor(cfg, creature)
+        if (fcfg.appraiser?.kind === 'deepseek') {
+          void memoryFor(creature).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 12 }).catch(() => {})
+        }
+      } catch { /* 补总结失败不影响对话 */ }
     } catch { /* 声音注册失败不影响功能 */ }
 
     // 第二天打开会话：先把昨天的日记补上
@@ -340,7 +347,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         try {
           const fcfg = configFor(cfg, c)
           if (fcfg.appraiser?.kind !== 'deepseek') continue
-          void memoryFor(c).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 8 })
+          void memoryFor(c).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 12 })
             .then((r) => {
               const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
               if (bad.length) trace({ ts: Date.now(), sessionId: c.meta.occupancy?.id, creatureId: c.meta.creatureId, warn: `memory sweep: ${bad.slice(0, 3).join(' | ')}` })
