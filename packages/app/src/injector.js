@@ -1,5 +1,6 @@
 /** 状态摘要：注入的是事实（数值 + 方向），不是情绪台词。 */
 import { randomUUID } from 'node:crypto'
+import { renderStateBlock } from '../../memory/src/index.ts'
 
 const f = (n) => Number(n).toFixed(2)
 
@@ -33,38 +34,15 @@ export function recallBlock(claims) {
   return '（他这句话让你想起：' + list.map((c) => c.text).join('；') + '）'
 }
 
-/** @param {import('../../src/core/types.ts').Bias} bias @param {import('../../src/core/types.ts').Affect} affect @param {{name?: string|null, semantics?: string[], procedures?: string[], self?: string[]}} [memory] */
+/**
+ * 状态摘要（纯状态，不含记忆条目）：统一由 memory 包的 renderStateBlock 生成，
+ * 这里只保留旧签名，避免两套格式漂移。
+ * @param {object} bias
+ * @param {object} affect
+ * @param {{name?: string|null, semantics?: string[], procedures?: string[], self?: string[], commitments?: string[], activity?: string|null, folded?: number, requests?: object}} [memory]
+ */
 export function summaryText(bias, affect, memory) {
-  const mem = memory ?? { name: null, semantics: [], procedures: [], self: [] }
-  const guilt = affect.guilt > 0.05
-    ? ` / 未平复的愧疚 ${f(affect.guilt)}（有件事还没过去）`
-    : ''
-  const parts = ['[fishbowl 状态]']
-  if (mem.name) parts.push(`名字: ${mem.name}`)
-  parts.push(
-    `情绪: 效价 ${f(affect.valence)} / 唤醒 ${f(affect.arousal)}${guilt}`,
-    `倾向: 话量${f(bias.verbosity)}(${q(bias.verbosity, 0.4, 0.6, '少说', '多说')})`
-      + ` · 拒绝${f(bias.thresholdRefuse)}(${q(bias.thresholdRefuse, 0.4, 0.6, '容易说不', '愿意配合')})`
-      + ` · 验证${f(bias.thresholdVerify)}(${q(bias.thresholdVerify, 0.4, 0.6, '照做', '先查再动')})`
-      + ` · 风险${f(bias.riskAppetite)}(${q(bias.riskAppetite, 0.4, 0.6, '保守', '敢试')})`
-      + ` · 披露${f(bias.disclosure)}(${q(bias.disclosure, 0.4, 0.6, '保留', '愿意说')})`
-      + ` · 耐心${f(bias.patience)}(${q(bias.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
-  )
-  if (mem.semantics?.length) parts.push(`记得的事: ${mem.semantics.join('；')}`)
-  if (mem.procedures?.length) parts.push(`教训: ${mem.procedures.join('；')}`)
-  if (mem.self?.length) parts.push(`自我认知: ${mem.self.join('；')}`)
-  if (mem.commitments?.length) parts.push(`未完成的承诺: ${mem.commitments.join('；')}`)
-  if (mem.activity) parts.push(`正在一起做的事: ${mem.activity}`)
-  if (mem.folded > 0) parts.push(`有些事记不清了（${mem.folded} 件；想得起来再提）`)
-  if (mem.requests?.pending?.length) parts.push(`还在等回音: ${mem.requests.pending.join('；')}`)
-  if (mem.requests?.answered?.length) {
-    parts.push(`他答过的: ${mem.requests.answered.map(r => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
-  }
-  parts.push(
-    '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
-      + '被问到你是什么样的人时：上面有"自我认知"就只按那些说，没有就照实说"我还没有足够的经历确定自己是什么样的人"，不要从情绪数字里编。',
-  )
-  return parts.join('\n')
+  return renderStateBlock({ ...(memory ?? {}), bias, affect })
 }
 
 /**

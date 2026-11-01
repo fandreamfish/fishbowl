@@ -22,6 +22,60 @@ const timeOf = (ts: number) => {
   }
 }
 
+/** 状态块的骨架行（情绪 + 六个旋钮）。summaryText 与 renderText 共用，避免两份格式漂移。 */
+function affectBiasLines(affect: any, bias: any): string[] {
+  const a = affect || {}
+  const b = bias || {}
+  const guilt = Number(a.guilt ?? 0) > 0.05 ? ` / 未平复的愧疚 ${f(a.guilt)}（有件事还没过去）` : ''
+  return [
+    `情绪: 效价 ${f(a.valence)} / 唤醒 ${f(a.arousal)}${guilt}`,
+    `倾向: 话量${f(b.verbosity)}(${q(b.verbosity, 0.4, 0.6, '少说', '多说')})`
+      + ` · 拒绝${f(b.thresholdRefuse)}(${q(b.thresholdRefuse, 0.4, 0.6, '容易说不', '愿意配合')})`
+      + ` · 验证${f(b.thresholdVerify)}(${q(b.thresholdVerify, 0.4, 0.6, '照做', '先查再动')})`
+      + ` · 风险${f(b.riskAppetite)}(${q(b.riskAppetite, 0.4, 0.6, '保守', '敢试')})`
+      + ` · 披露${f(b.disclosure)}(${q(b.disclosure, 0.4, 0.6, '保留', '愿意说')})`
+      + ` · 耐心${f(b.patience)}(${q(b.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
+  ]
+}
+
+const SNAPSHOT_NOTE =
+  '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
+  + '被问到你是什么样的人时：上面有「自我认知」就只按那些说，没有就照实说「我还没有足够的经历确定自己是什么样的人」，不要从情绪数字里编。'
+
+export interface StateBlockInput {
+  name?: string | null
+  affect: any
+  bias: any
+  semantics?: string[]
+  procedures?: string[]
+  self?: string[]
+  commitments?: string[]
+  activity?: string | null
+  folded?: number
+  requests?: { pending?: string[]; answered?: { text: string; answer: 'yes' | 'no' }[] }
+}
+
+/**
+ * 纯状态块：没有记忆条目，只有情绪、旋钮、承诺与请求。
+ * QQ 桥的公开场合与"记忆关闭/兜底"都走这里。
+ */
+export function renderStateBlock(input: StateBlockInput): string {
+  const parts: string[] = []
+  if (input.name) parts.push(`名字: ${input.name}`)
+  parts.push(...affectBiasLines(input.affect, input.bias))
+  if (input.semantics?.length) parts.push(`记得的事: ${input.semantics.join('；')}`)
+  if (input.procedures?.length) parts.push(`教训: ${input.procedures.join('；')}`)
+  if (input.self?.length) parts.push(`自我认知: ${input.self.join('；')}`)
+  if (input.commitments?.length) parts.push(`未完成的承诺: ${input.commitments.join('；')}`)
+  if (input.activity) parts.push(`正在一起做的事: ${input.activity}`)
+  if (Number(input.folded ?? 0) > 0) parts.push(`有些事记不清了（${input.folded} 件；想得起来再提）`)
+  if (input.requests?.pending?.length) parts.push(`还在等回音: ${input.requests.pending.join('；')}`)
+  if (input.requests?.answered?.length) {
+    parts.push(`他答过的: ${input.requests.answered.map((r) => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
+  }
+  parts.push(SNAPSHOT_NOTE)
+  return ['[fishbowl 状态]', ...parts].join('\n')
+}
 export interface RenderInput {
   name?: string | null
   affect: any
@@ -73,21 +127,8 @@ export function renderText(input: RenderInput): { text: string; picked: string[]
     return true
   }
 
-  const a = input.affect || {}
-  const guilt = Number(a.guilt ?? 0) > 0.05 ? ` / 未平复的愧疚 ${f(a.guilt)}（有件事还没过去）` : ''
   if (input.name) line(`名字: ${input.name}`, true)
-  line(`情绪: 效价 ${f(a.valence)} / 唤醒 ${f(a.arousal)}${guilt}`, true)
-
-  const b = input.bias || {}
-  line(
-    `倾向: 话量${f(b.verbosity)}(${q(b.verbosity, 0.4, 0.6, '少说', '多说')})`
-      + ` · 拒绝${f(b.thresholdRefuse)}(${q(b.thresholdRefuse, 0.4, 0.6, '容易说不', '愿意配合')})`
-      + ` · 验证${f(b.thresholdVerify)}(${q(b.thresholdVerify, 0.4, 0.6, '照做', '先查再动')})`
-      + ` · 风险${f(b.riskAppetite)}(${q(b.riskAppetite, 0.4, 0.6, '保守', '敢试')})`
-      + ` · 披露${f(b.disclosure)}(${q(b.disclosure, 0.4, 0.6, '保留', '愿意说')})`
-      + ` · 耐心${f(b.patience)}(${q(b.patience, 0.4, 0.6, '没耐心', '有耐心')})`,
-    true,
-  )
+  for (const text of affectBiasLines(input.affect, input.bias)) line(text, true)
 
   if (self.length) line(`自我认知: ${self.map((m) => m.claim).join('；')}`, true)
 
@@ -112,10 +153,8 @@ export function renderText(input: RenderInput): { text: string; picked: string[]
   const retired = mem.filter((m) => m.status === 'retired').length
   if (retired > 0) line(`有些事记不清了（${retired} 件；想得起来再提）`)
 
-  parts.push(
-    '以上是瞬时快照（天气），不是人格（气候）。让它们影响你怎么做，而不是怎么说；'
-      + '被问到你是什么样的人时：上面有「自我认知」就只按那些说，没有就照实说「我还没有足够的经历确定自己是什么样的人」，不要从情绪数字里编。',
-  )
+  parts.push(SNAPSHOT_NOTE)
+
 
   return {
     text: ['[fishbowl 状态]', ...parts].join('\n'),

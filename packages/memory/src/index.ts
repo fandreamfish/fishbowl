@@ -17,7 +17,7 @@ export type { TurnRecord, MemoryRecord, LedgerView } from './records.ts'
 export { buildView, weightOf, evidenceOk } from './records.ts'
 
 export type { RenderInput } from './render.ts'
-export { renderText, pickMemories, fingerprint } from './render.ts'
+export { renderText, pickMemories, fingerprint, renderStateBlock } from './render.ts'
 
 export { RecallIndex, tokenize } from './recall.ts'
 
