@@ -187,7 +187,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         }
 
         const broken = creature.openCommitments(fcfg.growth).filter((c) => c.broken).length
-        const longing = creature.fold().affect.longing
+        const longing = (creature.affectNow ? creature.affectNow() : creature.fold().affect).longing
         const { reason } = wakeReason({ openBroken: broken, longing })
         const gate = gateFor(creature, fcfg, now)
         const contactDecision = gate.can(now, reason !== null)

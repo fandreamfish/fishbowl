@@ -282,14 +282,14 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         ? { kind: occ.kind, id: occ.id, workspace: occ.workspace || ws }
         : (ws ? { kind: 'workspace', id: ws } : undefined)
       // 情绪峰值 = 这一轮评价之后的情绪。先算出来，免得事件写下去就改不了
-      const peak = { ...JSON.parse(JSON.stringify(creature.fold().affect)) }
+      const peak = { ...JSON.parse(JSON.stringify(creature.affectNow ? creature.affectNow() : creature.fold().affect)) }
       applyAppraisal(peak, a, creature.temperament)
 
       const injected = injectedBy.get(session.id) ?? []
       injectedBy.delete(session.id)
       mem.observe({ note: transcript, scope, appraisal: a, salience: salienceOf(a), affect: peak, injected, ts })
 
-      const affect = creature.fold().affect
+      const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: ts })
@@ -324,7 +324,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
           void checkBroken(session.id, creature, transcript)
         }
         // 被原谅：愧疚才有出口（设计上只有 repair 能减）
-        if (forgivenessOf(lastUserText) && creature.fold().affect.guilt > 0.2) {
+        if (forgivenessOf(lastUserText) && (creature.affectNow ? creature.affectNow() : creature.fold().affect).guilt > 0.2) {
           creature.recordRepair(0.35)
           trace({ ts: Date.now(), sessionId: session.id, creatureId: creature.meta.creatureId, event: 'repair', amount: 0.35 })
         }
@@ -451,7 +451,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
       if (cfg.control || !cfg.injectBias) return
       const mem = memoryFor(creature)
-      const affect = creature.fold().affect
+      const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
       const bias = toBias(affect, creature.temperament)
       const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
       const snap = mem.render({ affect, bias, name: creature.meta.name, commitments })

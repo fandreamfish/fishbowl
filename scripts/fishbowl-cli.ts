@@ -41,7 +41,7 @@ function resolveCreature(target) {
 }
 
 function fmtBias(c) {
-  const affect = c.fold().affect
+  const affect = c.affectNow ? c.affectNow() : c.fold().affect
   const bias = toBias(affect, c.temperament)
   return `v=${affect.valence.toFixed(2)} a=${affect.arousal.toFixed(2)}`
     + ` guilt=${affect.guilt.toFixed(2)} longing=${affect.longing.toFixed(2)} frozen=${c.isFrozen()}`

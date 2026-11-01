@@ -285,7 +285,7 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
 
   function fishView(c, sessions) {
     const fcfg = fishConfigView(cfg, c)
-    const affect = c.fold().affect
+    const affect = c.affectNow ? c.affectNow() : c.fold().affect
     const events = c.store.readEvents()
     const mv = memoryDetail(c, cfg)
     const rank = (list) => list

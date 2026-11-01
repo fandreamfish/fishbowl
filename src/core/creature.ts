@@ -75,6 +75,20 @@ export class Creature {
     // semantic / procedure / identity / activity / freeze / unfreeze 不参与情绪重放
   }
 
+  /**
+   * 到"此刻"的心情：fold 只算到最后一个事件，之后再怎么过都不变。
+   * 所有展示和判断都该用这个，不然愧疚会停在最后一刻的数值上。
+   */
+  affectNow(now = Date.now()): Affect {
+    const { affect } = this.fold()
+    const out = JSON.parse(JSON.stringify(affect)) as Affect
+    const events = this.store.readEvents()
+    const lastTs = events.length ? Number(events[events.length - 1].ts) || 0 : 0
+    if (!this.isFrozen() && lastTs > 0 && now > lastTs) {
+      applyElapse(out, (now - lastTs) / 1000, this.temperament)
+    }
+    return out
+  }
   bias(): Bias {
     return toBias(this.fold().affect, this.temperament)
   }
