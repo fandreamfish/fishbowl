@@ -1,12 +1,12 @@
 /** 演示：四组剧本 + 死区 + 联系限流 + 清醒节律。输出格式对齐 Python 原型。 */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ContactGate } from '../packages/schedule/src/contact.ts'
-import { Creature } from '../packages/being/src/creature.ts'
-import { toBias } from '../packages/affect/src/engine.ts'
-import { Scheduler } from '../packages/schedule/src/scheduler.ts'
-import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from '../packages/affect/src/types.ts'
-import type { Bias, CreatureMeta } from '../packages/affect/src/types.ts'
+import { ContactGate } from '../packages/schedule/src/index.ts'
+import { Creature } from '../packages/being/src/index.ts'
+import { toBias } from '../packages/affect/src/index.ts'
+import { Scheduler } from '../packages/schedule/src/index.ts'
+import { BASELINE_BIAS, DEFAULT_TEMPERAMENT } from '../packages/affect/src/index.ts'
+import type { Bias, CreatureMeta } from '../packages/affect/src/index.ts'
 import * as sc from './scenarios.ts'
 
 const TMP = path.join(process.cwd(), 'demo-tmp')
@@ -104,7 +104,7 @@ console.log('\n=== 死区：二十次微不足道的事件 ===')
 // ---------------------------------------------------------------- 联系与节律
 console.log('\n=== 主动联系：分层限流 ===')
 {
-  const CONFIG = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src', 'config.json'), 'utf8'))
+  const CONFIG = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'src', 'fixtures', 'wake-config.json'), 'utf8'))
   const gate = new ContactGate(CONFIG.contact, TZ)
   const at = (h: number, m: number, reason = true): void => {
     const now = Date.UTC(2026, 9, 30, h - 8, m)

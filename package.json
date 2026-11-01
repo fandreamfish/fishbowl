@@ -14,7 +14,7 @@
     "test:bili": "node packages/plugin/test/bili.test.ts",
     "test:bridge": "node packages/bridge-qq/test/unit.test.ts",
     "check:layers": "node scripts/dev/check-layers.mjs",
-    "test:all": "node scripts/dev/check-layers.mjs && node scripts/dev/test-all.mjs",
+    "check:imports": "node scripts/dev/check-imports.mjs",`r`n    "check:interfaces": "node scripts/dev/check-interfaces.mjs",`r`n    "test:all": "node scripts/dev/check-layers.mjs && node scripts/dev/check-interfaces.mjs && node scripts/dev/check-imports.mjs && node scripts/dev/test-all.mjs",
     "smoke": "node scripts/smoke/m7-apply-smoke.ts"
   }
 }

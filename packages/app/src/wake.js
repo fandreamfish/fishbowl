@@ -9,19 +9,19 @@
  * 自处型不记 outreach、不吃联系配额；提示只给处境，不写祈使句。
  * 上网不在这里预取素材：她醒着，自己决定要不要调用 fish_bili_look。
  */
-import { ContactGate } from '../../schedule/src/contact.ts'
-import { Scheduler } from '../../schedule/src/scheduler.ts'
+import { ContactGate } from '../../schedule/src/index.ts'
+import { Scheduler } from '../../schedule/src/index.ts'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { workspaceOf } from './extract.js'
 import { configFor } from './fishcfg.js'
 import { injectMessage } from './injector.js'
-import { browseDayKey } from '../../bilibili/src/browse.ts'
-import { recordWake } from '../../being/src/signals.ts'
-import { countToday } from '../../bilibili/src/store.js'
-import { markReplySeen, scanDueReplies } from '../../bilibili/src/comment.js'
-import { markSelfTime } from '../../bilibili/src/runtime.js'
+import { browseDayKey } from '../../bilibili/src/index.js'
+import { recordWake } from '../../being/src/index.ts'
+import { countToday } from '../../bilibili/src/index.js'
+import { markReplySeen, scanDueReplies } from '../../bilibili/src/index.js'
+import { markSelfTime } from '../../bilibili/src/index.js'
 import { wakeReason, wakeSituation, wakeTrigger, selfSituation, selfTimeEnabled, selfGateFor, waitIdle, wakeStatePath } from './wake/plan.js'
 export * from './wake/plan.js'
 

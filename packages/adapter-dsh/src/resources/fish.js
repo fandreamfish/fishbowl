@@ -1,12 +1,12 @@
 /** /fish 资源：列表、新生、单条鱼的一切操作（含它下面的上网/评论子路径）。 */
 import fs from 'node:fs'
 import path from 'node:path'
-import { renameScopeAsync, restoreOriginalAsync } from '../../../app/src/rename.js'
-import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/fishcfg.js'
+import { renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
+import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
-import { browseStatus, lookForCreature } from '../../../bilibili/src/runtime.js'
-import { history as browseHistory } from '../../../bilibili/src/store.js'
-import { commentStatus, scanDueReplies } from '../../../bilibili/src/comment.js'
+import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
+import { history as browseHistory } from '../../../bilibili/src/index.js'
+import { commentStatus, scanDueReplies } from '../../../bilibili/src/index.js'
 
 export async function handleFish({ cfg, binding, host, stateDir, opts, views, send, readBody }, req, res, parts) {
   if (parts[0] !== 'fish') return false

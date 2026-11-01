@@ -1,5 +1,5 @@
 /** 主动联系：分层限流。所有限制取交集，最严的一条生效。 */
-import { parseDur, parseHm, wallClockMinutes } from '../../affect/src/util.ts'
+import { parseDur, parseHm, wallClockMinutes } from '../../affect/src/index.ts'
 
 export interface ContactConfig {
   window: [string, string]

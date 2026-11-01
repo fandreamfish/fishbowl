@@ -2,15 +2,15 @@
  * 个体：状态 = f(事件日志, 时间)。
  * 情绪是投影，从日志重放得出；缓存只是加速，删了重算结果一致。
  */
-import type { Affect, Appraisal, Bias, CreatureEvent, CreatureMeta, Temperament } from '../../affect/src/types.ts'
-import { HALF_LIFE_DAYS } from '../../affect/src/engine.ts'
-import type { HalfLives } from '../../affect/src/engine.ts'
-import { freshAffect } from '../../affect/src/types.ts'
+import type { Affect, Appraisal, Bias, CreatureEvent, CreatureMeta, Temperament } from '../../affect/src/index.ts'
+import { HALF_LIFE_DAYS } from '../../affect/src/index.ts'
+import type { HalfLives } from '../../affect/src/index.ts'
+import { freshAffect } from '../../affect/src/index.ts'
 import {
   applyAbsence, applyAppraisal, applyContact, applyElapse,
   applyRepair, salienceOf, toBias,
-} from '../../affect/src/engine.ts'
-import { memoryWindowDays } from '../../affect/src/growth.ts'
+} from '../../affect/src/index.ts'
+import { memoryWindowDays } from '../../affect/src/index.ts'
 import { Store } from './store.ts'
 import {
   activeGrants as activeGrantsOf,
@@ -19,7 +19,7 @@ import {
   recordWake as recordWakeOf,
   selfWakeTimes as selfWakeTimesOf,
 } from './signals.ts'
-import { uid, wakingSecondsBetween } from '../../affect/src/util.ts'
+import { uid, wakingSecondsBetween } from '../../affect/src/index.ts'
 
 export class Creature {
   readonly store: Store

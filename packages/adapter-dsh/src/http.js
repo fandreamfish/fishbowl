@@ -9,7 +9,7 @@ import { handleBrowse } from './resources/browse.js'
 import { handleConfig } from './resources/config.js'
 
 export { mergeUiConfig, saveUiConfig, seedChanged, uiConfigPath, validateMemoryConfig } from './settings.js'
-export { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from '../../app/src/cfgkeys.js'
+export { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from '../../app/src/index.js'
 export { summarizeEvent } from './views.js'
 export { subjectOf, otherWriter, memoryDetail } from './views-memory.js'
 

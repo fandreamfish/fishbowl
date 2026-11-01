@@ -6,7 +6,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import type { CreatureEvent, CreatureMeta } from '../../affect/src/types.ts'
+import type { CreatureEvent, CreatureMeta } from '../../affect/src/index.ts'
 
 export interface ProjectionCache {
   lastSeq: number

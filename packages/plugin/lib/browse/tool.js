@@ -11,9 +11,9 @@
  *
  * 零依赖：直接给注册表认的 JSON Schema，不 import dsh-tools。
  */
-import { workspaceOf } from '../../../app/src/extract.js'
-import { inSelfTime, lookForCreature } from '../../../bilibili/src/runtime.js'
-import { configFor } from '../../../app/src/fishcfg.js'
+import { workspaceOf } from '../../../app/src/index.js'
+import { inSelfTime, lookForCreature } from '../../../bilibili/src/index.js'
+import { configFor } from '../../../app/src/index.js'
 
 export function createBrowseTool(binding, cfg) {
   return {

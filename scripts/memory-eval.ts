@@ -13,7 +13,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { Memory } from '../packages/memory/src/memory.ts'
+import { Memory } from '../packages/memory/src/index.ts'
 
 function arg(name: string, dflt?: string): string | undefined {
   const i = process.argv.indexOf('--' + name)

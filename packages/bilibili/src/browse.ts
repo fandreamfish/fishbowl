@@ -10,7 +10,7 @@
  *
  * 设计见 docs/BROWSE.md。零依赖。
  */
-import { parseHm, wallClockMinutes } from '../../affect/src/util.ts'
+import { parseHm, wallClockMinutes } from '../../affect/src/index.ts'
 
 /** 一次上网最多拼多少字（防止一轮吃掉几千 token）。 */
 export const BROWSE_MAX_MATERIAL = 6000

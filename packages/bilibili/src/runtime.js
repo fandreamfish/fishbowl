@@ -7,7 +7,7 @@ import { createClient, inCooldown, setPacing } from './client.js'
 import { lookOnce, recordBrowse } from './browse.js'
 import { riskState, noteRisk, markRiskOk } from './risk.js'
 import { browseSummary, countToday } from './store.js'
-import { browseGrant } from '../../being/src/grant.js'
+import { browseGrant } from '../../being/src/index.ts'
 
 /**
  * 「当前这一轮是自处醒来的」。

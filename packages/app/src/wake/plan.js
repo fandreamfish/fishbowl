@@ -3,8 +3,8 @@
  * 宿主循环与副作用在 wake.js。
  */
 import path from 'node:path'
-import { ContactGate } from '../../../schedule/src/contact.ts'
-import { selfWakeTimes } from '../../../being/src/signals.ts'
+import { ContactGate } from '../../../schedule/src/index.ts'
+import { selfWakeTimes } from '../../../being/src/index.ts'
 import { browseGrant, grantLine } from '../grant.js'
 
 /** 唤醒决策：醒了之后有没有话要说。先还债（未完成的承诺），再想念。 */

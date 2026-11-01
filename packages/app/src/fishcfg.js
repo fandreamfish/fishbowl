@@ -9,8 +9,8 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { normalizeMemory } from '../../memory/src/config.ts'
-import { normalizeBrowseConfig } from '../../bilibili/src/browse.ts'
+import { normalizeMemory } from '../../memory/src/index.ts'
+import { normalizeBrowseConfig } from '../../bilibili/src/index.js'
 import { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from './cfgkeys.js'
 
 const cached = new Map() // file -> { mtimeMs, value }

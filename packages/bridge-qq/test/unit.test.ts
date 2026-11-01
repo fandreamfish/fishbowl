@@ -4,8 +4,8 @@ import os from 'node:os'
 /** OneBot 事件解析测试（纯函数）。 */
 import { parseMessageEvent } from '../lib/onebot.js'
 import { rememberTurn } from '../lib/pipeline.js'
-import { normalizeConfig } from '../../app/src/config.js'
-import { createBinding } from '../../app/src/binding.js'
+import { normalizeConfig } from '../../app/src/index.js'
+import { createBinding } from '../../app/src/index.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = ''): void {

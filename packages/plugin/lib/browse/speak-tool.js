@@ -8,9 +8,9 @@
  * 她不知道配额、不知道开关、不知道被谁管着；被拒绝时只听到
  * 「现在不方便说」「今天说得够多了」这种状态，不是规则。
  */
-import { workspaceOf } from '../../../app/src/extract.js'
-import { postComment, postReply } from '../../../bilibili/src/comment.js'
-import { configFor } from '../../../app/src/fishcfg.js'
+import { workspaceOf } from '../../../app/src/index.js'
+import { postComment, postReply } from '../../../bilibili/src/index.js'
+import { configFor } from '../../../app/src/index.js'
 
 export function createSpeakTool(binding, cfg) {
   return {

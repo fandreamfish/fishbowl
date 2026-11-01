@@ -3,18 +3,18 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { Creature } from '../../being/src/creature.ts'
-import { DEFAULT_TEMPERAMENT } from '../../affect/src/types.ts'
-import { browseDayKey, slimItem } from '../../bilibili/src/browse.ts'
-import { normalizeConfig } from '../../app/src/config.js'
-import { authPath, clearCookie, mentionPrefix, parseCookieInput, publicAuth, readAuth, saveAccount, saveAuth } from '../../bilibili/src/auth.js'
-import { createClient, normalizeCookie } from '../../bilibili/src/client.js'
+import { Creature } from '../../being/src/index.ts'
+import { DEFAULT_TEMPERAMENT } from '../../affect/src/index.ts'
+import { browseDayKey, slimItem } from '../../bilibili/src/index.js'
+import { normalizeConfig } from '../../app/src/index.js'
+import { authPath, clearCookie, mentionPrefix, parseCookieInput, publicAuth, readAuth, saveAccount, saveAuth } from '../../bilibili/src/index.js'
+import { createClient, normalizeCookie } from '../../bilibili/src/index.js'
 import {
   commentCountToday, commentStatus, herCommentsRecent, postComment, postReply, renderReplies,
   replyCountToday, scanDueReplies, scanReplies, seenReplyRpids,
-} from '../../bilibili/src/comment.js'
+} from '../../bilibili/src/index.js'
 import { createSpeakTool } from '../lib/browse/speak-tool.js'
-import { appendSeen } from '../../bilibili/src/store.js'
+import { appendSeen } from '../../bilibili/src/index.js'
 
 let failures = 0
 function check(name: string, cond: boolean, detail = '') {

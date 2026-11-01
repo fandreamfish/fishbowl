@@ -6,13 +6,13 @@
  * 这一轮的情绪不参与这一轮的判断。
  */
 import path from 'node:path'
-import { applyAppraisal, salienceOf, toBias } from '../../affect/src/engine.ts'
-import { Memory } from '../../memory/src/memory.ts'
-import { createAppraiser } from '../../app/src/appraiser.js'
-import { configFor } from '../../app/src/fishcfg.js'
-import { summaryText } from '../../app/src/injector.js'
-import { callLLM } from '../../app/src/llm.js'
-import { voiceRulesFor } from '../../voice/src/voice.js'
+import { applyAppraisal, salienceOf, toBias } from '../../affect/src/index.ts'
+import { Memory } from '../../memory/src/index.ts'
+import { createAppraiser } from '../../app/src/index.js'
+import { configFor } from '../../app/src/index.js'
+import { summaryText } from '../../app/src/index.js'
+import { callLLM } from '../../app/src/index.js'
+import { voiceRulesFor } from '../../voice/src/index.js'
 
 /**
  * 把一轮 QQ 对话记进她的账本（与 DSH 那边同一种 turn 事件）。

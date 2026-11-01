@@ -1,8 +1,8 @@
 /** 配置归一化：全部带默认值，缺什么补什么。 */
 import os from 'node:os'
 import path from 'node:path'
-import { normalizeMemory } from '../../memory/src/config.ts'
-import { normalizeBrowseConfig } from '../../bilibili/src/browse.ts'
+import { normalizeMemory } from '../../memory/src/index.ts'
+import { normalizeBrowseConfig } from '../../bilibili/src/index.js'
 
 /** @returns {import('./types.js').FishbowlConfig} */
 export function normalizeConfig(raw = {}) {

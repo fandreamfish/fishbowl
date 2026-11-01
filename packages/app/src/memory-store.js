@@ -3,9 +3,9 @@
  * 收集器与「memory_search」工具共用同一份，避免两套缓存各读一遍账本。
  */
 import path from 'node:path'
-import { Memory } from '../../memory/src/memory.ts'
+import { Memory } from '../../memory/src/index.ts'
 import { configFor } from './fishcfg.js'
-import { createHttpEmbedder } from '../../memory/src/embed.ts'
+import { createHttpEmbedder } from '../../memory/src/index.ts'
 
 /** 向量检索默认关；开了才建 embedder，密钥沿用评价器那把（不另存一份）。 */
 function embedderFor(cfg) {

@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { Memory } from '../../packages/memory/src/memory.ts'
+import { Memory } from '../../packages/memory/src/index.ts'
 
 const arg = process.argv[2]
 if (!arg) {

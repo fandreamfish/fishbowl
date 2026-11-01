@@ -1,6 +1,6 @@
 /** 全局配置路由：记忆配置、旧版 /config、/state。 */
-import { normalizeConfig } from '../../../app/src/config.js'
-import { pickMemoryConfig, pickRoutineConfig } from '../../../app/src/cfgkeys.js'
+import { normalizeConfig } from '../../../app/src/index.js'
+import { pickMemoryConfig, pickRoutineConfig } from '../../../app/src/index.js'
 import { mergeUiConfig, saveUiConfig, seedChanged, validateMemoryConfig } from '../settings.js'
 
 export async function handleConfig({ cfg, stateDir, opts, views, send, readBody }, req, res, parts, sub) {

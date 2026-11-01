@@ -87,4 +87,4 @@
 | P3 | `memory-store` 归位；`creature` 拆 facet | 中 |
 | P4 | 测试按域拆分 | 低 |
 
-建议按 P0 → P1 各发一个 patch（`0.3.3`、`0.3.4`），P2/P3 放 `0.4.0`。
+进度：P0（模块加载检查）与「跨包只走接口」在 0.3.3 完成；src/config.json 已移到 fixtures。P1 的 bilibili facade 收口、P2/P3 待做。

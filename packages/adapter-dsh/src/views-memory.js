@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildView } from '../../memory/src/records.ts'
+import { buildView } from '../../memory/src/index.ts'
 
 const RELATION_RE = /我们|关系|信任|约定|答应|承诺|感情|亲密/
 

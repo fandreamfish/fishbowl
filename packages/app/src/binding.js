@@ -10,10 +10,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { Creature } from '../../being/src/creature.ts'
-import { DEFAULT_TEMPERAMENT } from '../../affect/src/types.ts'
-import { mulberry32 } from '../../affect/src/util.ts'
-import { findConflict, resolveOccupant } from '../../being/src/tenancy.ts'
+import { Creature } from '../../being/src/index.ts'
+import { DEFAULT_TEMPERAMENT } from '../../affect/src/index.ts'
+import { mulberry32 } from '../../affect/src/index.ts'
+import { findConflict, resolveOccupant } from '../../being/src/index.ts'
 import { halfLivesFor, wakingFor } from './fishcfg.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */

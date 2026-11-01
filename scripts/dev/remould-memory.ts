@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Memory } from '../../packages/memory/src/memory.ts'
+import { Memory } from '../../packages/memory/src/index.ts'
 
 const id = process.argv[2]
 if (!id) { console.error('用法: remould-memory.ts <creatureId>'); process.exit(1) }

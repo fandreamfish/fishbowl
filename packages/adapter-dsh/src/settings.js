@@ -4,9 +4,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { validateMemory } from '../../memory/src/config.ts'
-import { pickCommentConfig, pickRoutineConfig } from '../../app/src/cfgkeys.js'
-import { normalizeBrowseConfig } from '../../bilibili/src/browse.ts'
+import { validateMemory } from '../../memory/src/index.ts'
+import { pickCommentConfig, pickRoutineConfig } from '../../app/src/index.js'
+import { normalizeBrowseConfig } from '../../bilibili/src/index.js'
 
 /** 合并 UI 保存的配置（ui-config.json）到配置对象。 */
 export function mergeUiConfig(raw, ui) {

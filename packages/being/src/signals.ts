@@ -5,7 +5,7 @@
  * 往 Creature 类上加新方法/新导出，DSH 热启用时看不到（模块缓存），
  * 所以插件侧只依赖这个新模块；Creature 上的同名方法保留给测试与外部调用。
  */
-import { uid } from '../../affect/src/util.ts'
+import { uid } from '../../affect/src/index.ts'
 
 /**
  * 只要对话行。

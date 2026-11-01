@@ -3,9 +3,9 @@
  * 不处理请求，不做写入——只读。
  */
 import fs from 'node:fs'
-import { fishConfigView, hasFishConfig } from '../../app/src/fishcfg.js'
-import { wakeStatePath } from '../../app/src/wake.js'
-import { browseStatus } from '../../bilibili/src/runtime.js'
+import { fishConfigView, hasFishConfig } from '../../app/src/index.js'
+import { wakeStatePath } from '../../app/src/index.js'
+import { browseStatus } from '../../bilibili/src/index.js'
 import { memoryDetail } from './views-memory.js'
 
 export function createViews({ cfg, binding, host, stateDir }) {

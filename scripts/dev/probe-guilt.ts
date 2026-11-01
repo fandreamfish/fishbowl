@@ -1,4 +1,4 @@
-﻿import { Creature } from '../../packages/being/src/creature.ts'
+﻿import { Creature } from '../../packages/being/src/index.ts'
 const c = Creature.open('C:/Users/24358/.fishbowl/creatures/bbec32a5-a3a2-4be7-9d46-5d73b9cd11d9')
 let guilt = 0
 let n = 0

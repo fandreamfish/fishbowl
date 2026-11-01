@@ -1,5 +1,5 @@
 /** 清醒节律：什么时候醒。时区显式传入，窗口外是睡眠。 */
-import { mulberry32, parseDur, parseHm, wallClockMinutes, wallClockSeconds } from '../../affect/src/util.ts'
+import { mulberry32, parseDur, parseHm, wallClockMinutes, wallClockSeconds } from '../../affect/src/index.ts'
 
 export interface WakeConfig {
   activeWindow: [string, string]
