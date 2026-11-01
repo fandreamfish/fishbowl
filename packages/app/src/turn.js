@@ -229,7 +229,18 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const breach = breachLine(creature)
       const extra = (perm ? `\n你现在被允许: ${perm}` : '') + (breach ? `\n${breach}` : '')
       const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
-      await host.inject(agent, injectMessage(text))
+      // turn/start 的 append 还没发布完，直接 inject 会撞上「session append cannot reenter」。
+      // 先让出一次事件循环，再注入；仍然撞上就短暂重试。
+      for (let attempt = 0; attempt < 6; attempt++) {
+        if (attempt) await new Promise((r) => setTimeout(r, 20 * attempt))
+        try {
+          await host.inject(agent, injectMessage(text))
+          return
+        } catch (err) {
+          const msg = String(err?.message || err)
+          if (!/reenter|cannot append/i.test(msg) || attempt === 5) throw err
+        }
+      }
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session?.id, warn: `state inject failed: ${String(err?.message || err)}` })
     }
@@ -260,7 +271,8 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         const text = messageText(event?.data?.message ?? event?.data)
         pushItem(session.id, 'tool', [name, err ? '（出错）' : '', text ? text.slice(0, 200) : ''].filter(Boolean).join(' '))
       } else if (t === 'turn/start') {
-        void injectState(session)
+        // 让本次 append 先发布完，再注入（否则会撞上 reenter）
+        setTimeout(() => { void injectState(session) }, 0)
       } else if (t === 'turn/end') {
         finishTurn(session)
       }

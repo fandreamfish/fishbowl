@@ -1,6 +1,7 @@
 /** /fish 资源：列表、新生、单条鱼的一切操作（含它下面的上网/评论子路径）。 */
 import fs from 'node:fs'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { housingToOccupancy, injectMessage, moveInText, renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
 import { recordPermit } from '../../../being/src/index.ts'
 import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
@@ -184,10 +185,16 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
       const reqText = c.requests().find((r) => r.id === parts[3])?.text ?? ''
       const occ = c.meta.occupancy
       const agent = occ?.kind === 'session' ? host.agentFor?.(occ.id) : null
+      const word = body.answer === 'yes' ? '同意' : '不同意'
+      const text = `（他回答了你的请求「${reqText}」：${word}。想做什么就做，不想做也行。）`
       if (agent) {
-        const word = body.answer === 'yes' ? '同意' : '不同意'
-        const text = `（他回答了你的请求「${reqText}」：${word}。想做什么就做，不想做也行。）`
         await host.wake(agent, injectMessage(text, { mode: 'contact', reason: '请求有回音' }))
+      } else {
+        // 会话没开着：写进待送，下次打开时补投
+        c.store.appendOutbox({
+          id: randomUUID(), ts: Date.now(), text, channel: 'dsm-session', delivered: false,
+          wake: { mode: 'contact', reason: '请求有回音' },
+        })
       }
     } catch (e) { console.error('[fishbowl] request wake failed:', String(e?.message ?? e)) }
     send(res, { ok: true, requests: c.requests().slice(-30).reverse() })
