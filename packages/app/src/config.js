@@ -2,7 +2,10 @@
 import os from 'node:os'
 import path from 'node:path'
 import { normalizeMemory } from '../../memory/src/index.ts'
-import { normalizeBrowseConfig } from '../../bilibili/src/index.js'
+import { normalizeContact, normalizeSelfTime, normalizeWake } from '../../schedule/src/index.ts'
+import { normalizeDiary } from '../../journal/src/index.js'
+import { normalizeAffect } from '../../affect/src/index.ts'
+import { normalizeBrowseConfig, normalizeComment } from '../../bilibili/src/index.js'
 
 /** @returns {import('./types.js').FishbowlConfig} */
 export function normalizeConfig(raw = {}) {
@@ -62,11 +65,7 @@ export function normalizeConfig(raw = {}) {
       : null,
 
     // 日记：当天最后一件事；没写就第二天补
-    diary: (() => {
-      const d = raw.diary || {}
-      const hm = (v, dflt) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v ?? '')) ? String(v) : dflt)
-      return { enabled: d.enabled !== false, start: hm(d.start, '21:30'), end: hm(d.end, '23:59'), catchUp: d.catchUp !== false }
-    })(),
+    diary: normalizeDiary(raw.diary),
     // 能力开关（每条鱼可单独关）：关掉后工具不注册/会拒绝，设置页也不显示对应页面
     capabilities: (() => {
       const c = raw.capabilities || {}
@@ -75,64 +74,19 @@ export function normalizeConfig(raw = {}) {
       return { browse: on(c.browse) }
     })(),
     // 心情半衰期（天）：每条鱼可单独改；0.1–60
-    affect: (() => {
-      const a = raw.affect || {}
-      const days = (v, dflt) => (Number.isFinite(Number(v)) ? Math.min(60, Math.max(0.1, Number(v))) : dflt)
-      // 只有负面情绪可配；positive（温暖/好奇）不受这里影响
-      return { guiltDays: days(a.guiltDays, 3), longingDays: days(a.longingDays, 2), negativeDays: days(a.negativeDays ?? a.namedDays, 2) }
-    })(),
+    affect: normalizeAffect(raw.affect),
     // M3.0：清醒节律与主动联系（默认关闭——先观察，再打开）
-    wake: {
-      enabled: raw.wake?.enabled === true,
-      firstDelayMs: Number.isFinite(Number(raw.wake?.firstDelayMs)) ? Number(raw.wake.firstDelayMs) : 10000,
-      absenceHours: Number(raw.wake?.absenceHours) > 0 ? Number(raw.wake.absenceHours) : 8,
-      activeWindow: raw.wake?.activeWindow ?? ['08:00', '23:30'],
-      interval: raw.wake?.interval ?? { mode: 'fixed', min: '60m' },
-      dwell: raw.wake?.dwell ?? ['1m', '3m'],
-      idleSkip: raw.wake?.idleSkip ?? true,
-      stateMultiplier: raw.wake?.stateMultiplier ?? { active: 1, fading: 4, dormant: 24 },
-    },
-    contact: {
-      window: raw.contact?.window ?? ['09:00', '22:30'],
-      dailyMax: raw.contact?.dailyMax ?? 2,
-      minGap: raw.contact?.minGap ?? '3h',
-      burst: raw.contact?.burst ?? { max: 1, per: '2h' },
-      requireReason: raw.contact?.requireReason ?? true,
-      unansweredStop: raw.contact?.unansweredStop ?? 3,
-    },
+    wake: normalizeWake(raw.wake),
+    contact: normalizeContact(raw.contact),
 
     // M21：自处（醒来但不为了找他）。默认关；独立于联系配额。
-    selfTime: {
-      enabled: raw.selfTime?.enabled === true,
-      window: (() => {
-        const w = raw.selfTime?.window
-        return Array.isArray(w) && w.length === 2 && w.every((x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)))
-          ? [String(w[0]), String(w[1])]
-          : ['09:00', '23:00']
-      })(),
-      dailyMax: Number.isFinite(Number(raw.selfTime?.dailyMax)) ? Math.max(0, Math.min(6, Math.round(Number(raw.selfTime.dailyMax)))) : 1,
-      minGap: /^\d+(?:\.\d+)?\s*[smhd]$/.test(String(raw.selfTime?.minGap ?? '')) ? String(raw.selfTime.minGap) : '90m',
-      idleWaitMs: Number.isFinite(Number(raw.selfTime?.idleWaitMs)) ? Math.max(0, Math.min(120000, Number(raw.selfTime.idleWaitMs))) : 15000,
-    },
+    selfTime: normalizeSelfTime(raw.selfTime),
 
     // M21：上网（B 站只读）。工具始终注册；开关只决定能不能联网。
     browse: normalizeBrowseConfig(raw.browse),
 
     // M21.2：在 B 站说话（写操作，默认关）。cookie 在 bili-auth.json，不在这里。
-    comment: {
-      enabled: raw.comment?.enabled === true,
-      perDay: Number.isFinite(Number(raw.comment?.perDay)) ? Math.max(0, Math.min(5, Math.round(Number(raw.comment.perDay)))) : 1,
-      replyPerDay: Number.isFinite(Number(raw.comment?.replyPerDay)) ? Math.max(0, Math.min(10, Math.round(Number(raw.comment.replyPerDay)))) : 2,
-      replyToReplies: raw.comment?.replyToReplies !== false,
-      scanEveryMin: Number.isFinite(Number(raw.comment?.scanEveryMin)) ? Math.max(5, Math.min(720, Math.round(Number(raw.comment.scanEveryMin)))) : 30,
-      window: (() => {
-        const w = raw.comment?.window
-        return Array.isArray(w) && w.length === 2 && w.every((x) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(x)))
-          ? [String(w[0]), String(w[1])]
-          : ['20:00', '23:00']
-      })(),
-      atOwner: raw.comment?.atOwner !== false,
-    },
+    comment: normalizeComment(raw.comment),
   }
   return c
 }
