@@ -20,6 +20,9 @@ import { normalizeConfig } from '../../app/src/config.js'
 import { createDshHost } from './host.js'
 import { workspaceOf } from '../../app/src/extract.js'
 import { wakeStatePath, wakeSituation, wakeTrigger, selfSituation } from '../../app/src/wake.js'
+import { createViews } from './views.js'
+export { summarizeEvent } from './views.js'
+export { subjectOf, otherWriter, memoryDetail } from './views-memory.js'
 import { browseStatus, lookForCreature, markSelfTime } from '../../bilibili/src/runtime.js'
 import { clearRisk, riskState } from '../../bilibili/src/risk.js'
 import { history as browseHistory } from '../../bilibili/src/store.js'
@@ -36,30 +39,6 @@ export { pickCommentConfig, pickMemoryConfig, pickRoutineConfig } from '../../ap
 
 const ROUTE = '/fishbowl-ui'
 
-/** 事件 → 一行摘要（给时间线用）。 */
-export function summarizeEvent(e) {
-  switch (e.t) {
-    case 'episode': return { text: (e.note ?? '').slice(0, 80) || '（一轮对话）', meta: `v=${Number(e.appraisal?.goalCongruence ?? 0).toFixed(2)}` }
-    case 'semantic': return { text: e.claim, meta: `置信 ${Number(e.confidence).toFixed(2)}` }
-    case 'procedure': return { text: `${e.trigger} → ${e.action}`, meta: `置信 ${Number(e.confidence).toFixed(2)}` }
-    case 'self': return { text: e.claim, meta: `证据 ${e.evidence?.length ?? 0}` }
-    case 'commitment': return { text: e.text, meta: '承诺' }
-    case 'commitment-resolved': return { text: e.ref.slice(0, 8), meta: e.status === 'broken' ? '违诺' : '已兑现' }
-    case 'activity': return { text: e.title, meta: e.status === 'started' ? '开始' : '结束' }
-    case 'identity': return { text: e.name, meta: '名字' }
-    case 'diary': return { text: e.text.slice(0, 60), meta: '日记' }
-    case 'note': return { text: e.text, meta: '小纸条' }
-    case 'request': return { text: e.text, meta: '请求' }
-    case 'request-answered': return { text: e.ref.slice(0, 8), meta: e.answer === 'yes' ? '同意' : '不同意' }
-    case 'repair': return { text: '被原谅了一次', meta: '愧疚 -' + Number(e.amount ?? 0).toFixed(2) }
-    case 'grant': return { text: e.text, meta: e.allowed ? `允许：${e.topic}` : `撤销：${e.topic}` }
-    case 'wake': return { text: e.mode === 'self' ? '自己醒来' : '想找他', meta: e.reason ?? '' }
-    case 'reinforce': return { text: e.ref.slice(0, 8), meta: '又提到' }
-    case 'freeze': return { text: '封存', meta: '' }
-    case 'unfreeze': return { text: '解封', meta: '' }
-    default: return { text: e.t, meta: '' }
-  }
-}
 
 /** 合并 UI 保存的配置（ui-config.json）到配置对象。 */
 export function mergeUiConfig(raw, ui) {
@@ -83,182 +62,6 @@ export function validateMemoryConfig(c) {
   return validateMemory(c)
 }
 
-// —— 记忆系统视图（docs/MEMORY.md） ——
-
-const RELATION_RE = /我们|关系|信任|约定|答应|承诺|感情|亲密/
-
-/** 这条认知是谁的事。新结构里由模型给，旧结构里只能按字面猜（关系词优先）。 */
-export function subjectOf(text) {
-  const s = String(text ?? '')
-  if (RELATION_RE.test(s)) return 'between'
-  if (/^(用户|他)/.test(s)) return 'user'
-  if (/^(AI|我（AI）|我自己)/.test(s) || /AI\s*(会|在|给|对|把)/.test(s)) return 'self'
-  return 'world'
-}
-
-/** 旧认知（semantic / procedure / self）→ 统一的记忆视图。 */
-function legacyClaimView(e, reinforces) {
-  const text = e.t === 'procedure' ? `${e.trigger} → ${e.action}` : String(e.claim ?? '')
-  const kind = e.t === 'semantic' ? (RELATION_RE.test(text) ? 'relation' : 'fact') : e.t === 'procedure' ? 'lesson' : 'self'
-  return {
-    id: e.id,
-    kind,
-    subject: e.t === 'self' ? 'self' : subjectOf(text),
-    claim: text,
-    attitude: null,
-    tags: [],
-    evidence: Array.isArray(e.evidence) ? e.evidence.map(String) : [],
-    evidenceMode: 'lines', // 旧格式：提示词行号，无法回溯到 episode
-    confidence: Number(e.confidence ?? 0.5),
-    reinforcements: reinforces.get(e.id) ?? 0,
-    status: e.status ?? 'active',
-    createdAt: e.ts,
-    affectPeak: null,
-    affectAtWrite: null,
-    by: null,
-    supersedes: null,
-  }
-}
-
-/** 旧 episode → turn 记录视图。 */
-function legacyTurnView(e) {
-  const note = typeof e.note === 'string' ? e.note : ''
-  return {
-    id: e.id,
-    occurredAt: e.ts,
-    neutral: note,
-    her: [],
-    tags: [],
-    affectPeak: null,
-    salience: Number(e.salience ?? 0),
-    hits: { considered: 0, used: 0 },
-    summaryState: note ? 'neutral' : 'none',
-    scope: null,
-    rawText: null,
-    legacy: true,
-  }
-}
-
-/** 有没有另一个活着的进程也在写这只鱼（双写会让一个人变成两个）。 */
-export function otherWriter(dir) {
-  try {
-    const o = JSON.parse(fs.readFileSync(path.join(dir, '.writer.lock'), 'utf8'))
-    const pid = Number(o?.pid)
-    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return null
-    try {
-      process.kill(pid, 0)
-      return { pid, at: Number(o?.at) || 0 }
-    } catch (e) {
-      return e?.code === 'EPERM' ? { pid, at: Number(o?.at) || 0 } : null
-    }
-  } catch {
-    return null
-  }
-}
-
-/** 新结构：账本投影 → 设置页视图（字段名与前端约定一致）。 */
-function newDetail(events, cfg, dir) {
-  const v = buildView(events)
-  const turns = v.turns
-    .slice()
-    .reverse()
-    .map((t) => ({
-      id: t.id,
-      occurredAt: t.ts,
-      neutral: t.neutral,
-      her: t.her,
-      tags: t.tags,
-      affectPeak: t.affectPeak,
-      salience: t.salience,
-      hits: t.hits,
-      summaryState: t.summaryState,
-      scope: t.scope,
-      rawText: t.note,
-      legacy: false,
-    }))
-  const memories = v.memories.map((m) => ({ ...m, evidenceMode: 'turns' }))
-
-  const byKind = { fact: 0, lesson: 0, relation: 0, self: 0 }
-  let active = 0
-  let retired = 0
-  for (const m of memories) {
-    if (byKind[m.kind] !== undefined) byKind[m.kind] += 1
-    if (m.status === 'retired') retired += 1
-    else active += 1
-  }
-
-  memories.sort((a, b) => (a.status === b.status ? (b.createdAt || 0) - (a.createdAt || 0) : a.status === 'retired' ? 1 : -1))
-
-  return {
-    view: 'new',
-    config: cfg.memory ?? null,
-    stats: {
-      events: events.length,
-      turnTotal: v.turns.length,
-      memoryTotal: memories.length,
-      active,
-      retired,
-      byKind,
-      pending: Math.max(0, v.turns.length - v.watermark),
-      watermark: v.watermark,
-      lock: dir ? otherWriter(dir) : null,
-    },
-    memories: memories.slice(0, 1000),
-    turns: turns.slice(0, 500),
-  }
-}
-
-/** 旧结构：只有 episode / semantic / procedure 时，映射成同一套视图（明确标注是旧格式）。 */
-function legacyDetail(events, cfg) {
-  const reinforces = new Map()
-  for (const e of events) if (e.t === 'reinforce' && e.ref) reinforces.set(e.ref, (reinforces.get(e.ref) || 0) + 1)
-
-  const memories = []
-  const turns = []
-  for (const e of events) {
-    if (e.t === 'semantic' || e.t === 'procedure' || e.t === 'self') memories.push(legacyClaimView(e, reinforces))
-    else if (e.t === 'episode') turns.push(legacyTurnView(e))
-  }
-
-  const byKind = { fact: 0, lesson: 0, relation: 0, self: 0 }
-  let active = 0
-  let retired = 0
-  for (const m of memories) {
-    if (byKind[m.kind] !== undefined) byKind[m.kind] += 1
-    if (m.status === 'retired') retired += 1
-    else active += 1
-  }
-
-  memories.sort((a, b) => (a.status === b.status ? (b.createdAt || 0) - (a.createdAt || 0) : a.status === 'retired' ? 1 : -1))
-  turns.sort((a, b) => (b.occurredAt || 0) - (a.occurredAt || 0))
-
-  return {
-    view: 'legacy',
-    config: cfg.memory ?? null,
-    stats: {
-      events: events.length,
-      turnTotal: turns.length,
-      memoryTotal: memories.length,
-      active,
-      retired,
-      byKind,
-      // 旧结构没有水位线概念，不假装有待整理
-      pending: null,
-    },
-    memories: memories.slice(0, 1000),
-    turns: turns.slice(0, 500),
-  }
-}
-
-/**
- * 记忆详情视图：配置之外的一切。
- * 新结构（turn / merged）存在时优先用它；否则把旧的 episode / semantic / procedure 映射过来。
- */
-export function memoryDetail(creature, cfg) {
-  const events = creature.store.readEvents()
-  const hasNew = events.some((e) => e.t === 'turn' || e.t === 'merged')
-  return hasNew ? newDetail(events, cfg, creature.store.dir) : legacyDetail(events, cfg)
-}
 
 
 export function uiConfigPath(stateDir) {
@@ -283,71 +86,8 @@ export function createUiRoute(ctx, cfg, binding, host, opts = {}) {
   host = host ?? createDshHost(ctx, cfg)
   if (typeof host.registerRoute !== 'function') return () => {}
   const stateDir = cfg.stateDir
+  const { fishView, allScopes, stateView } = createViews({ cfg, binding, host, stateDir })
 
-  function fishView(c, sessions) {
-    const fcfg = fishConfigView(cfg, c)
-    const affect = c.affectNow ? c.affectNow() : c.fold().affect
-    const events = c.store.readEvents()
-    const mv = memoryDetail(c, cfg)
-    const rank = (list) => list
-      .filter((m) => m.status === 'active')
-      .sort((a, b) => (b.reinforcements - a.reinforcements) || (b.confidence - a.confidence))
-    const memory = {
-      name: c.meta.name && !c.meta.name.startsWith('fish-') ? c.meta.name : null,
-      semantics: rank(mv.memories.filter((m) => m.kind === 'fact' || m.kind === 'relation')).slice(0, 3).map((m) => m.claim),
-      procedures: rank(mv.memories.filter((m) => m.kind === 'lesson')).slice(0, 2).map((m) => m.claim),
-      self: rank(mv.memories.filter((m) => m.kind === 'self')).slice(0, 2).map((m) => m.claim),
-      commitments: c.openCommitments(cfg.growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text),
-      activity: c.currentActivity(cfg.growth),
-      folded: mv.stats.retired,
-      requests: c.requestDigest(),
-    }
-    return {
-      id: c.meta.creatureId,
-      name: c.meta.name,
-      bornAt: c.meta.bornAt,
-      config: fcfg,
-      configInherited: !hasFishConfig(cfg.stateDir, c.meta.creatureId),
-      frozen: c.isFrozen(),
-      occupancy: c.meta.occupancy
-        ? { ...c.meta.occupancy, workspace: c.meta.occupancy.kind === 'session' ? (c.meta.occupancy.workspace || (sessions || []).find(s => s.id === c.meta.occupancy.id)?.workspace || '') : undefined }
-        : null,
-      episodes: events.filter((e) => e.t === 'episode' || e.t === 'turn').length,
-      affect: { v: affect.valence, a: affect.arousal, guilt: affect.guilt, longing: affect.longing },
-      memory,
-      browse: browseStatus(c, cfg),
-      pendingRequests: c.pendingRequests(),
-      requests: c.requests().slice(-10).reverse(),
-      notes: c.notes(5),
-      diary: c.diaries(3),
-      metaBytes: JSON.stringify(c.meta).length,
-      outbox: c.store.readOutbox().filter(o => !o.delivered).length,
-      events: events.slice(-40).map(e => ({ t: e.t, ts: e.ts, ...summarizeEvent(e) })),
-    }
-  }
-
-  /** 枚举结果 + 插件已记录的住处（两边互补）。枚举本身在 host 适配器里。 */
-  function allScopes() {
-    const e = host.listScopes()
-    const workspaces = [...e.workspaces]
-    for (const w of (binding.scopes?.workspaces ?? [])) if (!workspaces.includes(w)) workspaces.push(w)
-    const sessions = [...e.sessions]
-    for (const s of (binding.scopes?.sessions ?? [])) {
-      if (s && s.id && !sessions.some(x => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '' })
-    }
-    return { workspaces, sessions }
-  }
-  function stateView() {
-    const scopes = allScopes()
-    const fish = binding.listCreatures().map((c) => fishView(c, scopes.sessions))
-    return {
-      born: fish.some(f => f.episodes > 0),
-      scopes,
-      wakeState: (() => { try { return JSON.parse(fs.readFileSync(wakeStatePath(stateDir), 'utf8')) } catch { return null } })(),
-      config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, selfTime: cfg.selfTime, browse: cfg.browse, comment: cfg.comment, memory: cfg.memory },
-      fish,
-    }
-  }
 
   function readBody(req) {
     return new Promise((resolve, reject) => {
