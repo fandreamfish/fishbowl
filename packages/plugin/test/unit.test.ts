@@ -16,7 +16,7 @@ import { IDENTITY_RE, parseIdentity } from '../../app/src/index.js'
 import { injectMessage, stateKey, summaryText } from '../../app/src/index.js'
 import { absenceHours, createWakeLoop, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../../app/src/index.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../../adapter-dsh/src/index.js'
-import { configFor, halfLivesFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../../app/src/index.js'
+import { configFor, fishConfigPath, halfLivesFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../../app/src/index.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/index.ts'
 import { Memory } from '../../memory/src/index.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
@@ -600,12 +600,14 @@ console.log('== M25：每条鱼的配置互相独立 ==')
   writeFishConfig(sdF, fa.meta.creatureId, { wake: { absenceHours: 3 }, memory: { consolidateCap: 7 } })
   check('A 的覆盖生效', configFor(base, fa).wake.absenceHours === 3 && configFor(base, fa).memory.consolidateCap === 7)
   check('B 不受影响', configFor(base, fb).wake.absenceHours === base.wake.absenceHours && configFor(base, fb).memory.consolidateCap === base.memory.consolidateCap)
-  check('B 没有自己的文件（继承默认）', readFishConfig(sdF, fb.meta.creatureId) === null)
+  check('B 出生就有一份完整配置', !!readFishConfig(sdF, fb.meta.creatureId) && readFishConfig(sdF, fb.meta.creatureId).wake?.enabled !== undefined)
   check('非法时段被丢', pickFishPatch({ wake: { activeWindow: ['99:00', '08:00'] } }).wake === undefined)
   check('成长率被钳制', pickFishPatch({ growth: 99 }).growth === 5)
   const fc = bF.birth('丙鱼')
+  // 模拟旧版本的鱼：删掉出生时写的那份，看迁移会不会补
+  fs.rmSync(fishConfigPath(sdF, fc.meta.creatureId), { force: true })
   const n = migrateFishConfigs(base, [fa, fb, fc], { wake: { absenceHours: 9 }, memory: { consolidateCap: 12 } })
-  check('只迁移没有配置的鱼', n === 2, 'migrated=' + n)
+  check('只迁移没有配置的鱼', n === 1, 'migrated=' + n)
   check('迁移后各自有一份', readFishConfig(sdF, fc.meta.creatureId).wake.absenceHours === 9)
   check('已有配置的鱼不被覆盖', configFor(base, fa).wake.absenceHours === 3)
   fs.rmSync(sdF, { recursive: true, force: true })

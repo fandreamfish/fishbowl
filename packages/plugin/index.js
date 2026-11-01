@@ -26,7 +26,7 @@ import { createSpeakTool } from './lib/browse/speak-tool.js'
 import { createPermissionTool } from './lib/browse/permission-tool.js'
 import { setPacing } from '../bilibili/src/index.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from '../adapter-dsh/src/index.js'
-import { configFor, migrateFishConfigs } from '../app/src/index.js'
+import { configFor, ensureFullFishConfig, migrateFishConfigs } from '../app/src/index.js'
 import { createDshHost } from '../adapter-dsh/src/index.js'
 
 export const inject = ['tools', 'agents']
@@ -51,6 +51,8 @@ export function apply(ctx, config = {}) {
   const host = createDshHost(ctx, cfg)
   const disposers = []
   const binding = createBinding(cfg)
+  // 每条鱼都有一份完整 config.json（缺的键从当前默认补，已有的优先）
+  try { for (const c of binding.listCreatures()) ensureFullFishConfig(cfg.stateDir, c, cfg) } catch { /* 补配置失败不影响启动 */ }
 
   // 以前配置是全家的：给每条还没有自己配置的鱼写一份快照，之后各改各的
   try {

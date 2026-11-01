@@ -7,7 +7,7 @@ function makeFactory() {
   return (require) => {
     const module = { exports: {} }
     const react = require('react')
-    const { useState, useEffect, useCallback } = react
+    const { useState, useEffect, useCallback, useRef } = react
     const jsx = require('react/jsx-runtime').jsx
 
     /** 自动 runtime 的 jsx(type, props, key)：key 走第三参数，children 放 props。 */
@@ -158,6 +158,28 @@ function makeFactory() {
         setTagText((((cfg && cfg.tags) || [])).join('，'))
       }, [cfg])
 
+      // 改一下就存：不再有"保存"按钮
+      const lastRef = useRef('')
+      useEffect(() => {
+        if (!d) return undefined
+        const payload = Object.assign({}, d, {
+          tags: String(tagText || '').split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean),
+        })
+        const key = JSON.stringify(payload)
+        if (lastRef.current === '') { lastRef.current = key; return undefined }
+        if (key === lastRef.current) return undefined
+        const timer = setTimeout(async () => {
+          lastRef.current = key
+          try {
+            setBusy(true)
+            await postJson(API + '/fish/' + props.fishId + '/config', { memory: payload })
+            setMsg('已自动保存')
+            setErr('')
+          } catch (x) { setErr(String((x && x.message) || x)) } finally { setBusy(false) }
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [d, tagText])
+
       if (!d) return e('div', { style: box, children: '记忆配置读取中…' }, 'mcfg-loading')
 
       const set = (k, v) => setD(Object.assign({}, d, { [k]: v }))
@@ -277,8 +299,7 @@ function makeFactory() {
         ], 'g3'),
 
         e('div', { style: { display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, flexWrap: 'wrap' }, children: [
-          e('button', { style: busy ? { ...btnP, opacity: 0.55, cursor: 'default' } : btnP, disabled: busy, onClick: save, children: busy ? '保存中…' : '保存' }, 'save'),
-          e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
+          e('span', { style: { ...lab, fontSize: 12 }, children: msg || '改动会自动保存' }, 'm'),
           e('span', { style: { fontSize: 12, color: 'var(--dsw-alias-danger, #d33)' }, children: err }, 'e'),
         ] }, 'acts'),
       ] }, 'mcfg')
@@ -499,6 +520,24 @@ function makeFactory() {
       const [busy, setBusy] = useState('')
       const [runText, setRunText] = useState('')
       const [replyText, setReplyText] = useState('')
+
+      // 上网与说话：改一下就存到这条鱼的 config.json
+      const lastCfgRef = useRef('')
+      useEffect(() => {
+        if (!cfg || !comment) return undefined
+        const key = JSON.stringify({ browse: cfg, comment })
+        if (lastCfgRef.current === '') { lastCfgRef.current = key; return undefined }
+        if (key === lastCfgRef.current) return undefined
+        const timer = setTimeout(async () => {
+          lastCfgRef.current = key
+          try {
+            await postJson(API + '/fish/' + f.id + '/config', { browse: cfg, comment })
+            setMsg('已自动保存')
+            setErr('')
+          } catch (x) { setErr(String((x && x.message) || x)) }
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [cfg, comment, f.id])
 
       const loadAll = useCallback(async () => {
         try {
@@ -787,8 +826,7 @@ function makeFactory() {
           ] }, 'at'),
         ] }, 'ownerbox'),
         e('div', { style: { ...rowS, marginTop: 8 }, children: [
-          e('span', { style: { ...lab, fontSize: 11.5 }, children: '说出去的话会过秘密/隐私闸；公开场合，不该带你们之间的私事。' }, 'h'),
-          e('button', { style: { ...btnP, padding: '5px 14px', fontSize: 12.5 }, disabled: busy === 'save', onClick: saveBili, children: '保存说话设置' }, 'save'),
+          e('span', { style: { ...lab, fontSize: 11.5 }, children: '说出去的话会过秘密/隐私闸；公开场合，不该带你们之间的私事。改动会自动保存。' }, 'h'),
         ] }, 'acts'),
       ] }, 'bili-speak')
 
@@ -815,10 +853,9 @@ function makeFactory() {
         replyCard,
         runText ? e('div', { style: { ...box, fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 260, overflow: 'auto' }, children: runText }, 'run') : null,
         e('div', { style: rowS, children: [
-          e('span', { style: { ...lab, fontSize: 12 }, children: msg || err }, 'm'),
+          e('span', { style: { ...lab, fontSize: 12 }, children: msg || err || '改动会自动保存' }, 'm'),
           e('span', { style: { display: 'flex', gap: 8 }, children: [
             e('button', { style: { ...btnS, padding: '6px 14px' }, disabled: busy === 'run' || !cfg.enabled, onClick: run, children: busy === 'run' ? '出门中…' : '让她现在去刷一次' }, 'runbtn'),
-            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, disabled: busy === 'save', onClick: save, children: busy === 'save' ? '保存中…' : '保存' }, 'save'),
           ] }, 'acts'),
         ] }, 'acts'),
       ] }, 'browse-panel')
@@ -894,6 +931,40 @@ function makeFactory() {
       const [delConfirm, setDelConfirm] = useState(false)
       const [routine, setRoutine] = useState(null)
       useEffect(() => { ensureStyle() }, [])
+
+      // 作息 / 成长 / 来历：改一下就存
+      const lastRoutineRef = useRef('')
+      const lastPersonaRef = useRef('')
+      useEffect(() => {
+        if (!routine || !data?.fish?.id) return undefined
+        const key = JSON.stringify(routine)
+        if (lastRoutineRef.current === '') { lastRoutineRef.current = key; return undefined }
+        if (key === lastRoutineRef.current) return undefined
+        const timer = setTimeout(async () => {
+          lastRoutineRef.current = key
+          try {
+            await postJson(API + '/fish/' + data.fish.id + '/config', routine)
+            setMsg('已自动保存')
+          } catch (x) { setErr(String((x && x.message) || x)) }
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [routine, data?.fish?.id])
+
+      useEffect(() => {
+        if (!data?.fish?.id) return undefined
+        const payload = data?.born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
+        const key = JSON.stringify(payload)
+        if (lastPersonaRef.current === '') { lastPersonaRef.current = key; return undefined }
+        if (key === lastPersonaRef.current) return undefined
+        const timer = setTimeout(async () => {
+          lastPersonaRef.current = key
+          try {
+            await postJson(API + '/fish/' + data.fish.id + '/config', payload)
+            setMsg('已自动保存')
+          } catch (x) { setErr(String((x && x.message) || x)) }
+        }, 500)
+        return () => clearTimeout(timer)
+      }, [growth, seedName, seedBg, data?.fish?.id, data?.born])
 
       const load = useCallback(async (attempt = 0) => {
         try {
@@ -1259,10 +1330,7 @@ function makeFactory() {
           ] }, 'affect'),
           statusCard,
           e('div', { style: rowS, children: [
-            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
-            e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => act(async () => {
-              await postJson(API + '/fish/' + f.id + '/config', { wake, contact, selfTime, affect: affectCfg, diary })
-            }, '作息已保存'), children: '保存' }, 'save'),
+            e('span', { style: { ...lab, fontSize: 12 }, children: msg || err || '改动会自动保存' }, 'm'),
           ] }, 'act'),
         ] }, 'routine')
       }
@@ -1298,11 +1366,7 @@ function makeFactory() {
             e('input', { type: 'range', min: '0.25', max: '4', step: '0.05', value: growth, style: { width: '100%' }, onInput: (ev) => setGrowth(Number(ev.target.value)) }, 's'),
           ] }, 'growth'),
           e('div', { style: rowS, children: [
-            e('span', { style: { ...lab, fontSize: 12 }, children: msg }, 'm'),
-            e('button', { style: btnP, onClick: () => act(async () => {
-              const body2 = born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
-              await postJson(API + '/fish/' + f.id + '/config', body2)
-            }, born ? '成长率已保存' : '已保存：来历从新出生的鱼开始生效'), children: '保存' }),
+            e('span', { style: { ...lab, fontSize: 12 }, children: msg || err || '改动会自动保存' }, 'm'),
           ] }, 'act'),
           e('div', { style: { ...box, marginTop: 4 }, children: [
             e('div', { style: { ...lab, marginBottom: 6 }, children: '放生会删掉她的全部记忆和日记，不可恢复。' }, 'h'),

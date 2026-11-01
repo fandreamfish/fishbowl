@@ -184,3 +184,40 @@ export function wakingFor(cfg, creatureId) {
   if (!window) return null
   return { window, timezone: cfg.timezone || 'Asia/Shanghai' }
 }
+
+/**
+ * 一条鱼的完整配置快照（不含密钥/路径这类机器级设置）。
+ * 创建时写一份到 config.json，之后这条鱼的所有配置读写都以它为准。
+ */
+export function fullFishConfig(cfg = {}) {
+  const cp = (x) => (x && typeof x === "object" ? JSON.parse(JSON.stringify(x)) : x)
+  return {
+    growth: cfg.growth,
+    wake: cp(cfg.wake),
+    contact: cp(cfg.contact),
+    selfTime: cp(cfg.selfTime),
+    memory: cp(cfg.memory),
+    browse: cp(cfg.browse),
+    comment: cp(cfg.comment),
+    capabilities: cp(cfg.capabilities ?? { browse: true }),
+    diary: cp(cfg.diary),
+    affect: cp(cfg.affect),
+    relation: cp(cfg.relation),
+  }
+}
+
+/** 保证这条鱼有一份完整 config.json：没有就复制模板，有就补齐缺的顶层键（已有的优先）。 */
+export function ensureFullFishConfig(stateDir, creature, cfg) {
+  const cid = creature?.meta?.creatureId
+  if (!cid) return null
+  const file = fishConfigPath(stateDir, cid)
+  let cur = {}
+  try { cur = JSON.parse(fs.readFileSync(file, "utf8")) || {} } catch { cur = {} }
+  const next = { ...fullFishConfig(cfg), ...cur }
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(file, JSON.stringify(next, null, 2), "utf8")
+    cached.delete(file)
+    return next
+  } catch { return null }
+}

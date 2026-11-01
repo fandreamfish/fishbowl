@@ -14,7 +14,7 @@ import { Creature } from '../../being/src/index.ts'
 import { DEFAULT_TEMPERAMENT } from '../../affect/src/index.ts'
 import { mulberry32 } from '../../affect/src/index.ts'
 import { findConflict, resolveOccupant } from '../../being/src/index.ts'
-import { halfLivesFor, wakingFor } from './fishcfg.js'
+import { ensureFullFishConfig, halfLivesFor, wakingFor } from './fishcfg.js'
 
 /** @param {import('./types.js').FishbowlConfig} cfg */
 export function createBinding(cfg) {
@@ -170,6 +170,7 @@ export function createBinding(cfg) {
     }
     Creature.create(path.join(cfg.stateDir, cid), meta)
     const c = Creature.open(path.join(cfg.stateDir, cid), { halfLives: halfLivesFor(cfg, cid), waking: wakingFor(cfg, cid) })
+    try { ensureFullFishConfig(cfg.stateDir, c, cfg) } catch { /* 配置没写出来不影响出生 */ }
     cache.set(cid, c)
     return c
   }
