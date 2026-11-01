@@ -310,7 +310,7 @@ export function createDshHost(ctx, cfg) {
     },
 
     /** 新建会话（可选挂到某个工作区）。返回 { id, workspace }。 */
-    async createSession({ workspaceId, cwd, path: dirPath } = {}) {
+    async createSession({ workspaceId, cwd, path: dirPath, title } = {}) {
       const registry = workspaceRegistry()
       let target = null
       if (workspaceId) {
@@ -346,6 +346,14 @@ export function createDshHost(ctx, cfg) {
       if (lastErr) throw lastErr
       const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
+      // 给会话一个标题：侧边栏与设置页都按标题认人
+      if (title) {
+        try {
+          const titles = svc('sessionTitle')
+          const live = handle?.agent?.session ?? sessionsService()?.get?.(String(id))
+          if (titles?.rename && live) titles.rename(live, String(title))
+        } catch (e) { console.error('[fishbowl] rename session failed:', String(e?.message ?? e)) }
+      }
       // 挂到工作区（侧边栏按 workspace.sessionIds 显示）：list() 给的是视图，要 get() 拿真实实例
       let ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir)) ?? null
       try { if (ws?.id) ws = registry?.get?.(ws.id) ?? ws } catch { /* 忽略 */ }

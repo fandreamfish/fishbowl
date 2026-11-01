@@ -22,7 +22,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
       ? { kind: body.occupancy.kind, id: String(body.occupancy.id ?? ''), workspace: body.occupancy.workspace ? String(body.occupancy.workspace) : undefined }
       : null
     if (body.housing) {
-      try { occ = await housingToOccupancy(host, body.housing) }
+      try { occ = await housingToOccupancy(host, body.housing, { title: name + '的房间' }) }
       catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, 400); return true }
     }
     if (occ) {

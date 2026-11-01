@@ -32,7 +32,7 @@ export function normalizeHousing(raw) {
 }
 
 /** housing → occupancy（必要时通过 host 真的建工作区/会话）。 */
-export async function housingToOccupancy(host, raw) {
+export async function housingToOccupancy(host, raw, opts = {}) {
   const h = normalizeHousing(raw)
   if (h.kind === 'none') return null
   if (h.kind === 'existing') {
@@ -46,11 +46,11 @@ export async function housingToOccupancy(host, raw) {
     return { kind: 'workspace', id: w.path }
   }
   if (h.kind === 'new-session') {
-    const s = await host.createSession({ path: h.workspace })
+    const s = await host.createSession({ path: h.workspace, title: opts.title })
     return { kind: 'session', id: s.id, workspace: s.workspace || h.workspace }
   }
   // new-both：先建工作区，再在里面建一个会话，鱼住在会话里（工作区里的其它会话不归她）
   const w = await host.createWorkspace(h.path)
-  const s = await host.createSession({ workspaceId: w.registryId, path: w.path })
+  const s = await host.createSession({ workspaceId: w.registryId, path: w.path, title: opts.title })
   return { kind: 'session', id: s.id, workspace: s.workspace || w.path }
 }
