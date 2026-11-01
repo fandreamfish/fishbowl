@@ -33,6 +33,8 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     // 新会话是空的会被侧边栏忽略：搬进去后先让她在自己的房间里说一句话
     if (occ && occ.kind === 'session') {
       try {
+        // 先等注入循环认领这个会话（它会在 400ms 后重试），再叫醒她
+        await new Promise((r) => setTimeout(r, 1600))
         let agent = null
         for (let i = 0; i < 4 && !agent; i++) {
           if (i) await new Promise((r) => setTimeout(r, 500))
