@@ -77,7 +77,9 @@ export function normalizeConfig(raw = {}) {
       const c = raw.capabilities || {}
       const on = (v) => v !== false
       // 能力只有技能类：上网（含说话）。记忆不是能力，是她的本体
-      return { browse: on(c.browse) }
+      // 没显式给 capabilities 时，跟随 browse.enabled，避免两个开关互相打架
+      const browseDefault = raw.browse?.enabled !== false
+      return { browse: c.browse === undefined ? browseDefault : on(c.browse) }
     })(),
     // 心情半衰期（天）：每条鱼可单独改；0.1–60
     affect: normalizeAffect(raw.affect),

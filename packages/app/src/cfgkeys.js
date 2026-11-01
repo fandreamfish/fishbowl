@@ -11,6 +11,7 @@ export function pickMemoryConfig(x) {
   for (const k of ['turnsPerRecord', 'consolidateCap', 'recallPool', 'injectBudget', 'memoryRatio', 'turnRatio']) {
     if (typeof x?.[k] === 'number' && Number.isFinite(x[k])) out[k] = x[k]
   }
+  if (typeof x?.enabled === 'boolean') out.enabled = x.enabled
   if (typeof x?.herSummaryOnPlainTurns === 'boolean') out.herSummaryOnPlainTurns = x.herSummaryOnPlainTurns
   if (typeof x?.neutralModel === 'string') out.neutralModel = x.neutralModel
   if (typeof x?.searchTool === 'boolean') out.searchTool = x.searchTool

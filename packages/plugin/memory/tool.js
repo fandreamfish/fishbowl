@@ -66,7 +66,10 @@ export function createMemoryTool(binding, cfg, memoryFor) {
       const sid = session?.id
       if (!sid) return '（这一轮拿不到会话，翻不了记忆）'
       const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(session) })
-    if (creature && configFor(cfg, creature).capabilities?.memory === false) return '我现在不翻记忆。'
+    if (creature) {
+    const mc = configFor(cfg, creature)
+    if (mc.capabilities?.memory === false || mc.memory?.enabled === false) return '我现在不翻记忆。'
+  }
       if (!creature) return '（这条会话里没有鱼住，没有记忆可翻）'
       const q = String(args?.query ?? '').trim()
       if (!q) return '要翻什么？给我一个词。'

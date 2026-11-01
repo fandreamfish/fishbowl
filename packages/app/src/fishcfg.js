@@ -139,6 +139,11 @@ export function configFor(cfg, creature) {
   if (over.capabilities) out.capabilities = { ...cfg.capabilities, ...over.capabilities }
   if (over.affect) out.affect = { ...cfg.affect, ...over.affect }
   if (over.memory) out.memory = normalizeMemory({ ...cfg.memory, ...over.memory })
+  // capabilities 与 browse.enabled 保持一致：能力开关是权威
+  if (out.capabilities && typeof out.capabilities.browse === 'boolean') {
+    const enabled = out.capabilities.browse !== false
+    if (out.browse?.enabled !== enabled) out.browse = { ...out.browse, enabled }
+  }
   return out
 }
 
@@ -221,7 +226,7 @@ export function fullFishConfig(cfg = {}) {
     memory: cp(cfg.memory),
     browse: cp(cfg.browse),
     comment: cp(cfg.comment),
-    capabilities: cp(cfg.capabilities ?? { browse: true }),
+    capabilities: cp(cfg.capabilities ?? { browse: cfg.browse?.enabled !== false }),
     diary: cp(cfg.diary),
     affect: cp(cfg.affect),
     relation: cp(cfg.relation),

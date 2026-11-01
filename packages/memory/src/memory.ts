@@ -160,6 +160,7 @@ export class Memory {
     injected?: string[]
     ts?: number
   }) {
+    if (this.cfg.enabled === false) return
     const ts = turn.ts ?? this.clock()
     const ev = this.ledger.append({
       t: 'turn',
@@ -202,6 +203,7 @@ export class Memory {
    * 每次最多 maxCalls 次模型调用（默认 3：两份总结 + 一次整理），失败不抛。
    */
   async tick(opts: { llm: Llm; now?: number; maxCalls?: number; by?: any; force?: boolean }): Promise<TickReport> {
+    if (this.cfg.enabled === false) return { her: 0, neutral: 0, merged: 0, rejected: [], errors: [], skipped: [] }
     const now = opts.now ?? this.clock()
     const max = Math.max(1, opts.maxCalls ?? 3)
     const report: TickReport = { her: 0, neutral: 0, merged: 0, rejected: [], errors: [], skipped: [] }

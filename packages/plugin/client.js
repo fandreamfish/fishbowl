@@ -246,6 +246,10 @@ function makeFactory() {
         ], 'g2'),
 
         group('其它', [
+          e('label', { key: 'mem-on', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
+            e('input', { type: 'checkbox', checked: d.enabled !== false, onChange: (ev) => set('enabled', ev.target.checked) }, 'c'),
+            e('span', { children: '记忆系统总开关（关掉后不再记录与整理，已有记忆仍会注入）' }, 't'),
+          ] }),
           e('label', { key: 'plain', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
             e('input', { type: 'checkbox', checked: !!d.herSummaryOnPlainTurns, onChange: (ev) => set('herSummaryOnPlainTurns', ev.target.checked) }, 'c'),
             e('span', { children: '平淡轮也写「她的总结」' }, 't'),
@@ -558,11 +562,13 @@ function makeFactory() {
       const loadAll = useCallback(async () => {
         try {
           const b = await getJson(API + '/browse')
-          // 这一页编辑的是「这条鱼」的配置：不能用全局默认值回填，否则保存后看起来又还原了
+          // 这一页编辑的是「这条鱼」的配置：读不到就报错，绝不拿全局值去回填再写进单鱼文件
           const fv = await getJson(API + '/fish/' + f.id)
-          const serverBrowse = fv.fish?.config?.browse || b.config
+          if (!fv?.fish?.config?.browse) throw new Error('读取单鱼配置失败（GET /fish/:id）；请确认插件版本并重启 DSH')
+          const serverBrowse = fv.fish.config.browse
           const bl = await getJson(API + '/bili')
-          const serverComment = fv.fish?.config?.comment || bl.comment
+          if (!fv.fish.config.comment) throw new Error('读取单鱼说话配置失败（GET /fish/:id）')
+          const serverComment = fv.fish.config.comment
           // 刚改过、可能还没写完：先用本地那份，别被旧值盖回去
           const opt = OPTIMISTIC.get(f.id)
           if (opt && Date.now() - opt.at < 30_000) {
@@ -845,6 +851,10 @@ function makeFactory() {
           e(Toggle, { on: cm.requirePermit === true, onChange: () => setCm('requirePermit', cm.requirePermit !== true), k: 'permit' }),
         ] }, 'cmpermit'),
         e('div', { style: rowS, children: [
+          e('span', { style: lab, children: '这类事不用每次问（直接发）' }, 'pl2'),
+          e(Toggle, { on: cm.autoApprove === true, onChange: () => setCm('autoApprove', cm.autoApprove !== true), k: 'auto' }),
+        ] }, 'cmauto'),
+        e('div', { style: rowS, children: [
           e('span', { style: lab, children: '有人回她时允许她回一句' }, 'l'),
           e(Toggle, { on: cm.replyToReplies !== false, onChange: () => setCm('replyToReplies', cm.replyToReplies === false), k: 'rt' }),
         ] }, 'reply'),
@@ -878,7 +888,7 @@ function makeFactory() {
       ] }, 'bili-replies')
 
       return e('div', { children: [
-        e('div', { style: { ...lab, marginBottom: 8, fontSize: 12 }, children: '这些是环境参数，不是她的喜好。设置对所有鱼生效；配额与历史按鱼算。' }, 'top'),
+        e('div', { style: { ...lab, marginBottom: 8, fontSize: 12 }, children: '这些设置按鱼生效：上网、说话、作息、记忆都存进这条鱼自己的 config.json。' }, 'top'),
         e('div', { className: 'fb-page', children: cards }, 'cards'),
         statusCard,
         historyCard,
@@ -1034,15 +1044,14 @@ function makeFactory() {
       const load = useCallback(async (attempt = 0) => {
         try {
           const d = await getJson(API + '/fish')
-          setData(d)
-          // 当前这条鱼自己的配置：不能用列表里的全局默认值
+          // 当前这条鱼自己的配置：读不到就报错，不拿全局默认值回填
           let fc = d.config
           if (view.level === 'fish' && view.id) {
-            try {
-              const fv = await getJson(API + '/fish/' + view.id)
-              if (fv?.fish?.config) fc = fv.fish.config
-            } catch { /* 读不到就退回全局 */ }
+            const fv = await getJson(API + '/fish/' + view.id)
+            if (!fv?.fish?.config) throw new Error('读取单鱼配置失败（GET /fish/:id）；请确认插件版本并重启 DSH')
+            fc = fv.fish.config
           }
+          setData(d)
           setSeedName(fc.seed?.name ?? '')
           setSeedBg(fc.seed?.background ?? '')
           setRoutine({ wake: fc.wake ?? {}, contact: fc.contact ?? {}, selfTime: fc.selfTime ?? {}, affect: fc.affect ?? {}, diary: fc.diary ?? {} })

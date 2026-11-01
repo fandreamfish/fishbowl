@@ -9,6 +9,7 @@ import { memoryDetail } from '../views-memory.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
 import { history as browseHistory } from '../../../bilibili/src/index.js'
 import { commentStatus, scanDueReplies } from '../../../bilibili/src/index.js'
+import { normalizeMemory, validateMemory } from '../../../memory/src/index.ts'
 
 export async function handleFish({ cfg, binding, host, stateDir, opts, views, send, readBody }, req, res, parts) {
   if (parts[0] !== 'fish') return false
@@ -63,7 +64,15 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     if (req.method === 'GET') { send(res, { ok: true, config: fishConfigView(cfg, c), inherited: !hasFishConfig(stateDir, c.meta.creatureId) }); return true }
     if (req.method === 'POST') {
       const body = JSON.parse(await readBody(req) || '{}')
-      writeFishConfig(stateDir, c.meta.creatureId, pickFishPatch(body), cfg)
+      if (body.memory && typeof body.memory === 'object') {
+        const errs = validateMemory(normalizeMemory(body.memory))
+        if (errs.length) { send(res, { ok: false, error: errs.join('；') }, 400); return true }
+      }
+      const patch = pickFishPatch(body)
+      // 出生后来历只读：直接改 seed 的请求一律忽略
+      const born = c.store.readEvents().some((e) => e.t === 'turn' || e.t === 'episode')
+      if (born && patch.seed) delete patch.seed
+      writeFishConfig(stateDir, c.meta.creatureId, patch, cfg)
       try { c.halfLives = halfLivesFor(cfg, c.meta.creatureId) } catch { /* 忽略 */ }
       try { opts.refreshTools?.() } catch { /* 忽略 */ }
       send(res, { ok: true, config: fishConfigView(cfg, c), inherited: false })
@@ -178,7 +187,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
         try { fs.appendFileSync(path.join(stateDir, 'trace.ndjson'), JSON.stringify({ ts: Date.now(), event: 'browse', tag, msg: String(msg ?? '') }) + '\n') } catch { /* 忽略 */ }
       },
     })
-    send(res, { ok: !!r.ok, result: r, status: browseStatus(c, cfg) })
+    send(res, { ok: !!r.ok, result: r, status: browseStatus(c, configFor(cfg, c)) })
     return true
   }
   if (action === 'bili' && req.method === 'GET' && parts.length === 3) {
@@ -187,7 +196,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
   }
   if (action === 'bili' && parts[3] === 'scan' && req.method === 'POST') {
     const r = await scanDueReplies(c, configFor(cfg, c), { force: true }).catch(() => ({ items: [], text: '' }))
-    send(res, { ok: true, items: r.items ?? [], text: r.text ?? '', status: commentStatus(c, cfg) })
+    send(res, { ok: true, items: r.items ?? [], text: r.text ?? '', status: commentStatus(c, configFor(cfg, c)) })
     return true
   }
   if (action === 'requests' && req.method === 'GET') { send(res, { ok: true, requests: c.requests().slice(-30).reverse() }); return true }

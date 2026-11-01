@@ -10,7 +10,7 @@ import {
 } from '../../bilibili/src/index.js'
 import { DEFAULT_TEMPERAMENT } from '../../affect/src/index.ts'
 import { Creature } from '../../being/src/index.ts'
-import { normalizeConfig } from '../../app/src/index.js'
+import { normalizeConfig, writeFishConfig } from '../../app/src/index.js'
 import { detectGrant, detectRevoke, grantLine } from '../../being/src/index.ts'
 import { selfTimeEnabled } from '../../app/src/index.js'
 import { createClient, mixinKey, parseDanmaku, signQuery } from '../../bilibili/src/index.js'
@@ -176,11 +176,12 @@ const cfgOff = normalizeConfig({ stateDir: TMP, browse: { enabled: false } })
 const r2 = await lookForCreature(creature, cfgOff, { client: fakeRuntimeClient, force: true })
 check('开关关着 → 不发请求', r2.ok === false && r2.note === '现在打不开。')
 
+writeFishConfig(TMP, creature.meta.creatureId, { browse: { enabled: false } })
 const toolOff = createBrowseTool({ resolve: () => creature }, cfgOff)
 check('工具名带回前缀', toolOff.name === 'fish_bili_look')
 check('工具 schema 是完整 object', toolOff.parameters.type === 'object' && toolOff.parameters.required[0] === 'what')
 const toolOut = await toolOff.execute({ what: 'home' }, { agent: { session: { id: 's1', header: { cwd: 'D:\\ws' } } } })
-check('关着时工具明确说打不开', toolOut.ok === false && toolOut.note === '现在打不开。')
+check('关着时工具明确说打不开', toolOut.ok === false && /不上网|打不开/.test(String(toolOut.note)), JSON.stringify(toolOut))
 
 noteRisk(TMP, -352, Date.now())
 const st2 = riskState(TMP)
@@ -258,7 +259,7 @@ check('GET /requests 只返回待答请求', reqList.code === 200 && reqBody.req
 const gb = await callRoute('GET', '/fishbowl-ui/browse')
 check('GET /browse 返回配置', gb.code === 200 && JSON.parse(gb.body).config.enabled === false)
 const fb = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId + '/browse')
-check('GET 单鱼上网状态', fb.code === 200 && JSON.parse(fb.body).enabled === false)
+check('GET 单鱼上网状态', fb.code === 200 && JSON.parse(fb.body).enabled === false, JSON.stringify(fb))
 const fh = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId + '/browse/history?days=14')
 check('GET 上网历史', fh.code === 200 && Array.isArray(JSON.parse(fh.body).items))
 const fr = await callRoute('POST', '/fishbowl-ui/fish/' + routeFish.meta.creatureId + '/browse/run', {})

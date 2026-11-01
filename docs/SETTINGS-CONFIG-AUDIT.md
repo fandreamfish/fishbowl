@@ -12,7 +12,7 @@
 4. **作息/人设/记忆**：有控件的项都读写同文件 ✅。但 `wake.idleSkip`、`contact.burst`、`contact.requireReason`、`selfTime.idleWaitMs`、`diary.enabled`、`affect.longingDays` 有键无 UI（⚠️，不是写错文件，是设置页改不到）。
 5. **明确没做到的三处**：
    - `memory.enabled`：`normalizeMemory` 不返回该字段（`packages/memory/src/config.ts:47-68`），5 份 config.json 也没有；记忆无法从配置关闭 ❌。
-   - `seed.name`：5 条鱼都已命名，`client.js:1420` 的输入框只在名字为 `fish-*` 时出现；改名走 `POST /fish/:id/name`（写 `meta.json`），不是 config.json。
+   - `seed.name`：5 条鱼都已命名，`client.js:1423-1427` 的输入框只在名字为 `fish-*` 时出现；改名走 `POST /fish/:id/name`（写 `meta.json`），不是 config.json。
    - `@` 的 uid/昵称：属于 `bili-auth.json`（`packages/bilibili/src/auth.js:17-19`），不是 config.json；当前该文件**不存在**。
 6. **读取仍会碰全局接口**：打开设置页确实请求 `GET /browse`（`client.js:560`）和 `GET /bili`（`client.js:564`），但只作回退/账号来源；**若 `GET /fish/:id` 失败，会静默回退到全局 `cfg`（`client.js:563/565`、`1039-1044`），而保存仍写单鱼文件** —— 这是唯一实质性的读写不一致风险。
 
@@ -88,7 +88,7 @@ UI 位置均指 `packages/plugin/client.js`（行号 + 控件名）。
 | 作息.affect.longingDays | 无（1402 是空行，原控件被删） | R | W | ⚠️ 有键且参与半衰期，无 UI |
 | 人设.growth | 1440 `range`（读取 1049 / 1062） | R | W | ✅ |
 | 人设.seed.background | 1433 `textarea`（born 后 disabled，1419/1433） | R | W | ✅ |
-| 人设.seed.name | 1423-1427 `input`，仅名字为 `fish-*` 时显示 | 走 `POST /fish/:id/name`（`fish.js:110-117`）→ `meta.json` | ⚠️ 5 条都已命名，无入口 |
+| 人设.seed.name | 1423-1427 `input`，仅名字为 `fish-*` 时显示 | R（`seed: null`） | `POST /fish/:id/name`（`fish.js:110-117`）→ `meta.json` | ⚠️ 5 条都已命名，无入口 |
 | 记忆.turnsPerRecord | 233 `number` | R → 单鱼 config.json | W → 单鱼 config.json | ✅ |
 | 记忆.consolidateCap | 234 `number` | R | W | ✅ |
 | 记忆.recallPool | 238 `number` | R | W | ✅ |
@@ -122,7 +122,7 @@ UI 位置均指 `packages/plugin/client.js`（行号 + 控件名）。
 
 ## 5. 仍未实现 / 有风险的点（按严重程度）
 
-1. **【高】读失败静默回退全局，写仍落单鱼**：`client.js:563/565`（browse/comment）与 `1039-1044`（growth/seed/作息）在 `GET /fish/:id` 失败时用 `/fish`、`/browse`、`/bili` 的全局 `cfg` 回填；用户一改就把全局默认值写进这条鱼的 config.json。后端已是新版 404 不会发生，但这是"看起来读了 A、实际写了 B"的唯一通道。
+1. **【高】读失败静默回退全局，写仍落单鱼**：`client.js:563/565`（browse/comment）与 `1039-1044`（growth/seed/作息）在 `GET /fish/:id` 失败时用 `/fish`、`/browse`、`/bili` 的全局 `cfg` 回填；用户一改就把全局默认值写进这条鱼的 config.json。新版后端下不会发生，但这是"看起来读了 A、实际写了 B"的唯一通道。
 2. **【高】出生后 seed 仍可经 API 改写**：`POST /fish/:id/config`（`fish.js:62-71`）没有 born 检查，`pickFishPatch` 也直接收 `seed`（`fishcfg.js:54-59`）；UI 只是用 `disabled`（`client.js:1433`）挡住。全局旧路由有 A1 保护（`resources/config.js:32-35`），单鱼路由没有，违背"来历只读"。
 3. **【中】单鱼记忆配置没有语义校验**：UI 自动保存直接 POST（`client.js:171/218`），服务端只 normalize 钳制，不调用 `validateMemory`；`recallPool < memoryRatio + turnRatio` 这类矛盾值会静默写进 config.json（全局 `/memory/config` 是校验的，`config.js:13`）。
 4. **【中】`browse.enabled` 与 `capabilities.browse` 只有单向联动**：关能力时写 `browse.enabled=false`（`fishcfg.js:63-70`），但打开能力才写回 true；若磁盘上出现 `enabled=false` + `capabilities.browse=true`（手改、迁移、旧数据），设置页会显示上网页（`client.js:1232`）、但"让她现在去刷一次"永远禁用（`892`），且没有开关可修。
@@ -138,3 +138,27 @@ UI 位置均指 `packages/plugin/client.js`（行号 + 控件名）。
 - 本报告未启动/调用任何 HTTP 接口，也未验证浏览器实际渲染；行号以当前工作区源码为准。
 - 只读了一个配置样例的完整值来确认键存在；未鉴权、未修改任何代码或 creatures 配置。
 - 若要确认"设置页在跑的版本"就是本报告审计的版本，需要完全退出 DSH 后重启再看 `/debug/services`（`browse.js:130-133`）。
+
+## 7. 修复后复核（0.14.7，审计 agent 报告之后）
+
+审计报告基于 21:33 的源码；之后又修了一轮，以下问题已关闭：
+
+| 原风险 | 处理 |
+|---|---|
+| 【高】`GET /fish/:id` 失败时静默回退全局值再写单鱼 | `client.js` 的 BrowsePanel 与 FishDetail 读取失败直接报错，不再回退；没有全局值可被误写 |
+| 【高】单鱼 config POST 无 born 保护，可改写 seed | `resources/fish.js` 的 POST 在鱼已有 `turn/episode` 时丢弃 `patch.seed` |
+| 【中】单鱼记忆写入不跑 `validateMemory` | `resources/fish.js` POST 若带 `memory`，先 `validateMemory(normalizeMemory(...))`，不通过返回 400 |
+| 【中】状态回包用全局 cfg | `/fish/:id/browse`、`/bili`、`/browse/run`、`/bili/scan` 与 `fishView.browse` 全部改用 `configFor(cfg, c)` |
+| 【中】capabilities 与 browse.enabled 单向联动 | `configFor` 以 capabilities 为权威同步 `browse.enabled`；`normalizeConfig` 在未显式给 capabilities 时跟随 `browse.enabled` |
+| 【低】UI 文案「设置对所有鱼生效」 | 改为「按鱼生效，存进这条鱼的 config.json」 |
+| 【低】`memory.enabled` 被 normalize 丢弃 | `normalizeMemory` 输出 `enabled`（默认 true）；`observe`/`tick` 在关闭时直接返回；MemoryConfig 增加总开关 |
+| 【低】`autoApprove` 有键无 UI | 说话卡片增加「这类事不用每次问（直接发）」 |
+| `seed` 缺键 | 5 条鱼的 config.json 已补齐 `seed` 键；模板/写入都会带 |
+| 配置残缺 | `writeFishConfig` 以完整模板打底，旧文件缺子键会在下次写入时补齐 |
+
+仍未处理（与审计一致）：
+
+- 有键无 UI：`wake.idleSkip`、`contact.burst`、`contact.requireReason`、`selfTime.idleWaitMs`、`diary.enabled`、`affect.longingDays`、`browse.grantDetect/rankingTids/historyDays/avoid.upMids`
+- `seed.name` 只对默认名 `fish-*` 的鱼开放改名；5 条鱼均已命名
+- `@` 的 uid/昵称存 `bili-auth.json`，不属于 config.json
+- 旧进程并发写 config.json 的读-改-写窗口（重启后消失）

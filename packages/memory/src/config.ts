@@ -47,6 +47,7 @@ function num(v, dflt, min, max) {
 export function normalizeMemory(raw) {
   const r = raw && typeof raw === 'object' ? raw : {}
   return {
+    enabled: r.enabled !== false,
     turnsPerRecord: Math.round(num(r.turnsPerRecord, MEMORY_DEFAULTS.turnsPerRecord, 1, 20)),
     consolidateCap: Math.round(num(r.consolidateCap, MEMORY_DEFAULTS.consolidateCap, 5, 100)),
     recallPool: Math.round(num(r.recallPool, MEMORY_DEFAULTS.recallPool, 5, 100)),
