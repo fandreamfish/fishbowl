@@ -16,7 +16,7 @@ import { IDENTITY_RE, parseIdentity } from '../../app/src/index.js'
 import { injectMessage, stateKey, summaryText } from '../../app/src/index.js'
 import { absenceHours, createWakeLoop, proactivePrompt, shouldRecordAbsence, wakeReason, wakeSituation, wakeTrigger } from '../../app/src/index.js'
 import { mergeUiConfig, pickRoutineConfig, seedChanged, summarizeEvent, validateMemoryConfig, pickMemoryConfig, subjectOf, memoryDetail, otherWriter } from '../../adapter-dsh/src/index.js'
-import { configFor, fishConfigPath, halfLivesFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../../app/src/index.js'
+import { configFor, fishConfigPath, fullFishConfig, halfLivesFor, migrateFishConfigs, pickFishPatch, readFishConfig, writeFishConfig } from '../../app/src/index.js'
 import { HER_SYSTEM, NEUTRAL_SYSTEM } from '../../memory/src/index.ts'
 import { Memory } from '../../memory/src/index.ts'
 import { createMemoryTool, formatHit } from '../memory/tool.js'
@@ -340,6 +340,25 @@ check('家目录与日记目录已创建', fs.existsSync(path.join(memDir, 'home
   check('host.sessionDirsOf 可用', Array.isArray(h.sessionDirsOf('session-none')))
   check('host.workspaceByPath 可用', h.workspaceByPath(stateDir) === null)
 }
+// 许可工具：不要求许可时不该产生请求
+{
+  const { createPermissionTool } = await import('../lib/browse/permission-tool.js')
+  const sdP = fs.mkdtempSync(path.join(os.tmpdir(), 'permtool-'))
+  const cfgP = normalizeConfig({ stateDir: sdP, comment: { enabled: true, requirePermit: false } })
+  const bP = createBinding(cfgP)
+  const fP = bP.birth('申请鱼', { kind: 'session', id: 'sp1' })
+  const toolP = createPermissionTool(bP, cfgP)
+  const outP = await toolP.execute({ action: 'comment.post', target: 'BV1', reason: '想说' }, { agent: { session: { id: 'sp1' } } })
+  check('不需要许可时直接放行、不建请求', outP.ok === true && /不用问/.test(String(outP.note)) && fP.pendingRequests().length === 0)
+
+  const cfgQ = normalizeConfig({ stateDir: sdP, comment: { enabled: true, requirePermit: true } })
+  const bQ = createBinding(cfgQ)
+  const fQ = bQ.birth('申请鱼二', { kind: 'session', id: 'sp2' })
+  const toolQ = createPermissionTool(bQ, cfgQ)
+  const outQ = await toolQ.execute({ action: 'comment.post', target: 'BV1', reason: '想说' }, { agent: { session: { id: 'sp2' } } })
+  check('要求许可时会建请求', outQ.ok === true && fQ.pendingRequests().length === 1)
+  fs.rmSync(sdP, { recursive: true, force: true })
+}
 // 配置持久化与许可策略
 {
   const { savePluginConfig, readPluginConfig } = await import('../../app/src/index.js')
@@ -603,6 +622,12 @@ console.log('== M25：每条鱼的配置互相独立 ==')
   check('B 出生就有一份完整配置', !!readFishConfig(sdF, fb.meta.creatureId) && readFishConfig(sdF, fb.meta.creatureId).wake?.enabled !== undefined)
   check('非法时段被丢', pickFishPatch({ wake: { activeWindow: ['99:00', '08:00'] } }).wake === undefined)
   check('成长率被钳制', pickFishPatch({ growth: 99 }).growth === 5)
+  // 只改一个子键不应丢掉同 section 的其它键
+  writeFishConfig(sdF, fa.meta.creatureId, { comment: { requirePermit: true } })
+  const cm = readFishConfig(sdF, fa.meta.creatureId).comment || {}
+  check('子键合并不丢兄弟键', cm.requirePermit === true && cm.perDay !== undefined)
+check('来历可以按鱼保存', pickFishPatch({ seed: { name: '鲸', background: '来自海' } }).seed?.background === '来自海')
+check('模板里有 seed 键', Object.prototype.hasOwnProperty.call(fullFishConfig(base), 'seed'))
   const fc = bF.birth('丙鱼')
   // 模拟旧版本的鱼：删掉出生时写的那份，看迁移会不会补
   fs.rmSync(fishConfigPath(sdF, fc.meta.creatureId), { force: true })

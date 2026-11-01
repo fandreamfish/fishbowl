@@ -247,6 +247,8 @@ check('状态里有配置自检', !!stateBody.health && Array.isArray(stateBody.
 routeFish.recordRequest('申请：今天可以刷 B 站', undefined, { action: 'browse', target: 'home', uses: 20, ttlMs: 60_000 })
 const reqList = await callRoute('GET', '/fishbowl-ui/requests')
 const reqBody = reqList.code === 200 ? JSON.parse(reqList.body) : { requests: [] }
+const fishOne = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId)
+check('GET /fish/:id 返回单鱼配置', fishOne.code === 200 && !!JSON.parse(fishOne.body).fish.config.browse)
 check('GET /requests 只返回待答请求', reqList.code === 200 && reqBody.requests.length === 1 && reqBody.requests[0].request.action === 'browse')
 const gb = await callRoute('GET', '/fishbowl-ui/browse')
 check('GET /browse 返回配置', gb.code === 200 && JSON.parse(gb.body).config.enabled === false)

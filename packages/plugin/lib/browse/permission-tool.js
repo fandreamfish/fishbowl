@@ -69,6 +69,13 @@ export function createPermissionTool(binding, cfg) {
         if (spec.gate === 'comment' && fcfg.comment?.autoApprove === true) {
           return { ok: true, note: '他之前说过这类事不用每次问，直接说就行。' }
         }
+        // 他关掉了「必须先得到同意」：不用申请，直接做
+        const need = spec.gate === 'comment'
+          ? fcfg.comment?.requirePermit === true
+          : fcfg.browse?.requirePermit === true
+        if (!need) {
+          return { ok: true, note: spec.gate === 'comment' ? '这件事不用问，直接说就行。' : '这件事不用问，直接看就行。' }
+        }
         const target = String(args?.target ?? '').trim()
         const reason = String(args?.reason ?? '').trim()
         const ttlMs = spec.untilDayEnd ? msUntilDayEnd(Date.now(), cfg.timezone) : spec.ttlMs

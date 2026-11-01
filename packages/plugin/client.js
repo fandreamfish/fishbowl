@@ -970,27 +970,27 @@ function makeFactory() {
       const lastRoutineRef = useRef('')
       const lastPersonaRef = useRef('')
       useEffect(() => {
-        if (!routine || !data?.fish?.id) return undefined
+        if (!routine || !view?.id) return undefined
         const key = JSON.stringify(routine)
         if (lastRoutineRef.current === '') { lastRoutineRef.current = key; return undefined }
         if (key === lastRoutineRef.current) return undefined
         lastRoutineRef.current = key
-        void postJson(API + '/fish/' + data.fish.id + '/config', routine).then(() => setMsg('已自动保存')).catch((x) => setErr(String((x && x.message) || x)))
+        void postJson(API + '/fish/' + view.id + '/config', routine).then(() => setMsg('已自动保存')).catch((x) => setErr(String((x && x.message) || x)))
         return undefined
-      }, [routine, data?.fish?.id])
+      }, [routine, view?.id])
 
       const personaPendingRef = useRef(null)
       const personaSaveNow = (payload) => {
-        if (!payload || !data?.fish?.id) return
+        if (!payload || !view?.id) return
         const key = JSON.stringify(payload)
         if (key === lastPersonaRef.current) return
         lastPersonaRef.current = key
-        void postJson(API + '/fish/' + data.fish.id + '/config', payload)
+        void postJson(API + '/fish/' + view.id + '/config', payload)
           .then(() => setMsg('已自动保存'))
           .catch((x) => setErr(String((x && x.message) || x)))
       }
       useEffect(() => {
-        if (!data?.fish?.id) return undefined
+        if (!view?.id) return undefined
         const payload = data?.born ? { growth } : { growth, seed: { name: seedName, background: seedBg } }
         personaPendingRef.current = payload
         const key = JSON.stringify(payload)
@@ -998,9 +998,9 @@ function makeFactory() {
         if (key === lastPersonaRef.current) return undefined
         const timer = setTimeout(() => personaSaveNow(payload), 500)
         return () => clearTimeout(timer)
-      }, [growth, seedName, seedBg, data?.fish?.id, data?.born])
+      }, [growth, seedName, seedBg, view?.id, data?.born])
       // 切页时补存还没落盘的那一笔
-      useEffect(() => () => personaSaveNow(personaPendingRef.current), [data?.fish?.id])
+      useEffect(() => () => personaSaveNow(personaPendingRef.current), [view?.id])
 
       const setGrowthNow = (v) => {
         setGrowth(v)
@@ -1014,7 +1014,7 @@ function makeFactory() {
       // 作息：点一下就存（不依赖防抖，切页也不会丢）
       const saveRoutine = (next) => {
         setRoutine(next)
-        const id = data?.fish?.id || view?.id
+        const id = view?.id || view?.id
         if (!id) return
         const key = JSON.stringify(next)
         if (key === lastRoutineRef.current) return
@@ -1024,20 +1024,36 @@ function makeFactory() {
           .catch((x) => setErr(String((x && x.message) || x)))
       }
 
+      // 换鱼时清掉上一条鱼的 pending，避免把 A 的改动写到 B
+      useEffect(() => {
+        lastRoutineRef.current = ''
+        lastPersonaRef.current = ''
+        personaPendingRef.current = null
+      }, [view?.id])
+
       const load = useCallback(async (attempt = 0) => {
         try {
           const d = await getJson(API + '/fish')
           setData(d)
-          setSeedName(d.config.seed?.name ?? '')
-          setSeedBg(d.config.seed?.background ?? '')
-          setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {}, affect: d.config.affect ?? {}, diary: d.config.diary ?? {} })
+          // 当前这条鱼自己的配置：不能用列表里的全局默认值
+          let fc = d.config
+          if (view.level === 'fish' && view.id) {
+            try {
+              const fv = await getJson(API + '/fish/' + view.id)
+              if (fv?.fish?.config) fc = fv.fish.config
+            } catch { /* 读不到就退回全局 */ }
+          }
+          setSeedName(fc.seed?.name ?? '')
+          setSeedBg(fc.seed?.background ?? '')
+          setRoutine({ wake: fc.wake ?? {}, contact: fc.contact ?? {}, selfTime: fc.selfTime ?? {}, affect: fc.affect ?? {}, diary: fc.diary ?? {} })
+          if (typeof fc.growth === 'number') setGrowth(fc.growth)
           setErr('')
         } catch (x) {
           setErr(String((x && x.message) || x))
           // 宿主的路由可能刚启动还没挂好：前几次自动重试
           if (attempt < 4) setTimeout(() => { void load(attempt + 1) }, 1500)
         }
-      }, [])
+      }, [view?.level, view?.id])
       useEffect(() => { void load() }, [load])
       // 成长率是每条鱼自己的：看哪条鱼就显示哪条鱼的值，保存后刷新也是它
       useEffect(() => {

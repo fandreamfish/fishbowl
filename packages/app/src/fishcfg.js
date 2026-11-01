@@ -51,6 +51,12 @@ export function pickFishPatch(body) {
   if (routine.selfTime) out.selfTime = routine.selfTime
   const memory = pickMemoryConfig(body.memory)
   if (Object.keys(memory).length) out.memory = memory
+  if (body.seed && typeof body.seed === 'object') {
+    out.seed = {
+      name: String(body.seed.name ?? '').slice(0, 40),
+      background: String(body.seed.background ?? '').slice(0, 800),
+    }
+  }
   if (body.browse && typeof body.browse === 'object') out.browse = normalizeBrowseConfig(body.browse)
   const comment = pickCommentConfig(body.comment)
   if (comment && Object.keys(comment).length) out.comment = comment
@@ -86,13 +92,24 @@ export function pickFishPatch(body) {
 }
 
 /** 写这条鱼的覆盖（合并已有；只接受认识的键）。 */
+/** 一层深合并：section 内的子键不因为只改一个字段就整段丢掉。 */
+function mergeOneLevel(base, patch) {
+  const out = { ...(base || {}) }
+  for (const [k, v] of Object.entries(patch || {})) {
+    const cur = out[k]
+    if (v && typeof v === "object" && !Array.isArray(v) && cur && typeof cur === "object" && !Array.isArray(cur)) {
+      out[k] = { ...cur, ...v }
+    } else out[k] = v
+  }
+  return out
+}
 export function writeFishConfig(stateDir, creatureId, patch) {
   const file = fishConfigPath(stateDir, creatureId)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   let cur = {}
   try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) || {} } catch { /* 首次 */ }
   const clean = pickFishPatch(patch)
-  const next = { ...cur, ...clean }
+  const next = mergeOneLevel(cur, clean)
   fs.writeFileSync(file, JSON.stringify(next, null, 2))
   cached.delete(file)
   return next
@@ -109,6 +126,7 @@ export function configFor(cfg, creature) {
   if (!over) return cfg
   const out = { ...cfg }
   if (typeof over.growth === 'number') out.growth = over.growth
+  if (over.seed && typeof over.seed === 'object') out.seed = over.seed
   if (over.wake) out.wake = { ...cfg.wake, ...over.wake }
   if (over.contact) out.contact = { ...cfg.contact, ...over.contact }
   if (over.selfTime) out.selfTime = { ...cfg.selfTime, ...over.selfTime }
@@ -127,6 +145,7 @@ export function fishConfigView(cfg, creature) {
   const f = configFor(cfg, creature)
   return {
     growth: f.growth,
+    seed: f.seed ?? null,
     wake: f.wake,
     contact: f.contact,
     selfTime: f.selfTime,
@@ -193,6 +212,7 @@ export function fullFishConfig(cfg = {}) {
   const cp = (x) => (x && typeof x === "object" ? JSON.parse(JSON.stringify(x)) : x)
   return {
     growth: cfg.growth,
+    seed: cp(cfg.seed ?? null),
     wake: cp(cfg.wake),
     contact: cp(cfg.contact),
     selfTime: cp(cfg.selfTime),
@@ -213,7 +233,7 @@ export function ensureFullFishConfig(stateDir, creature, cfg) {
   const file = fishConfigPath(stateDir, cid)
   let cur = {}
   try { cur = JSON.parse(fs.readFileSync(file, "utf8")) || {} } catch { cur = {} }
-  const next = { ...fullFishConfig(cfg), ...cur }
+  const next = mergeOneLevel(fullFishConfig(cfg), cur)
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(file, JSON.stringify(next, null, 2), "utf8")

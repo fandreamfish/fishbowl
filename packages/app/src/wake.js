@@ -27,7 +27,8 @@ export * from './wake/plan.js'
 
 
 export function createWakeLoop(ctx, binding, cfg, host) {
-  if (!cfg.wake?.enabled) return () => {}
+  // 不再因为全局关着就整个不启动：每条鱼可以单独开（循环内的 fcfg 判断）
+  if (!cfg.wake?.enabled && !binding.listCreatures().some((c) => configFor(cfg, c).wake?.enabled !== false)) return () => {}
 
   const scheduler = new Scheduler(cfg.wake, cfg.timezone)
   const gates = new Map() // creatureId -> ContactGate（联系）

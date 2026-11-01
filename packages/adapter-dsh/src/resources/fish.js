@@ -4,7 +4,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { housingToOccupancy, injectMessage, moveInText, renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
 import { homeDir, recordPermit } from '../../../being/src/index.ts'
-import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
+import { configFor, fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
 import { history as browseHistory } from '../../../bilibili/src/index.js'
@@ -44,6 +44,13 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
       } catch (e) { console.error('[fishbowl] move-in wake failed:', String(e?.message ?? e)) }
     }
     send(res, { ok: true, fish: fishView(c) })
+    return true
+  }
+  // GET /fish/:id：设置页回填要读这条鱼自己的合并配置
+  if (parts.length === 2 && req.method === 'GET') {
+    const one = binding.get(parts[1])
+    if (!one) { send(res, { ok: false, error: '找不到这条鱼' }, 404); return true }
+    send(res, { ok: true, fish: fishView(one) })
     return true
   }
   if (parts.length < 3) return false
@@ -143,7 +150,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
   if (action === 'memory' && req.method === 'GET' && parts.length === 3) { send(res, { ok: true, ...memoryDetail(c, cfg) }); return true }
 
   if (action === 'browse' && req.method === 'GET' && parts.length === 3) {
-    send(res, { ok: true, ...browseStatus(c, cfg) })
+    send(res, { ok: true, ...browseStatus(c, configFor(cfg, c)) })
     return true
   }
   if (action === 'browse' && parts[3] === 'history' && req.method === 'GET') {
@@ -161,7 +168,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
   }
   if (action === 'browse' && parts[3] === 'run' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req) || '{}')
-    const r = await lookForCreature(c, cfg, {
+    const r = await lookForCreature(c, configFor(cfg, c), {
       what: body.what ?? 'home',
       keyword: body.keyword,
       bvid: body.bvid,
@@ -175,11 +182,11 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     return true
   }
   if (action === 'bili' && req.method === 'GET' && parts.length === 3) {
-    send(res, { ok: true, ...commentStatus(c, cfg) })
+    send(res, { ok: true, ...commentStatus(c, configFor(cfg, c)) })
     return true
   }
   if (action === 'bili' && parts[3] === 'scan' && req.method === 'POST') {
-    const r = await scanDueReplies(c, cfg, { force: true }).catch(() => ({ items: [], text: '' }))
+    const r = await scanDueReplies(c, configFor(cfg, c), { force: true }).catch(() => ({ items: [], text: '' }))
     send(res, { ok: true, items: r.items ?? [], text: r.text ?? '', status: commentStatus(c, cfg) })
     return true
   }

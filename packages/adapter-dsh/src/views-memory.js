@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { buildView, readWriterLock } from '../../memory/src/index.ts'
+import { configFor } from '../../app/src/index.js'
 
 const RELATION_RE = /我们|关系|信任|约定|答应|承诺|感情|亲密/
 
@@ -155,6 +156,7 @@ function legacyDetail(events, cfg) {
 /** 记忆详情视图：配置之外的一切。 */
 export function memoryDetail(creature, cfg) {
   const events = creature.store.readEvents()
+  const fcfg = configFor(cfg, creature)
   const hasNew = events.some((e) => e.t === 'turn' || e.t === 'merged')
-  return hasNew ? newDetail(events, cfg, creature.store.dir) : legacyDetail(events, cfg)
+  return hasNew ? newDetail(events, fcfg, creature.store.dir) : legacyDetail(events, fcfg)
 }
