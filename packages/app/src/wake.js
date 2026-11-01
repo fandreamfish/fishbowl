@@ -61,17 +61,23 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         scheduleNext(now)
         return
       }
-      const seen = new Set()
       const report = []
-      for (const agent of host.listAgents?.() ?? []) {
+      // 每条鱼都要有检查记录：会话没开着也要记，否则设置页「现在的状态」永远是空的
+      const live = (host.listAgents?.() ?? []).map((a) => ({
+        agent: a,
+        sid: a?.session?.id ?? a?.id,
+        ws: workspaceOf(a?.session),
+      }))
+      for (const creature of binding.listCreatures()) {
         if (stopped) return
-        const sid = agent?.session?.id ?? agent?.id
-        if (!sid || !binding.manages(sid)) continue
-        const creature = binding.resolve({ sessionId: sid, workspace: workspaceOf(agent?.session) })
-        if (!creature) continue
         const cid = creature.meta.creatureId
-        if (seen.has(cid)) continue
-        seen.add(cid)
+        const occ = creature.meta.occupancy
+        const found = occ
+          ? live.find((x) => (occ.kind === 'session' ? x.sid === occ.id : x.ws === occ.id))
+          : null
+        const agent = found?.agent ?? null
+        const sid = found?.sid ?? (occ?.kind === 'session' ? occ.id : null)
+        if (sid && !binding.manages(sid)) continue
         try {
 
         const fcfg = configFor(cfg, creature)
@@ -96,6 +102,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           longing: Number(longing.toFixed(2)),
           broken,
           gate: contactDecision,
+          live: !!agent,
           self: { enabled: selfEnabled, gate: selfDecision, usedToday: browseToday, perDay: fcfg.browse?.perDay ?? 0 },
           at: now,
         })

@@ -920,14 +920,14 @@ function makeFactory() {
         const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
         // 最近一次检查：她为什么没开口
         const ws = (data && data.wakeState) || null
-        const entry = ws && Array.isArray(ws.entries) ? ws.entries[0] : null
+        const entry = ws && Array.isArray(ws.entries) ? (ws.entries.find(x => x.creature === f.name) || ws.entries[0]) : null
         const gateLabel = { ok: '可以开口', no_reason: '没有由头', quiet_hours: '不在时段', daily_max: '今天次数用完', min_gap: '离上次太近', burst: '短时间太多', unanswered_stop: '连发没回', disabled: '自处没开', browse_quota: '今天上网次数用完', busy: '正在说话' }
         const lastCheck = entry ? new Date(entry.at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '—'
         const selfLine = entry?.self
           ? ' · 自处：' + (entry.self.enabled ? (gateLabel[entry.self.gate?.reason] || entry.self.gate?.reason || '—') + `（今天上网 ${entry.self.usedToday}/${entry.self.perDay}）` : '没开')
           : ''
         const statusLine = entry
-          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—') + selfLine
+          ? '最近检查 ' + lastCheck + '：想念 ' + entry.longing + '（要 >0.4） · 未完成承诺 ' + entry.broken + ' · ' + (gateLabel[entry.gate?.reason] || entry.gate?.reason || '—') + (entry.live === false ? ' · 会话没开（她叫不醒，联系会进待送）' : '') + selfLine
           : '还没有检查记录（节律没开或刚启动）'
         const statusCard = e('div', { style: box, children: [
           e('div', { style: { ...rowS, marginBottom: 4 }, children: [
