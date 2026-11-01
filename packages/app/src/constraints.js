@@ -117,6 +117,8 @@ export function createConstraints(ctx, binding, cfg, host) {
             const cmd = String(args.command ?? '')
             const writey = /(set-content|add-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|mkdir|del\s|rm\s|>\s)/i.test(cmd)
             if (writey) {
+              // 相对路径写不出来（cwd 在房间里）：要么写 home 的绝对路径，要么别写
+              if (!cmd.toLowerCase().includes(home)) return 'fishbowl: 写文件请用你自己文件夹里的绝对路径（' + home + '）；别的地方可以看，但不要改。'
               const paths = cmd.match(/[a-z]:[\\/][^\s'\"|;]+/gi) || []
               if (paths.some((p) => !inside(p))) return 'fishbowl: 只能改你自己的文件夹（' + home + '）；别的地方可以看，但不要改。'
             }

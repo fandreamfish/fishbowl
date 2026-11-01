@@ -385,7 +385,7 @@ export function createDshHost(ctx, cfg) {
       const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
       try { svc('approval')?.setPolicy?.(handle.agent, 'never') } catch (e) { console.error('[fishbowl] approval setPolicy failed:', String(e?.message ?? e)) }
-      // 她的数据目录在房间之外（creatures/<id>）：workspace-write 会拒绝写入，改成完全访问
+      // 她的家（creatures/<id>/home）在房间之外：workspace-write 会拒绝写入，改成完全访问（写入范围由工具层守卫限制）
       try {
         const pp = svc('permissionPresets')
         const full = (pp?.names ?? []).find((n) => n === 'danger-full-access') ?? (pp?.names ?? []).find((n) => /danger|full/.test(n))

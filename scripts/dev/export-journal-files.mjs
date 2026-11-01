@@ -14,7 +14,7 @@ for (const name of fs.readdirSync(root)) {
     try { e = JSON.parse(line) } catch { continue }
     if (e.t === 'diary') {
       const d = new Date(e.ts)
-      const out = path.join(dir, 'diary')
+      const out = path.join(dir, 'home', 'diary')
       fs.mkdirSync(out, { recursive: true })
       const file = path.join(out, `${e.date}.md`)
       fs.writeFileSync(file, `# ${e.date} ${pad(d.getHours())}:${pad(d.getMinutes())}\n\n${String(e.text).trim()}\n`, 'utf8')
@@ -22,7 +22,7 @@ for (const name of fs.readdirSync(root)) {
       console.log('diary', file)
     } else if (e.t === 'note') {
       const d = new Date(e.ts)
-      const out = path.join(dir, 'notes')
+      const out = path.join(dir, 'home', 'notes')
       fs.mkdirSync(out, { recursive: true })
       const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
       let file = path.join(out, `${stamp}.md`)

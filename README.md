@@ -36,7 +36,7 @@ packages/
   adapter-dsh/     DSH 适配器：事件、注入、唤醒、工具、设置页 HTTP
   plugin/          DSH 插件入口与前端（index.js / client.js / 工具薄封装）
   bridge-qq/       QQ 桥（OneBot v11，独立进程）
-creatures/<id>/    一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）
+creatures/<id>/    一条鱼一个目录：账本、情绪投影、她自己的配置（config.json）、她的家（home/）
 src/               demo / 测试 / 兼容层（旧路径 re-export，下一版删除）
 scripts/           CLI、dev 工具（分层检查 / 迁移 / 调试）、smoke
 prototype/         Python 原型（已冻结）
