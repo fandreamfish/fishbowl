@@ -629,5 +629,21 @@ console.log('== M38：设置页分支完整（回归） ==')
   }
   check('状态分支以住所分支收尾（防止掉进 home 覆盖 body）', /\}, 'status'\)\s*\} else if \(page === 'home'\)/.test(src))
 }
+console.log('== M39：能力是唯一开关（不再有重复配置） ==')
+{
+  const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'caps2-'))
+  const base = normalizeConfig({ stateDir: sd })
+  const b = createBinding(base)
+  const f1 = b.birth('关掉能力')
+  const f2 = b.birth('留着')
+  writeFishConfig(sd, f1.meta.creatureId, { capabilities: { browse: false, speak: false, memorySearch: false } })
+  const c1 = configFor(base, f1)
+  const c2 = configFor(base, f2)
+  check('关上网 → 行为字段也关', c1.browse.enabled === false)
+  check('关说话 → 评论开关也关', c1.comment.enabled === false)
+  check('关翻记忆 → searchTool 也关', c1.memory.searchTool === false)
+  check('另一条鱼保持默认', c2.browse.enabled !== false && c2.memory.searchTool !== false)
+  fs.rmSync(sd, { recursive: true, force: true })
+}
 console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURES'}`)
 process.exit(failures === 0 ? 0 : 1)

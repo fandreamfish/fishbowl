@@ -215,10 +215,6 @@ function makeFactory() {
             e('input', { type: 'checkbox', checked: !!d.herSummaryOnPlainTurns, onChange: (ev) => set('herSummaryOnPlainTurns', ev.target.checked) }, 'c'),
             e('span', { children: '平淡轮也写「她的总结」' }, 't'),
           ] }),
-          e('label', { key: 'search', style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 8, cursor: 'pointer' }, children: [
-            e('input', { type: 'checkbox', checked: d.searchTool !== false, onChange: (ev) => set('searchTool', ev.target.checked) }, 'c'),
-            e('span', { children: '允许她主动翻记忆（memory_search）' }, 't'),
-          ] }),
           e('div', { key: 'writer', style: { marginBottom: 8 }, children: [
             e('div', { style: { fontSize: 13, marginBottom: 3 }, children: '同时写入' }, 'l'),
             e('select', {
@@ -581,9 +577,8 @@ function makeFactory() {
         e('div', { style: box, key: 'onoff', children: [
           e('div', { style: rowS, children: [
             e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '能不能上网' }, 'h'),
-            e(Toggle, { on: cfg.enabled, onChange: () => set('enabled', !cfg.enabled), k: 'sw' }),
           ] }, 'head'),
-          e('div', { style: { ...lab, marginBottom: 8 }, children: '这是硬开关：关掉后一次请求都不发，工具会说「现在打不开」。自处时她可以自己决定看不看。' }, 'hint'),
+          e('div', { style: { ...lab, marginBottom: 8 }, children: '上网的开关在「状态 → 能力」里（关掉后工具和这一页都会消失）。' }, 'hint'),
           e('div', { style: rowS, children: [
             e('span', { style: lab, children: '上网时段' }, 'l'),
             e('span', { style: { display: 'flex', gap: 6, alignItems: 'center' }, children: [
@@ -698,9 +693,8 @@ function makeFactory() {
       const speakCard = e('div', { style: box, key: 'bili-speak', children: [
         e('div', { style: rowS, children: [
           e('div', { style: { fontWeight: 600, fontSize: 13.5 }, children: '在 B 站说话' }, 'h'),
-          e(Toggle, { on: cm.enabled, onChange: () => setCm('enabled', !cm.enabled), k: 'sw' }),
         ] }, 'head'),
-        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '这是唯一会动账号的功能：评论会公开留痕，别人看得见。默认关。她只评今天自己看过的视频；回复只回别人在她评论下面的楼。' }, 'hint'),
+        e('div', { style: { ...lab, fontSize: 11.5, marginBottom: 8 }, children: '说话的总开关在「状态 → 能力」里。这是唯一会动账号的功能：评论公开留痕。她只评今天自己看过的视频；回复只回别人在她评论下面的楼。' }, 'hint'),
         e('div', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginBottom: 8 }, children: [
           e('div', { children: [e('div', { style: lab, children: '每天最多发几条评论' }, 'l'), numCm('perDay', 0, 5, cm.perDay ?? 1)] }, 'p'),
           e('div', { children: [e('div', { style: lab, children: '每天最多回几条' }, 'l'), numCm('replyPerDay', 0, 10, cm.replyPerDay ?? 2)] }, 'r'),
