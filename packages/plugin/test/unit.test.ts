@@ -394,6 +394,7 @@ createCollector(null, e2eBinding, e2eCfg, {
   services: () => ({}),
 } as any)
 const e2eSession = { id: 'se1', header: { cwd: 'D:\\ws-e2e' } }
+e2eHandler(e2eSession, { type: 'turn/start', data: {} })
 e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u1', content: [{ type: 'text', text: '今天下雨了' }] } })
 e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '带伞了吗' }] } } })
 e2eHandler(e2eSession, { type: 'turn/end', data: {} })
@@ -405,6 +406,7 @@ check('注入用的是新渲染', e2eInjected.some((t) => t.startsWith('[fishbow
 check('情绪跟着 turn 重放（valence 有变化）', Math.abs(e2eFish.fold().affect.valence) > 0)
 
 // P0 回归：唤醒回合也必须带出处；否则总结会替她编一个"对方"。
+e2eHandler(e2eSession, { type: 'turn/start', data: {} })
 const wakeEvent = { type: 'user/message', data: injectMessage('（醒一醒。现在是 20:07。你很久没跟他说过话了。）', { mode: 'contact', reason: '很久没好好说话了' }) }
 e2eHandler(e2eSession, wakeEvent)
 e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '嗯。' }] } } })
@@ -418,10 +420,13 @@ check('recentDialog 不把 situation 当对话', !signalRecentDialog(e2eFish, 10
 check('signals.recentDialog 也不把 situation 当对话', !signalRecentDialog(e2eFish, 10).some((d) => d.text.includes('醒一醒')))
 
 // 「你没事可以刷刷 B 站」是许可：落 grant 事件，并进入下一轮注入。
+e2eHandler(e2eSession, { type: 'turn/start', data: {} })
 e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u-grant', content: [{ type: 'text', text: '你没事可以刷刷 B 站' }] } })
 e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '行。' }] } } })
 e2eHandler(e2eSession, { type: 'turn/end', data: {} })
 await new Promise((r) => setTimeout(r, 250))
+e2eHandler(e2eSession, { type: 'turn/start', data: {} })
+await new Promise((r) => setTimeout(r, 150))
 check('许可落成 grant 事件', e2eFish.activeGrants('browse').length === 1)
 check('许可进入注入（事实，不是命令）', e2eInjected.some((t) => t.includes('他允许你的事')))
 

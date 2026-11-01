@@ -195,37 +195,35 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         void after.maybeRequest(session.id, creature, transcript)
       }
 
-      if (!cfg.control && cfg.injectBias) {
-        // 同一只鱼的其它会话：状态变了也同步过去（她要"在哪都一样"）
-        try {
-          const others = host.listAgents?.() ?? []
-          for (const a of others) {
-            const osid = a?.session?.id ?? a?.id
-            if (!osid || osid === session.id) continue
-            const oc = binding.resolve({ sessionId: osid, workspace: workspaceOf(a?.session) })
-            if (!oc || oc.meta.creatureId !== creature.meta.creatureId) continue
-            if (lastKey.get(osid) === snapFingerprint) continue
-            lastKey.set(osid, snapFingerprint)
-            await host.inject(a, injectMessage(snapText))
-          }
-        } catch { /* 同步失败不影响主流程 */ await Promise.resolve() }
-        // 数值每轮都因衰减漂移 0.001，直接比文本永远不相等；
-        // 量化到 0.1 的指纹只在肉眼可见的变化时触发注入。
-        if (snapFingerprint !== lastKey.get(session.id)) {
-          lastKey.set(session.id, snapFingerprint)
-          const agent = host.agentFor(session.id)
-          if (agent) {
-            try {
-              await host.inject(agent, injectMessage(snapText))
-            } catch (err) {
-              trace({ ts: Date.now(), sessionId: session.id, warn: `inject failed: ${String(err && err.message || err)}` })
-            }
-          }
-        }
-      }
       buffers.delete(session.id)
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session.id, warn: `collect failed: ${String(err && err.message || err)}` })
+    }
+  }
+
+  /**
+   * 回合开始时把「现在的状态」作为 developer 消息塞进去。
+   * 放在回合内消费，不再留一条排队消息到下一轮（也就不会让 DSH 以为有任务在跑）。
+   */
+  async function injectState(session) {
+    try {
+      if (cfg.control || !cfg.injectBias) return
+      const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
+      if (!creature) return
+      const agent = host.agentFor(session.id)
+      if (!agent) return
+      const mem = memoryFor(creature)
+      const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
+      const bias = toBias(affect, creature.temperament)
+      const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
+      const snap = mem.render({ affect, bias, name: creature.meta.name, commitments, now: Date.now() })
+      injectedBy.set(session.id, snap.picked)
+      const grant = grantLine(creature)
+      const recent = recentBlock(recentDialog(creature, 6))
+      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + (recent ? '\n' + recent : '')
+      await host.inject(agent, injectMessage(text))
+    } catch (err) {
+      trace({ ts: Date.now(), sessionId: session?.id, warn: `state inject failed: ${String(err?.message || err)}` })
     }
   }
 
@@ -253,6 +251,8 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         const err = event?.data?.message?.isError || event?.data?.isError || event?.data?.error
         const text = messageText(event?.data?.message ?? event?.data)
         pushItem(session.id, 'tool', [name, err ? '（出错）' : '', text ? text.slice(0, 200) : ''].filter(Boolean).join(' '))
+      } else if (t === 'turn/start') {
+        void injectState(session)
       } else if (t === 'turn/end') {
         finishTurn(session)
       }
@@ -295,26 +295,8 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         }
       })
       .catch(() => { /* 绝不外抛 */ })
-
-    if (cfg.control || !cfg.injectBias) return
-    const mem = memoryFor(creature)
-    const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
-    const bias = toBias(affect, creature.temperament)
-    const commitments = creature.openCommitments(configFor(cfg, creature).growth).slice(-2).map((x) => (x.broken ? '⚠ ' : '') + x.text)
-    const snap = mem.render({ affect, bias, name: creature.meta.name, commitments })
-    injectedBy.set(sid, snap.picked)
-    // 基线里带上"你们之前说过的话"，新会话打开也能接上
-    const recent = recentBlock(recentDialog(creature, 6))
-    const grant = grantLine(creature)
-    const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + (recent ? '\n' + recent : '')
-    Promise.resolve()
-      .then(() => {
-        if (isEmptyShell(creature, snap.view)) return
-        trace({ ts: Date.now(), sessionId: sid, event: 'inject', kind: 'baseline', name: creature.meta.name })
-        return host.inject(agent, injectMessage(text))
-      })
-      .catch(() => { /* agent 可能在注入前被销毁 */ })
   }
+
 
   const offCreated = host.onAgentCreated((payload) => {
     try {

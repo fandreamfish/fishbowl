@@ -57,8 +57,9 @@ export function summaryText(bias, affect, memory) {
  *
  * @param {string} text
  * @param {{ mode?: 'contact'|'self', reason?: string|null }|null} [wake]
+ * @param {{ role?: 'user'|'developer' }} [opts]
  */
-export function injectMessage(text, wake = null) {
+export function injectMessage(text, wake = null, opts = {}) {
   return {
     role: 'user',
     id: randomUUID(),
