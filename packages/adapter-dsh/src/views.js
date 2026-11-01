@@ -63,10 +63,8 @@ export function createViews({ cfg, binding, host, stateDir }) {
       seenWs.add(norm(w))
       workspaces.push(w)
     }
+    // 会话只列 DSH 工作区里挂着的（和侧边栏一致）；历史目录不再冒充「现有会话」
     const sessions = [...e.sessions]
-    for (const s of (binding.scopes?.sessions ?? [])) {
-      if (s && s.id && !sessions.some((x) => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '', title: '' })
-    }
     return { workspaces, sessions, workspaceNames: e.workspaceNames ?? {} }
   }
 

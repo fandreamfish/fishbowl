@@ -118,6 +118,8 @@ export function createDshHost(ctx, cfg) {
     try { return typeof ctx.get === 'function' ? ctx.get(name) : undefined } catch { return undefined }
   }
 
+  let lastSessionError = null
+
   function sessionsService() { return get('sessions') }
   function titlesService() { return get('sessionTitle') }
   function workspaceRegistry() { return get('workspaceRegistry') }
@@ -340,38 +342,48 @@ export function createDshHost(ctx, cfg) {
       let ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir)) ?? null
       try { if (ws?.id) ws = registry?.get?.(ws.id) ?? ws } catch { /* 忽略 */ }
       let attached = false
+      let attachError = null
       if (ws && typeof ws.attachSession === 'function') {
-        try { await ws.attachSession(String(id)); attached = true } catch { /* 下面把失败带回去 */ }
+        try { await ws.attachSession(String(id)); attached = true }
+        catch (e) { attachError = String(e?.message ?? e); lastSessionError = attachError; console.error('[fishbowl] attachSession failed:', attachError) }
       }
-      return { id: String(id), workspace: dir, attached }
+      return { id: String(id), workspace: dir, attached, attachError }
     },
 
     listScopes() {
       const scopes = enumerateScopes()
-      // 名字：工作区用注册表的 title，会话用 sessionTitle（仅活着的会话能取到）
-      const byNorm = new Map()
-      try {
-        for (const w of (workspaceRegistry()?.list?.() ?? [])) {
-          if (w?.path) byNorm.set(normPath(w.path), String(w.title ?? ''))
-        }
-      } catch { /* 没有注册表就只用路径 */ }
-      // 键必须和返回的 workspaces 字符串完全一致（normPath 会小写、换分隔符）
-      const workspaceNames = {}
-      for (const p of scopes.workspaces) workspaceNames[p] = byNorm.get(normPath(p)) ?? ''
       const titles = get('sessionTitle')
       const sessionsSvc = sessionsService()
-      const sessions = scopes.sessions.map((s) => {
-        let title = ''
+      const titleOf = (sid) => {
         try {
-          const live = sessionsSvc?.get?.(s.id)
-          const t = live && titles?.get ? titles.get(live) : null
-          if (t) title = String(t)
-        } catch { /* 不是活会话就没有名字 */ }
-        return { ...s, title }
-      })
-      return { ...scopes, sessions, workspaceNames }
+          const live = sessionsSvc?.get?.(sid)
+          if (!live) return ''
+          const t = titles?.get ? titles.get(live) : null
+          if (!t) return ''
+          return typeof t === 'string' ? t : String(t?.title ?? '')
+        } catch { return '' }
+      }
+      // 会话列表以 DSH 工作区的 sessionIds 为准，和侧边栏保持一致
+      const regs = workspaceRegistry()?.list?.() ?? []
+      const sessions = []
+      const seenSess = new Set()
+      const workspaceNames = {}
+      for (const w of regs) {
+        if (!w?.path) continue
+        workspaceNames[w.path] = String(w.title ?? '')
+        for (const sid of (w.sessionIds ?? [])) {
+          const id = String(sid)
+          if (seenSess.has(id)) continue
+          seenSess.add(id)
+          sessions.push({ id, workspace: w.path, title: titleOf(id) })
+        }
+      }
+      // 没有注册表时退回枚举，至少能列出来
+      if (!regs.length) {
+        for (const s of scopes.sessions) sessions.push({ ...s, title: titleOf(s.id) })
+      }
+      return { workspaces: scopes.workspaces, sessions, workspaceNames }
     },
-
     /**
      * 会话当前的审批策略：'ask' | 'never'；拿不到返回 null。
      * 策略是 never 时，插件发起的 ask 会被宿主**直接判成 rejected**，
@@ -392,6 +404,7 @@ export function createDshHost(ctx, cfg) {
       try { live = (sessions?.list?.() ?? []).map((s) => s?.id).filter(Boolean) } catch { live = [] }
       return {
         hasSessions: !!sessions,
+      lastSessionError,
         hasSessionTitle: !!titlesService(),
         hasWorkspaceRegistry: !!workspaceRegistry(),
         liveSessions: live,
