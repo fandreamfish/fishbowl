@@ -38,10 +38,11 @@ export async function handleCleanup({ binding, host, views, send, readBody }, re
     const removed = []
     const failed = []
     for (const c of p.candidates) {
-      const detached = await host.detachSession?.(p.ws, c.id)
-      const files = host.deleteSessionFiles?.(c.id) ?? 0
-      if (files > 0 || detached) removed.push({ id: c.id, dirs: files })
-      else failed.push({ id: c.id, error: '没删到文件也没摘掉登记' })
+      // 默认归档（侧边栏隐藏、文件保留）；只有明确 purge 才删文件
+      const archived = await host.archiveSession?.(p.ws, c.id)
+      const files = body.purge === true ? (host.deleteSessionFiles?.(c.id) ?? 0) : 0
+      if (archived || files > 0) removed.push({ id: c.id, archived: !!archived, dirs: files })
+      else failed.push({ id: c.id, error: '归档失败（文件未动）' })
     }
     rooms.push({ path: p.path, kept: p.kept, removed, failed })
   }

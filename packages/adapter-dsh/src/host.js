@@ -381,6 +381,12 @@ export function createDshHost(ctx, cfg) {
       try { await ws.detachSession(String(sid)); return true } catch { return false }
     },
 
+    /** 归档一个会话（侧边栏隐藏，文件保留）。 */
+    async archiveSession(ws, sid) {
+      try { await ws.archiveSession(String(sid), { stopActivity: true }); return true }
+      catch (e) { lastSessionError = String(e?.message ?? e); console.error('[fishbowl] archiveSession failed:', lastSessionError); return false }
+    },
+
     /** 会话在磁盘上的目录（通常在某个 --workspace-- 目录下）。 */
     sessionDirsOf(sid) {
       const out = []
@@ -430,12 +436,13 @@ export function createDshHost(ctx, cfg) {
         workspaceNames[p] = byNorm.get(normPath(p)) ?? ''
         nativeOf.set(normPath(p), p)
       }
+      const archived = new Set((workspaceRegistry()?.archivedSessionIds ?? []).map(String))
       const sessions = []
       const seenSess = new Set()
       for (const w of regs) {
         for (const sid of (w.sessionIds ?? [])) {
           const id = String(sid)
-          if (seenSess.has(id)) continue
+          if (seenSess.has(id) || archived.has(id)) continue
           seenSess.add(id)
           sessions.push({ id, workspace: nativeOf.get(normPath(w.path)) ?? w.path, title: titleOf(id) })
         }

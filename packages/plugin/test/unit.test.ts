@@ -659,19 +659,18 @@ process.exit(failures === 0 ? 0 : 1)
     async createWorkspace(p) { this.created.push(['ws', p]); return { id: p, path: p, registryId: 'w1', title: 't' } },
     async createSession(o) { this.created.push(['ss', o]); return { id: 's1', workspace: o.path || '/x' } },
   }
-  check('housing：不安排', normalizeHousing(undefined).kind === 'none')
-  check('housing：现有工作区', normalizeHousing({ kind: 'existing', type: 'workspace', id: 'D:/a' }).type === 'workspace')
-  check('housing：现有会话缺 id 会报错', (() => { try { normalizeHousing({ kind: 'existing', type: 'session' }) ; return false } catch { return true } })())
-  check('housing：新工作区缺目录会报错', (() => { try { normalizeHousing({ kind: 'new-workspace', path: '  ' }); return false } catch { return true } })())
+  const throws = (fn) => { try { fn(); return false } catch { return true } }
+  check('housing：必须给一个屋子', throws(() => normalizeHousing(undefined)))
+  check('housing：旧的"不安排"不再允许', throws(() => normalizeHousing({ kind: 'none' })))
+  check('housing：旧的"住进现有会话"不再允许', throws(() => normalizeHousing({ kind: 'existing', type: 'session', id: 's9' })))
+  check('housing：旧的"整屋"不再允许', throws(() => normalizeHousing({ kind: 'new-workspace', path: 'D:/home' })))
+  check('housing：现有屋子缺路径会报错', throws(() => normalizeHousing({ kind: 'new-session', workspace: '  ' })))
+  check('housing：新屋子缺目录会报错', throws(() => normalizeHousing({ kind: 'new-both', path: '  ' })))
 
-  const occ1 = await housingToOccupancy(fakeHost, { kind: 'new-workspace', path: 'D:/home' })
-  check('housing：新工作区 → workspace 住处（id 用路径）', occ1.kind === 'workspace' && occ1.id === 'D:/home' && fakeHost.created[0][0] === 'ws')
-  fakeHost.created = []
   const occ2 = await housingToOccupancy(fakeHost, { kind: 'new-session', workspace: 'D:/home' })
-  check('housing：新会话 → 在选中的工作区里建会话', occ2.kind === 'session' && occ2.id === 's1' && fakeHost.created[0][1].path === 'D:/home')
+  check('housing：现有屋子 → 新建一间房', occ2.kind === 'session' && occ2.id === 's1' && fakeHost.created[0][1].path === 'D:/home')
   fakeHost.created = []
   const occ3 = await housingToOccupancy(fakeHost, { kind: 'new-both', path: 'D:/home' })
-  check('housing：建两者 → 先工作区再会话', occ3.kind === 'session' && fakeHost.created.length === 2 && fakeHost.created[0][0] === 'ws' && fakeHost.created[1][0] === 'ss')
-  check('housing：existing 直接映射', (await housingToOccupancy(fakeHost, { kind: 'existing', type: 'session', id: 's9', workspace: 'D:/w' })).id === 's9')
-  check('housing：none 不产生住处', (await housingToOccupancy(fakeHost, { kind: 'none' })) === null)
+  check('housing：新屋子 → 先建屋子再建房间，房间归鱼', occ3.kind === 'session' && fakeHost.created.length === 2 && fakeHost.created[0][0] === 'ws' && fakeHost.created[1][0] === 'ss')
+  check('housing：不再产生工作区级住处', occ2.kind === 'session' && occ3.kind === 'session')
 }

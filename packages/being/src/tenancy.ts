@@ -1,14 +1,24 @@
 /**
- * 住处模型（M7）：一只鱼住在一个工作区，或工作区里的一个会话。
+ * 住处模型：一条鱼住一间房（一个会话），终身唯一。
  *
  * 规则：
- *   - 一个工作区只能住一只鱼；住进去后，它的所有会话都被占用（其他鱼进不来）
- *   - 一个会话只能住一只鱼；住进去不影响同工作区的其他会话
- *   - 同一只鱼只有一个住处；换住处 = 先释放再占用
- *   - 工作区用绝对路径标识（DSH 会话头的 cwd），会话用 session id
+ *   - 鱼只能通过「新建房间」获得住处，不能继承别人的会话
+ *   - 一间房只能住一条鱼
+ *   - 屋子（工作区）本身不归任何鱼；一个屋子可以住多条鱼（各有各的房间）
+ *   - 搬家 = 归档旧房间 + 在新屋子建一间新房（由调用方执行）
  *
- * 解析优先级：会话级 > 工作区级。都没有 → 没有鱼（不注入、不记忆）。
+ * 旧的「整屋级住处」只保留读取兼容（数据里万一还有），不再允许创建。
  */
+
+export type Occupancy =
+  | { kind: 'session'; id: string; workspace?: string }
+  /** @deprecated 只读兼容：旧数据里的整屋住处 */
+  | { kind: 'workspace'; id: string }
+
+export interface OccupantRow {
+  creatureId: string
+  occupancy: Occupancy
+}
 
 /** 住处里的路径比较：大小写/分隔符不敏感（DSH 不同入口给的写法不一致）。 */
 export function samePath(a?: string | null, b?: string | null): boolean {
@@ -16,29 +26,21 @@ export function samePath(a?: string | null, b?: string | null): boolean {
   return !!a && !!b && n(a) === n(b)
 }
 
-export type Occupancy =
-  | { kind: 'workspace'; id: string }
-  | { kind: 'session'; id: string; workspace?: string }
-
-export interface OccupantRow {
-  creatureId: string
-  occupancy: Occupancy
-}
-
 /**
- * 新住处是否与已有住处冲突。
+ * 新房间是否与已有住处冲突。
  * @returns 冲突的 creatureId，或 null
  */
 export function findConflict(target: Occupancy, taken: OccupantRow[]): string | null {
   for (const t of taken) {
     const o = t.occupancy
-    if (target.kind === 'workspace') {
-      if (o.kind === 'workspace' && samePath(o.id, target.id)) return t.creatureId
-      // 想住整个工作区：该工作区下已住着一只鱼（会话级）→ 也冲突
-      if (o.kind === 'session' && samePath(o.workspace, target.id)) return t.creatureId
-    } else {
+    if (target.kind === 'session') {
       if (o.kind === 'session' && o.id === target.id) return t.creatureId
+      // 兼容：旧的整屋住户会拦住这个屋子里的所有房间
       if (o.kind === 'workspace' && samePath(o.id, target.workspace)) return t.creatureId
+    } else {
+      // 只读兼容路径：不再有新代码创建整屋住处
+      if (o.kind === 'workspace' && samePath(o.id, target.id)) return t.creatureId
+      if (o.kind === 'session' && samePath(o.workspace, target.id)) return t.creatureId
     }
   }
   return null

@@ -17,13 +17,10 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     const body = JSON.parse(await readBody(req) || '{}')
     const name = String(body.name ?? '').trim()
     if (!name) { send(res, { ok: false, error: '先给它起个名字' }, 400); return true }
-    let occ = body.occupancy && body.occupancy.kind
-      ? { kind: body.occupancy.kind, id: String(body.occupancy.id ?? ''), workspace: body.occupancy.workspace ? String(body.occupancy.workspace) : undefined }
-      : null
-    if (body.housing) {
-      try { occ = await housingToOccupancy(host, body.housing, { title: name + '的房间' }) }
-      catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, 400); return true }
-    }
+    if (!body.housing) { send(res, { ok: false, error: '先为它选一个屋子（会为它新建一间房）' }, 400); return true }
+    let occ = null
+    try { occ = await housingToOccupancy(host, body.housing, { title: name + '的房间' }) }
+    catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, 400); return true }
     if (occ) {
       const conflict = binding.conflictFor('', occ)
       if (conflict) { send(res, { ok: false, error: `这个住处已经住着「${conflict.name}」了` }, 409); return true }
@@ -64,25 +61,42 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
       return true
     }
   }
-  if (action === 'occupy' && req.method === 'POST') {
+  if (action === 'move' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req) || '{}')
-    if (body.kind !== 'workspace' && body.kind !== 'session') { send(res, { ok: false, error: '住处类型不对' }, 400); return true }
-    const occ = body.kind === 'workspace'
-      ? { kind: 'workspace', id: String(body.id ?? '') }
-      : { kind: 'session', id: String(body.id ?? ''), workspace: body.workspace ? String(body.workspace) : undefined }
-    if (!occ.id) { send(res, { ok: false, error: '住处的 id 不能为空' }, 400); return true }
-    try {
-      const c0 = binding.get(parts[1])
-      const prev = c0.meta.occupancy
-      binding.assign(parts[1], occ)
-      if (prev && (prev.kind !== occ.kind || prev.id !== occ.id)) restoreOriginalAsync(host, stateDir, prev)
-      renameScopeAsync(host, stateDir, occ, c0.meta.name)
-      send(res, { ok: true, fish: fishView(binding.get(parts[1])) })
-      return true
-    } catch (e) {
-      send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400)
-      return true
+    const target = String(body.workspace ?? '').trim()
+    if (!target) { send(res, { ok: false, error: '先选一个新屋子' }, 400); return true }
+    if (!host.workspaceByPath?.(target)) { send(res, { ok: false, error: '这个屋子不存在：' + target }, 400); return true }
+
+    // 旧房间归档（文件保留，侧边栏隐藏）
+    const prev = c.meta.occupancy
+    let archived = false
+    if (prev?.kind === 'session' && prev.workspace) {
+      const oldWs = host.workspaceByPath?.(prev.workspace)
+      if (oldWs) archived = await host.archiveSession?.(oldWs, prev.id) ?? false
     }
+
+    // 新房间
+    let s = null
+    try { s = await host.createSession({ path: target, title: c.meta.name + '的房间' }) }
+    catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, 400); return true }
+    const occ = { kind: 'session', id: s.id, workspace: s.workspace || target }
+    try { binding.assign(parts[1], occ) }
+    catch (e) { send(res, { ok: false, error: String(e?.message ?? e) }, e?.code === 'OCCUPIED' ? 409 : 400); return true }
+    renameScopeAsync(host, stateDir, occ, c.meta.name)
+
+    // 让她在新房间里开口（等注入循环认领）
+    try {
+      await new Promise((r) => setTimeout(r, 1600))
+      let agent = null
+      for (let i = 0; i < 4 && !agent; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 500))
+        agent = host.agentFor?.(occ.id) ?? null
+      }
+      if (agent) await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ }), { mode: 'self', reason: null }))
+    } catch (e) { console.error('[fishbowl] move wake failed:', String(e?.message ?? e)) }
+
+    send(res, { ok: true, archived, fish: fishView(binding.get(parts[1])) })
+    return true
   }
   if (action === 'name' && req.method === 'POST') {
     const body = JSON.parse(await readBody(req) || '{}')
