@@ -667,8 +667,8 @@ process.exit(failures === 0 ? 0 : 1)
   const occ1 = await housingToOccupancy(fakeHost, { kind: 'new-workspace', path: 'D:/home' })
   check('housing：新工作区 → workspace 住处', occ1.kind === 'workspace' && occ1.id === 'w1' && fakeHost.created[0][0] === 'ws')
   fakeHost.created = []
-  const occ2 = await housingToOccupancy(fakeHost, { kind: 'new-session', path: 'D:/home' })
-  check('housing：新会话 → session 住处', occ2.kind === 'session' && occ2.id === 's1' && fakeHost.created[0][1].path === 'D:/home')
+  const occ2 = await housingToOccupancy(fakeHost, { kind: 'new-session', workspace: 'D:/home' })
+  check('housing：新会话 → 在选中的工作区里建会话', occ2.kind === 'session' && occ2.id === 's1' && fakeHost.created[0][1].path === 'D:/home')
   fakeHost.created = []
   const occ3 = await housingToOccupancy(fakeHost, { kind: 'new-both', path: 'D:/home' })
   check('housing：建两者 → 先工作区再会话', occ3.kind === 'session' && fakeHost.created.length === 2 && fakeHost.created[0][0] === 'ws' && fakeHost.created[1][0] === 'ss')

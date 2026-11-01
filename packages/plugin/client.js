@@ -766,7 +766,50 @@ function makeFactory() {
       ] }, 'browse-panel')
     }
 
-    function Section() {
+    /** 目录浏览器：只列目录、可新建文件夹。给「新建工作区」用。 */
+  function FolderPicker({ start, onPick, onClose }) {
+    const [cur, setCur] = useState(null)
+    const [name, setName] = useState('')
+    const [err, setErr] = useState('')
+    const loadDir = useCallback(async (p) => {
+      try {
+        const r = await getJson(API + '/fs/dirs' + (p ? '?path=' + encodeURIComponent(p) : ''))
+        setCur(r)
+        setErr('')
+      } catch (x) { setErr(String((x && x.message) || x)) }
+    }, [])
+    useEffect(() => { void loadDir(start || '') }, [loadDir, start])
+    const mk = async () => {
+      if (!cur) return
+      try {
+        const r = await postJson(API + '/fs/mkdir', { parent: cur.path, name })
+        setName('')
+        await loadDir(r.path)
+      } catch (x) { setErr(String((x && x.message) || x)) }
+    }
+    return e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: onClose, children: [
+      e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '18px 20px', width: 520, maxWidth: '94vw', boxShadow: '0 12px 40px rgba(0,0,0,0.28)' }, onClick: (ev) => ev.stopPropagation(), children: [
+        e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 8 }, children: '选一个文件夹' }, 'h'),
+        e('div', { style: { display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }, children: (cur && cur.places || []).map((pl, i) => e('button', { style: { ...btnS, padding: '3px 9px', fontSize: 12 }, onClick: () => loadDir(pl.path), children: pl.label }, 'p' + i)) }, 'places'),
+        e('div', { style: { ...lab, fontSize: 12, marginBottom: 6, wordBreak: 'break-all' }, children: (cur && cur.path) || '…' }, 'cur'),
+        e('div', { style: { maxHeight: 240, overflow: 'auto', border: '1px solid var(--dsw-alias-border, #ddd)', borderRadius: 8, padding: 4 }, children: [
+          (cur && cur.parent) ? e('button', { style: { ...btnS, padding: '4px 8px', fontSize: 12, marginBottom: 4 }, onClick: () => loadDir(cur.parent), children: '↑ 上一级' }, 'up') : null,
+          ...((cur && cur.dirs) || []).map((d, i) => e('div', { key: 'd' + i, style: { padding: '5px 8px', fontSize: 13, cursor: 'pointer', borderRadius: 6 }, onClick: () => loadDir((cur.path + (cur.path.endsWith('\\') || cur.path.endsWith('/') ? '' : (navigator.platform.toLowerCase().includes('win') ? '\\' : '/'))) + d), children: '📁 ' + d }, 'd' + i)),
+          (!cur || !cur.dirs || !cur.dirs.length) ? e('div', { style: { ...lab, fontSize: 12, padding: 6 }, children: '（没有子文件夹）' }, 'empty') : null,
+        ] }, 'list'),
+        e('div', { style: { display: 'flex', gap: 6, marginTop: 10 }, children: [
+          e('input', { style: { ...inp, padding: '6px 9px', flex: 1 }, value: name, placeholder: '新文件夹名', onInput: (ev) => setName(ev.target.value) }, 'n'),
+          e('button', { style: { ...btnS, padding: '5px 10px' }, onClick: mk, children: '新建文件夹' }, 'mk'),
+        ] }, 'newrow'),
+        err ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 6 }, children: err }, 'err') : null,
+        e('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }, children: [
+          e('button', { style: { ...btnS, padding: '5px 14px' }, onClick: onClose, children: '取消' }, 'c'),
+          e('button', { style: { ...btnP, padding: '6px 16px', fontSize: 13 }, onClick: () => { if (cur && cur.path) { onPick(cur.path); onClose() } }, children: '选这个文件夹' }, 'ok'),
+        ] }, 'acts'),
+      ] }, 'modal'),
+    ] })
+  }
+  function Section() {
       const [data, setData] = useState(null)
       const [view, setView] = useState({ level: 'list' })
       const [err, setErr] = useState('')
@@ -784,6 +827,7 @@ function makeFactory() {
       const [newName, setNewName] = useState('')
       const [newErr, setNewErr] = useState('')
       const [newHouse, setNewHouse] = useState({ mode: 'none', id: '', path: '' })
+      const [fp, setFp] = useState(null)
       const [nameInput, setNameInput] = useState('')
       const [delConfirm, setDelConfirm] = useState(false)
       const [routine, setRoutine] = useState(null)
@@ -836,6 +880,7 @@ function makeFactory() {
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
             e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
           ] }, 'add'),
+          fp ? e(FolderPicker, { start: fp.start, onPick: (p) => setNewHouse({ ...newHouse, path: p }), onClose: () => setFp(null) }, 'fp') : null,
           newOpen ? e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }, onClick: () => setNewOpen(false), children: [
             e('div', { style: { background: 'var(--dsw-alias-bg-1, #fff)', color: 'var(--dsw-alias-text-1, #222)', borderRadius: 14, padding: '20px 22px', width: 400, maxWidth: '92vw', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }, onClick: (ev) => ev.stopPropagation(), children: [
               e('div', { style: { fontWeight: 600, fontSize: 14, marginBottom: 12 }, children: '给新鱼起个名字' }, 'h'),
@@ -873,10 +918,23 @@ function makeFactory() {
                   ...((data && data.scopes && data.scopes.sessions) || []).map((s, i) => e('option', { value: s.id, children: s.id + (s.workspace ? ' · ' + s.workspace : '') }, 's' + i)),
                 ],
               }, 'house-ss') : null,
-              (newHouse.mode === 'new-workspace' || newHouse.mode === 'new-session' || newHouse.mode === 'new-both')
+              (newHouse.mode === 'new-session') ? e('select', {
+                style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%', marginTop: 6 },
+                value: newHouse.id,
+                onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
+                children: [
+                  e('option', { value: '', children: '选一个现有工作区' }),
+                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
+                ],
+              }, 'house-ws2') : null,
+              (newHouse.mode === 'new-session') ? e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: '会在选中的工作区里新建一个会话，只有这个会话归她' }, 'house-hint2') : null,
+              (newHouse.mode === 'new-workspace' || newHouse.mode === 'new-both')
                 ? e('div', { children: [
-                    e('input', { style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', width: '100%', marginTop: 6 }, value: newHouse.path, placeholder: '目录（必须已存在），例：D:\\\\fish-home', onInput: (ev) => setNewHouse({ ...newHouse, path: ev.target.value }) }, 'house-path'),
-                    e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: newHouse.mode === 'new-both' ? '会在这个目录建工作区，并在里面建一个会话' : (newHouse.mode === 'new-workspace' ? '会把这个目录登记成工作区' : '会在这个目录里建一个会话') }, 'house-hint'),
+                    e('div', { style: { display: 'flex', gap: 6, marginTop: 6 }, children: [
+                      e('input', { style: { ...inp, padding: '7px 10px', boxSizing: 'border-box', flex: 1 }, value: newHouse.path, placeholder: '目录，例：D:\\\\fish-home', onInput: (ev) => setNewHouse({ ...newHouse, path: ev.target.value }) }, 'house-path'),
+                      e('button', { style: { ...btnS, padding: '6px 10px', whiteSpace: 'nowrap' }, onClick: () => setFp({ start: newHouse.path || '' }), children: '选择文件夹' }, 'house-pick'),
+                    ] }),
+                    e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: newHouse.mode === 'new-both' ? '会在这个目录建工作区，并在里面建一个会话（只有这个会话归她）' : '整个工作区都归她' }, 'house-hint'),
                   ] }, 'house-new')
                 : null,
               newErr ? e('div', { style: { color: 'var(--dsw-alias-danger, #d33)', fontSize: 12.5, marginTop: 6 }, children: newErr }, 'e') : null,
@@ -892,7 +950,9 @@ function makeFactory() {
                         ? { kind: 'existing', type: 'workspace', id: newHouse.id }
                         : newHouse.mode === 'existing-session'
                           ? { kind: 'existing', type: 'session', id: newHouse.id, workspace: (((data && data.scopes && data.scopes.sessions) || []).find(s => s.id === newHouse.id) || {}).workspace }
-                          : { kind: newHouse.mode, path: newHouse.path }
+                          : newHouse.mode === 'new-session'
+                            ? { kind: 'new-session', workspace: newHouse.id }
+                            : { kind: newHouse.mode, path: newHouse.path }
                     await postJson(API + '/fish', { name, housing })
                     setNewOpen(false); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' })
                     await load()

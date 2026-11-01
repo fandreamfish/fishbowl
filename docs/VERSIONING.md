@@ -47,5 +47,5 @@ git -c http.proxy=http://127.0.0.1:7892 -c https.proxy=http://127.0.0.1:7892 pus
 
 ## 当前版本
 
-- 最近发布：`0.4.0`
+- 最近发布：`0.4.1`
 - 下一个计划：`0.3.1` —— `http.js` 资源层继续拆（fish / browse / config）
