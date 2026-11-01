@@ -11,6 +11,7 @@
 | [docs/BROWSE.md](docs/BROWSE.md) | 上网与说话设计（B 站、自处、许可、登录/@/评论/回复、风控与设置） |
 | [docs/HOST.md](docs/HOST.md) | 宿主适配层契约（怎么把"鱼"接到别的宿主上） |
 | [docs/BROWSE.md](docs/BROWSE.md) | 上网（B 站只读浏览 / 评论闸门 / 自处节律） |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层分析：核心 / 能力 / 工具 / 可抽取模块与重构路线 |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
 | [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
