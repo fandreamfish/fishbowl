@@ -1,10 +1,12 @@
 {
   "name": "fishbowl-core",
-  "version": "0.13.0",
+  "version": "0.14.4",
   "private": true,
   "type": "module",
   "description": "fishbowl: memory is the material, personality is the trajectory, emotion is the real-time bias.",
-  "engines": { "node": ">=22.18" },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "test": "node scripts/dev/test-all.mjs",
     "test:memory": "node packages/memory/test/unit.test.ts",

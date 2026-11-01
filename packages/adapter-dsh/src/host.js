@@ -23,6 +23,11 @@ import { randomUUID } from 'node:crypto'
 export { workspaceOf, findAgent, decodeWorkspace, enumerateScopes } from './host/scopes.js'
 import { enumerateScopes, findAgent, normPath, scopesRoots, workspaceOf } from './host/scopes.js'
 
+/** 当前加载的插件版本（设置页诊断用；也能确认 DSH 是不是还在跑旧代码）。 */
+const PKG_VERSION = (() => {
+  try { return JSON.parse(fs.readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version } catch { return '' }
+})()
+
 /** @param {any} ctx 插件根上下文 @param {{stateDir: string, timezone?: string}} cfg */
 export function createDshHost(ctx, cfg) {
   const get = (name) => {
@@ -466,6 +471,7 @@ export function createDshHost(ctx, cfg) {
       let live = []
       try { live = (sessions?.list?.() ?? []).map((s) => s?.id).filter(Boolean) } catch { live = [] }
       return {
+        version: PKG_VERSION,
         hasSessions: !!sessions,
       lastSessionError,
       lastCreate,

@@ -249,6 +249,8 @@ const reqList = await callRoute('GET', '/fishbowl-ui/requests')
 const reqBody = reqList.code === 200 ? JSON.parse(reqList.body) : { requests: [] }
 const fishOne = await callRoute('GET', '/fishbowl-ui/fish/' + routeFish.meta.creatureId)
 check('GET /fish/:id 返回单鱼配置', fishOne.code === 200 && !!JSON.parse(fishOne.body).fish.config.browse)
+const unknown = await callRoute('GET', '/fishbowl-ui/not-a-route')
+check('未知 GET 不会被 /requests 兜住', unknown.code === 404)
 check('GET /requests 只返回待答请求', reqList.code === 200 && reqBody.requests.length === 1 && reqBody.requests[0].request.action === 'browse')
 const gb = await callRoute('GET', '/fishbowl-ui/browse')
 check('GET /browse 返回配置', gb.code === 200 && JSON.parse(gb.body).config.enabled === false)
