@@ -320,6 +320,7 @@ export function createDshHost(ctx, cfg) {
       }
       const dir = path.resolve(cwd || target?.path || dirPath || '')
       if (!dir) throw new Error('新建会话需要工作区或目录')
+      try { fs.mkdirSync(dir, { recursive: true }) } catch { /* 建不出来就让后面的 create 报错 */ }
 
       // DSH 的会话就是 agent：走 agents.create（与 GUI 新建会话同一条路）
       const agents = svc('agents') ?? svc('agent')
@@ -474,14 +475,20 @@ export function createDshHost(ctx, cfg) {
           return typeof t === 'string' ? t : String(t?.title ?? '')
         } catch { return '' }
       }
-      // 会话列表以 DSH 工作区的 sessionIds 为准，和侧边栏保持一致
+      // 工作区以注册表为准：即使目录被删了也列出来（创建会话时会重建目录）
       const regs = workspaceRegistry()?.list?.() ?? []
       const byNorm = new Map()
       for (const w of regs) if (w?.path) byNorm.set(normPath(w.path), String(w.title ?? ''))
-      // 键必须和返回给界面的 workspaces 完全一致（注册表里的写法可能小写/正斜杠）
-      const workspaceNames = {}
+      const workspaces = []
+      const seenWs = new Set()
+      for (const p of [...scopes.workspaces, ...regs.map((w) => w?.path).filter(Boolean)]) {
+        if (!p || seenWs.has(normPath(p))) continue
+        seenWs.add(normPath(p))
+        workspaces.push(p)
+      }
       const nativeOf = new Map()
-      for (const p of scopes.workspaces) {
+      const workspaceNames = {}
+      for (const p of workspaces) {
         workspaceNames[p] = byNorm.get(normPath(p)) ?? ''
         nativeOf.set(normPath(p), p)
       }
@@ -500,7 +507,7 @@ export function createDshHost(ctx, cfg) {
       if (!regs.length) {
         for (const s of scopes.sessions) sessions.push({ ...s, title: titleOf(s.id) })
       }
-      return { workspaces: scopes.workspaces, sessions, workspaceNames }
+      return { workspaces, sessions, workspaceNames }
     },
     /**
      * 会话当前的审批策略：'ask' | 'never'；拿不到返回 null。
