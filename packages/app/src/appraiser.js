@@ -18,7 +18,7 @@ const ANGRY = /(生气|失望|过分|太差|烦死|闭嘴|滚)/
 const APOLOGY = /(抱歉|对不起|我错了|是我的错)/
 const PROMISE = /(答应|保证|承诺)/
 
-/** @returns {import('../../../src/core/types.ts').Appraisal} */
+/** @returns {import('../../affect/src/index.ts').Appraisal} */
 export function appraiseScripted(transcript) {
   const t = transcript
   const a = appraisal()

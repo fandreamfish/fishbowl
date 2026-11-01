@@ -18,7 +18,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { homeDir } from '../../being/src/index.ts'
 
-/** @param {import('../../src/core/types.ts').Bias} bias */
+/** @param {import('../../affect/src/index.ts').Bias} bias */
 export function verifyDecision(bias, toolName, cfg) {
   if (!toolName || !cfg.verifyTools.includes(toolName)) return null
   if (bias.thresholdVerify >= cfg.verifyThreshold) {
@@ -30,7 +30,7 @@ export function verifyDecision(bias, toolName, cfg) {
   return null
 }
 
-/** @param {import('../../src/core/types.ts').Bias} bias */
+/** @param {import('../../affect/src/index.ts').Bias} bias */
 export function refuseReason(bias, toolName, cfg) {
   if (!toolName || !cfg.refuseTools.includes(toolName)) return null
   if (bias.thresholdRefuse <= cfg.refuseThreshold) {
