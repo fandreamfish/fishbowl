@@ -356,7 +356,12 @@ export function createDshHost(ctx, cfg) {
       }
       // 挂到工作区（侧边栏按 workspace.sessionIds 显示）：list() 给的是视图，要 get() 拿真实实例
       let ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir)) ?? null
-      try { if (ws?.id) ws = registry?.get?.(ws.id) ?? ws } catch { /* 忽略 */ }
+      try {
+        if (!ws || typeof ws.attachSession !== 'function') {
+          const real = ws?.id ? registry?.get?.(ws.id) : undefined
+          if (real && typeof real.attachSession === 'function') ws = real
+        }
+      } catch { /* 忽略 */ }
       let attached = false
       let attachError = null
       if (ws && typeof ws.attachSession === 'function') {
@@ -370,9 +375,14 @@ export function createDshHost(ctx, cfg) {
     workspaceByPath(p) {
       const registry = workspaceRegistry()
       try {
-        const hit = (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(p))
+        const list = registry?.list?.() ?? []
+        const hit = list.find((w) => w?.path && normPath(w.path) === normPath(p))
         if (!hit) return null
-        return registry?.get?.(hit.id) ?? hit
+        // 优先返回带方法（archiveSession 等）的实例：get() 可能给的是只读视图
+        if (typeof hit.archiveSession === 'function') return hit
+        const real = typeof registry?.get === 'function' ? registry.get(hit.id) : undefined
+        if (real && typeof real.archiveSession === 'function') return real
+        return real ?? hit
       } catch { return null }
     },
 
@@ -474,6 +484,14 @@ export function createDshHost(ctx, cfg) {
       return {
         hasSessions: !!sessions,
       lastSessionError,
+      wsProbe: (() => {
+        try {
+          const list = workspaceRegistry()?.list?.() ?? []
+          const w = list[0]
+          const g = w?.id ? workspaceRegistry()?.get?.(w.id) : null
+          return { listHasArchive: typeof w?.archiveSession, getHasArchive: typeof g?.archiveSession, count: list.length }
+        } catch (e) { return String(e?.message ?? e) }
+      })(),
         hasSessionTitle: !!titlesService(),
         hasWorkspaceRegistry: !!workspaceRegistry(),
         liveSessions: live,
