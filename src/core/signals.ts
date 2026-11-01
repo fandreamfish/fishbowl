@@ -1,2 +1,2 @@
 // 兼容层：实现已迁到 packages/being。
-export * from '../../../packages/being/src/signals.ts'
+export * from '../../packages/being/src/signals.ts'
