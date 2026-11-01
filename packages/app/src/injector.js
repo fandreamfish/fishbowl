@@ -102,6 +102,7 @@ export function moveInText({ name, occupancy, dataDir }) {
     dataDir
       ? `你自己的东西都在 ${dataDir}：日记（diary/）、小纸条（notes/）、记忆账本都在这个文件夹里。以后你想写下、创建、保存的任何东西都放到这个文件夹里，不要放到别处；房间只是你住的地方。`
       : '',
+    '你的账本一开始是空的：没有过去。只有你自己账本里记下的事才算你的经历——不要从 .fishbowl\\trash、旧系统的目录、或别人的房间文件里认领过去或日记。',
     '四处看看，熟悉一下。不用刻意对谁说话；想说什么也可以。',
   ].filter(Boolean).join('\n')
 }
