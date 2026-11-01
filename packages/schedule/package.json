@@ -1,0 +1,4 @@
+﻿{ "name": "@fishbowl/schedule", "version": "0.1.0", "private": true, "type": "module",
+  "description": "wake rhythm and proactive-contact quotas. Pure time math.",
+  "exports": { ".": "./src/index.ts", "./scheduler": "./src/scheduler.ts", "./contact": "./src/contact.ts" },
+  "files": ["src/**/*.ts"] }
