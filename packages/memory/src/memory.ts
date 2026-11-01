@@ -58,6 +58,7 @@ export class Memory {
   private index = new RecallIndex()
   private indexKey = ''
   private tries = new Map<string, number>()
+  private triesAt = new Map<string, number>()
   private snapCache: { bytes: number; view: ReturnType<typeof buildView> } | null = null
   private snapSaved = 0
   private lock: { status: LockStatus; release: () => void } | null = null
@@ -215,7 +216,9 @@ export class Memory {
       const needNeutral = !t.neutral
       const needHer = t.her.length === 0 && this.wantsHer(t)
       if (!needNeutral && !needHer) continue
-      if ((this.tries.get(t.id) ?? 0) >= 2) continue
+      const tries = this.tries.get(t.id) ?? 0
+      const sinceTry = now - (this.triesAt.get(t.id) ?? 0)
+      if (tries >= 2 && sinceTry < 30 * 60_000) continue
 
       if (needNeutral) {
         calls += 1
@@ -225,7 +228,7 @@ export class Memory {
             system: NEUTRAL_SYSTEM.replace('{{TAGS}}', this.cfg.tags.join(' / ')),
             user: buildNeutralUser({ transcript: t.note, tags: this.cfg.tags }),
             json: true,
-            maxTokens: 500,
+            maxTokens: 900,
             model: this.cfg.neutralModel || undefined,
           })
           const parsed = parseNeutral(raw, this.cfg.tags)
@@ -254,7 +257,7 @@ export class Memory {
             system: HER_SYSTEM,
             user: buildHerUser({ transcript: t.note, affect: t.affectPeak, injected }),
             json: true,
-            maxTokens: 300,
+            maxTokens: 600,
             model: this.cfg.neutralModel || undefined,
           })
           const parsed = parseHer(raw)
@@ -311,6 +314,7 @@ export class Memory {
 
   private bump(turnId: string) {
     this.tries.set(turnId, (this.tries.get(turnId) || 0) + 1)
+    this.triesAt.set(turnId, this.clock())
   }
 
   private async merge(

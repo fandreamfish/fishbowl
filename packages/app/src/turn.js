@@ -167,6 +167,10 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       if (cfg.appraiser.kind === 'deepseek') {
         // 双总结 + 到点整理：异步、有预算、失败可重试；绝不阻塞对话
         void mem.tick({ llm: memLlm(), by: { model: cfg.appraiser.model } })
+          .then((r) => {
+            const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
+            if (bad.length) trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick: ${bad.slice(0, 3).join(' | ')}` })
+          })
           .catch((err) => trace({ ts: Date.now(), sessionId: session.id, warn: `memory tick failed: ${String(err?.message || err)}` }))
         if (IDENTITY_RE.test(transcript)) {
           void after.detectIdentity(session.id, creature, transcript)
@@ -352,6 +356,10 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
           const fcfg = configFor(cfg, c)
           if (fcfg.appraiser?.kind !== 'deepseek') continue
           void memoryFor(c).tick({ llm: memLlm(), by: { model: fcfg.appraiser.model }, maxCalls: 8 })
+            .then((r) => {
+              const bad = [...(r.errors ?? []), ...(r.rejected ?? [])]
+              if (bad.length) trace({ ts: Date.now(), sessionId: c.meta.occupancy?.id, creatureId: c.meta.creatureId, warn: `memory sweep: ${bad.slice(0, 3).join(' | ')}` })
+            })
             .catch(() => { /* 下轮再试 */ })
         } catch { /* 单条失败不影响其它鱼 */ }
       }
