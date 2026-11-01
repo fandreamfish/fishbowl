@@ -931,7 +931,12 @@ function makeFactory() {
                 } else {
                   const r = await postJson(API + '/import', { path: dir })
                   await load()
-                  window.alert('导入 ' + (r.housed || []).length + ' 条鱼\n屋子：' + r.house)
+                  const got = (r.imported || []).length
+                  const placed = (r.housed || []).length
+                  const skipped = (r.skipped || []).length
+                  window.alert(
+                    '导入 ' + got + ' 条鱼；这次新安置 ' + placed + ' 条' + (skipped ? '，跳过 ' + skipped + ' 条（已有房间）' : '') + '\n屋子：' + r.house,
+                  )
                 }
               } catch (x) { window.alert('失败：' + String((x && x.message) || x)) }
             },
