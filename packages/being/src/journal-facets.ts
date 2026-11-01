@@ -42,8 +42,9 @@ export function notes(creature: Creature, limit = 10): { text: string; ts: numbe
     .reverse()
 }
 
-export function recordRequest(creature: Creature, text: string, ts?: number): void {
-  creature.store.appendEvent({ t: 'request', id: uid(), ts: ts ?? Date.now(), text } as CreatureEvent)
+export function recordRequest(creature: Creature, text: string, ts?: number, meta?: { action?: string; target?: string; uses?: number; ttlMs?: number }): void {
+  const at = ts ?? Date.now()
+  creature.store.appendEvent({ t: 'request', id: uid(), ts: at, text, ...(meta ?? {}) } as CreatureEvent)
 }
 
 export function answerRequest(creature: Creature, ref: string, answer: 'yes' | 'no', ts?: number): void {

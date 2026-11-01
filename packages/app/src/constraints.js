@@ -91,6 +91,20 @@ export function createConstraints(ctx, binding, cfg, host) {
         if (!sid || !binding.manages(sid)) return undefined
         const name = toolNameOf(exec)
         const ws = workspaceOfExec(exec)
+        // 硬地板（很窄）：系统级破坏性命令一律不代她执行。不是安全边界，是保险丝。
+        if (name === 'pwsh' || name === 'bash') {
+          let cmd = ''
+          try {
+            const raw = exec?.data?.arguments ?? exec?.data?.args ?? ""
+            const o = typeof raw === 'string' ? JSON.parse(raw) : raw
+            cmd = String(o?.command ?? raw ?? '')
+          } catch { cmd = String(exec?.data?.arguments ?? '') }
+          const FLOOR = /(?:^|[^\w-])(format|diskpart|shutdown|restart-computer|stop-computer|vssadmin)(?:\s|$)/i
+          const ROOT_DEL = /remove-item\s+['"]?[a-z]:[\\/]['"]?[^\n]*-recurse|remove-item\s+['"]?(?:[a-z]:)?[\\/](windows|users|program files)[\\/]/i
+          if (FLOOR.test(cmd) || ROOT_DEL.test(cmd)) {
+            return 'fishbowl: 这条命令会动到房间之外的东西（系统或别的目录），我不替你执行。'
+          }
+        }
 
         // 只有住着鱼的会话才谈得上「她的预算」——别人的会话一概别管。
         // 预算默认关（0）：调用次数本身不是问题，嫌吵该改的是显示。

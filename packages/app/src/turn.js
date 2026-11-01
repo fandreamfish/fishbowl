@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ACTIVITY_RE, mergePendingText } from '../../being/src/index.ts'
+import { ACTIVITY_RE, breachLine, mergePendingText, permitLine } from '../../being/src/index.ts'
 import { COMMITMENT_RE, REQUEST_RE } from '../../being/src/index.ts'
 import { applyAppraisal, salienceOf, toBias } from '../../affect/src/index.ts'
 import { createMemoryStore } from './memory-store.js'
@@ -192,7 +192,6 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         // —— M7：日记 / 小纸条 / 请求 ——
         void after.runDiary(session.id, creature)
         void after.maybeNote(session.id, creature, affect)
-        void after.maybeRequest(session.id, creature, transcript)
       }
 
       buffers.delete(session.id)
@@ -226,7 +225,10 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       if (req.pending.length) reqLines.push(`还在等回音: ${req.pending.join('；')}`)
       if (req.answered.length) reqLines.push(`他答过的: ${req.answered.map((r) => `${r.text}（${r.answer === 'yes' ? '同意' : '不同意'}）`).join('；')}`)
       const reqText = reqLines.length ? '\n' + reqLines.join('\n') : ''
-      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + (recent ? '\n' + recent : '')
+      const perm = permitLine(creature)
+      const breach = breachLine(creature)
+      const extra = (perm ? `\n你现在被允许: ${perm}` : '') + (breach ? `\n${breach}` : '')
+      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
       await host.inject(agent, injectMessage(text))
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session?.id, warn: `state inject failed: ${String(err?.message || err)}` })

@@ -128,7 +128,10 @@ export type CreatureEvent =
   // —— M7：日记 / 小纸条 / 请求 ——
   | { t: 'diary'; id: string; ts: number; date: string; text: string }
   | { t: 'note'; id: string; ts: number; text: string }
-  | { t: 'request'; id: string; ts: number; text: string }
+  | { t: 'request'; id: string; ts: number; text: string; action?: string; target?: string; uses?: number; ttlMs?: number }
+  | { t: 'permit'; id: string; ts: number; ref: string; action: string; target: string; uses: number; ttlMs: number }
+  | { t: 'permit-used'; id: string; ts: number; ref: string }
+  | { t: 'breach'; id: string; ts: number; action: string; target: string; detail: string }
   | { t: 'request-answered'; id: string; ts: number; ref: string; answer: 'yes' | 'no' }
   // —— M4：封存（停止时间：不经历、不缺席、不想念） ——
   | { t: 'freeze'; id: string; ts: number }

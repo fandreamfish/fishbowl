@@ -99,6 +99,9 @@ export function summarizeEvent(e) {
     case 'request-answered': return { text: e.ref.slice(0, 8), meta: e.answer === 'yes' ? '同意' : '不同意' }
     case 'repair': return { text: '被原谅了一次', meta: '愧疚 -' + Number(e.amount ?? 0).toFixed(2) }
     case 'grant': return { text: e.text, meta: e.allowed ? `允许：${e.topic}` : `撤销：${e.topic}` }
+    case 'permit': return { text: `被允许：${e.action ?? ''}${e.target ? ' @ ' + e.target : ''}`, meta: `${e.uses ?? 1} 次` }
+    case 'permit-used': return { text: '用掉一次许可', meta: String(e.ref ?? '').slice(0, 8) }
+    case 'breach': return { text: `没等同意就做了：${e.action ?? ''}`, meta: String(e.target ?? '').slice(0, 24) }
     case 'wake': return { text: e.mode === 'self' ? '自己醒来' : '想找他', meta: e.reason ?? '' }
     case 'reinforce': return { text: e.ref.slice(0, 8), meta: '又提到' }
     case 'freeze': return { text: '封存', meta: '' }

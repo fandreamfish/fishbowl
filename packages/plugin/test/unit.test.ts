@@ -331,6 +331,21 @@ check('日记落成单独文件', fs.existsSync(path.join(memDir, 'diary', '2026
 memFish.recordDiary('2026-11-01', '第二篇', new Date(2026, 10, 1, 11, 0).getTime())
 const diaryFiles = fs.readdirSync(path.join(memDir, 'diary'))
 check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
+// 许可与审计
+const { recordPermit, findPermit, consumePermit, activePermits, recordBreach, recentBreaches } = await import('../../being/src/index.ts')
+const permitDir = path.join(stateDir, 'permit-fixture')
+fs.rmSync(permitDir, { recursive: true, force: true })
+const permitFish = Creature.create(permitDir, {
+  schemaVersion: 1, creatureId: 'permit-fixture', name: '许可鱼', bornAt: new Date(0).toISOString(),
+  timezone: 'Asia/Shanghai', model: { id: 'test', pinned: true }, temperament: DEFAULT_TEMPERAMENT,
+})
+const perm = recordPermit(permitFish, { action: 'comment.post', target: 'BV1xx', uses: 2, ttlMs: 60_000 })
+check('许可签发后能找到', findPermit(permitFish, 'comment.post', 'BV1xx')?.id === perm.id)
+consumePermit(permitFish, perm)
+consumePermit(permitFish, perm)
+check('次数用完就不再有效', findPermit(permitFish, 'comment.post', 'BV1xx') === null && activePermits(permitFish).length === 0)
+recordBreach(permitFish, { action: 'comment.post', target: 'BV1xx', detail: '没等同意就发了' })
+check('违规会被记下', recentBreaches(permitFish).length === 1)
 memFish.recordNote('纸条正文', new Date(2026, 10, 1, 11, 0).getTime())
 const noteFiles = fs.existsSync(path.join(memDir, 'notes')) ? fs.readdirSync(path.join(memDir, 'notes')) : []
 check('小纸条单独成文件', noteFiles.length === 1 && fs.readFileSync(path.join(memDir, 'notes', noteFiles[0]), 'utf8').includes('纸条正文'))

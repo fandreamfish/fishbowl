@@ -23,6 +23,7 @@ import { createMemoryStore } from '../app/src/index.js'
 import { createMemoryTool } from './memory/tool.js'
 import { createBrowseTool } from './lib/browse/tool.js'
 import { createSpeakTool } from './lib/browse/speak-tool.js'
+import { createPermissionTool } from './lib/browse/permission-tool.js'
 import { setPacing } from '../bilibili/src/index.js'
 import { createUiRoute, mergeUiConfig, uiConfigPath } from '../adapter-dsh/src/index.js'
 import { configFor, migrateFishConfigs } from '../app/src/index.js'
@@ -98,6 +99,7 @@ export function apply(ctx, config = {}) {
     }
     if (anyFishHas('browse')) add(() => host.registerTool(createBrowseTool(binding, cfg)))
     if (anyFishHas('browse')) add(() => host.registerTool(createSpeakTool(binding, cfg)))
+    if (anyFishHas('browse')) add(() => host.registerTool(createPermissionTool(binding, cfg)))
     if (cfg.memory?.searchTool !== false) add(() => host.registerTool(createMemoryTool(binding, cfg, memoryFor)))
   }
   registerCapabilityTools()

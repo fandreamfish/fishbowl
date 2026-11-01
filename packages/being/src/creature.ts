@@ -264,8 +264,8 @@ export class Creature {
   }
 
   /** 请求：她有事想征求你的同意。 */
-  recordRequest(text: string, ts?: number): void {
-    recordRequestOf(this, text, ts)
+  recordRequest(text: string, ts?: number, meta?: { action?: string; target?: string; uses?: number; ttlMs?: number }): void {
+    recordRequestOf(this, text, ts, meta)
   }
 
   /** 回答一个请求：yes / no。 */

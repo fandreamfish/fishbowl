@@ -2,6 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { housingToOccupancy, injectMessage, moveInText, renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
+import { recordPermit } from '../../../being/src/index.ts'
 import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
@@ -171,6 +172,13 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     const body = JSON.parse(await readBody(req) || '{}')
     if (body.answer !== 'yes' && body.answer !== 'no') { send(res, { ok: false, error: 'answer 只能是 yes 或 no' }, 400); return true }
     c.answerRequest(parts[3], body.answer)
+    // 同意且是结构化请求 → 签发一张许可（带范围/次数/期限）
+    try {
+      const r0 = c.requests().find((r) => r.id === parts[3])
+      if (body.answer === 'yes' && r0?.action) {
+        recordPermit(c, { action: r0.action, target: r0.target, uses: r0.uses ?? 1, ttlMs: r0.ttlMs ?? 2 * 60 * 60_000, ref: r0.id })
+      }
+    } catch (e) { console.error('[fishbowl] permit issue failed:', String(e?.message ?? e)) }
     // 回音要叫醒她一次：不然她永远不知道自己请求过什么、你答了什么
     try {
       const reqText = c.requests().find((r) => r.id === parts[3])?.text ?? ''

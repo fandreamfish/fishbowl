@@ -11,6 +11,7 @@
 import { workspaceOf } from '../../../app/src/index.js'
 import { postComment, postReply } from '../../../bilibili/src/index.js'
 import { configFor } from '../../../app/src/index.js'
+import { consumePermit, findPermit, recordBreach } from '../../../being/src/index.ts'
 
 export function createSpeakTool(binding, cfg) {
   return {
@@ -18,7 +19,7 @@ export function createSpeakTool(binding, cfg) {
     description:
       '在 B 站说一句话。可以给你今天看过的某个视频留一条评论，或者回一句别人留在你评论下面的话。'
       + '这是公开场合，别人看得见；不要提你们之间的事，也不要提他的私事。'
-      + '不想说就不说，没有人等着你回答。',
+      + '不想说就不说，没有人等着你回答。想说的话最好先用 fish_ask_permission 问一声；没等他点头就发，他会知道。',
     parameters: {
       type: 'object',
       properties: {
@@ -63,6 +64,11 @@ export function createSpeakTool(binding, cfg) {
         if (args?.kind !== 'comment' && args?.kind !== 'reply') {
           return { ok: false, said: '', note: '要说哪种？评论还是回复。' }
         }
+        // 约定，不是围墙：没有许可也让她说，但要被看见（审计）
+        const fcfg = configFor(cfg, creature)
+        const target = String(args?.bvid ?? '')
+        const permit = fcfg.comment?.autoApprove === true ? null : findPermit(creature, 'comment.post', target)
+        if (permit) consumePermit(creature, permit)
         const r = args.kind === 'reply'
           ? await postReply(creature, configFor(cfg, creature), {
             bvid: args?.bvid,
@@ -70,6 +76,13 @@ export function createSpeakTool(binding, cfg) {
             text: args?.text,
           })
           : await postComment(creature, configFor(cfg, creature), { bvid: args?.bvid, text: args?.text })
+        if (r.ok && fcfg.comment?.autoApprove !== true && !permit) {
+          recordBreach(creature, {
+            action: 'comment.post',
+            target,
+            detail: String(r.said ?? '').slice(0, 120),
+          })
+        }
         return { ok: !!r.ok, said: String(r.said ?? ''), note: String(r.note ?? '') }
       } catch (err) {
         return { ok: false, said: '', note: '没说出来。' }
