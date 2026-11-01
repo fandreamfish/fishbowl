@@ -17,7 +17,7 @@ import path from 'node:path'
 import { createBinding } from '../app/src/index.js'
 import { createCollector } from '../app/src/index.js'
 import { createConstraints } from '../app/src/index.js'
-import { normalizeConfig } from '../app/src/index.js'
+import { normalizeConfig, configHealth } from '../app/src/index.js'
 import { createWakeLoop } from '../app/src/index.js'
 import { createMemoryStore } from '../app/src/index.js'
 import { createMemoryTool } from './memory/tool.js'
@@ -44,6 +44,10 @@ export function apply(ctx, config = {}) {
   } catch { /* 没有 UI 配置就用 patch 配置 */ }
 
   const cfg = normalizeConfig(raw)
+  try {
+    const h = configHealth(cfg)
+    if (!h.ok) traceWarn('config', new Error('配置不完整：' + h.issues.join('；')))
+  } catch { /* 自检失败不影响启动 */ }
   const host = createDshHost(ctx, cfg)
   const disposers = []
   const binding = createBinding(cfg)

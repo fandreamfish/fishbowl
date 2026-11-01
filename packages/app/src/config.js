@@ -90,3 +90,15 @@ export function normalizeConfig(raw = {}) {
   }
   return c
 }
+
+/**
+ * 配置自检：DSH 设置页重写 profile patch 时可能把 fishbowl 的配置整段冲掉，
+ * 表现就是"没有记忆、没有总结、情绪变笨"。这里只报告，不改配置。
+ */
+export function configHealth(cfg) {
+  const issues = []
+  if (cfg?.appraiser?.kind !== 'deepseek') issues.push('appraiser 不是 deepseek：没有 LLM 评价，记忆总结也不会跑')
+  if (cfg?.appraiser?.kind === 'deepseek' && !cfg?.appraiser?.apiKey) issues.push('appraiser.apiKey 为空：调用会失败')
+  if (!cfg?.wake?.enabled && !cfg?.selfTime?.enabled) issues.push('清醒节律与自处都关着：她不会主动醒来')
+  return { ok: issues.length === 0, issues }
+}

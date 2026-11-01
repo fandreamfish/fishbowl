@@ -890,6 +890,13 @@ function makeFactory() {
             e('div', { className: 'fb-sub', children: '每条鱼都有自己的房间（一个会话），终身唯一。一个屋子可以住多条鱼；搬家会归档旧房间并新建一间房。' }, 'd'),
           ] }, 'head'),
           err ? e('div', { className: 'fb-error', children: err }, 'err') : null,
+          (data && data.health && data.health.issues && data.health.issues.length)
+            ? e('div', { style: { ...box, borderColor: 'var(--dsw-alias-warning, #c90)', background: 'rgba(255,200,0,0.10)', fontSize: 12.5 }, children: [
+                e('div', { style: { fontWeight: 600, marginBottom: 4 }, children: 'fishbowl 配置可能不完整' }, 'hh'),
+                ...data.health.issues.map((x, i) => e('div', { key: 'h' + i, style: { marginTop: 2 }, children: '· ' + x })),
+                e('div', { style: { ...lab, fontSize: 11.5, marginTop: 6 }, children: '常见原因：DSH 设置页保存时重写了 profile 的 cordis.patch.yml，把 fishbowl 那段冲掉了。' }, 'hk'),
+              ] }, 'health')
+            : null,
           fish.length
             ? fish.map((f, i) => e(FishCard, { f, k: 'f' + i, onOpen: () => openFish(f.id) }))
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),

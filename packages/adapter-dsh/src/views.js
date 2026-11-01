@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs'
 import { fishConfigView, hasFishConfig } from '../../app/src/index.js'
+import { configHealth } from '../../app/src/index.js'
 import { wakeStatePath } from '../../app/src/index.js'
 import { browseStatus } from '../../bilibili/src/index.js'
 import { memoryDetail } from './views-memory.js'
@@ -73,6 +74,7 @@ export function createViews({ cfg, binding, host, stateDir }) {
     const fish = binding.listCreatures().map((c) => fishView(c, scopes.sessions))
     return {
       born: fish.some((f) => f.episodes > 0),
+      health: configHealth(cfg),
       scopes,
       wakeState: (() => { try { return JSON.parse(fs.readFileSync(wakeStatePath(stateDir), 'utf8')) } catch { return null } })(),
       config: { growth: cfg.growth, seed: cfg.seed ?? null, appraiser: cfg.appraiser?.kind, relation: cfg.relation, wake: cfg.wake, contact: cfg.contact, selfTime: cfg.selfTime, browse: cfg.browse, comment: cfg.comment, memory: cfg.memory },
