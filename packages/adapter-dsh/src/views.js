@@ -58,9 +58,9 @@ export function createViews({ cfg, binding, host, stateDir }) {
     for (const w of (binding.scopes?.workspaces ?? [])) if (!workspaces.includes(w)) workspaces.push(w)
     const sessions = [...e.sessions]
     for (const s of (binding.scopes?.sessions ?? [])) {
-      if (s && s.id && !sessions.some((x) => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '' })
+      if (s && s.id && !sessions.some((x) => x.id === s.id)) sessions.push({ id: s.id, workspace: s.workspace || '', title: '' })
     }
-    return { workspaces, sessions }
+    return { workspaces, sessions, workspaceNames: e.workspaceNames ?? {} }
   }
 
   function stateView() {

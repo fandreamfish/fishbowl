@@ -74,6 +74,8 @@ function makeFactory() {
       if (m) return 's-' + m[1] + '…'
       return s.length > 14 ? s.slice(0, 14) + '…' : s
     }
+    const wsName = (names, p) => (names && names[p]) || (String(p).split(/[\\\\/]/).filter(Boolean).pop() || String(p))
+    const sessName = (s) => (s && s.title) || shortId((s && s.id) || '')
     const occText = (occ) => {
       if (!occ) return '未分配（不归任何会话）'
       if (occ.kind === 'workspace') return '工作区 ' + occ.id
@@ -906,7 +908,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个工作区' }),
-                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
+                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: wsName(data.scopes.workspaceNames, w) + '（' + w + '）' }, 'w' + i)),
                 ],
               }, 'house-ws') : null,
               (newHouse.mode === 'existing-session') ? e('select', {
@@ -915,7 +917,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个会话' }),
-                  ...((data && data.scopes && data.scopes.sessions) || []).map((s, i) => e('option', { value: s.id, children: s.id + (s.workspace ? ' · ' + s.workspace : '') }, 's' + i)),
+                  ...((data && data.scopes && data.scopes.sessions) || []).map((s, i) => e('option', { value: s.id, children: sessName(s) + (s.workspace ? ' · ' + wsName(data.scopes.workspaceNames, s.workspace) : '') }, 's' + i)),
                 ],
               }, 'house-ss') : null,
               (newHouse.mode === 'new-session') ? e('select', {
@@ -924,7 +926,7 @@ function makeFactory() {
                 onChange: (ev) => setNewHouse({ ...newHouse, id: ev.target.value }),
                 children: [
                   e('option', { value: '', children: '选一个现有工作区' }),
-                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: w }, 'w' + i)),
+                  ...((data && data.scopes && data.scopes.workspaces) || []).map((w, i) => e('option', { value: w, children: wsName(data.scopes.workspaceNames, w) + '（' + w + '）' }, 'w' + i)),
                 ],
               }, 'house-ws2') : null,
               (newHouse.mode === 'new-session') ? e('div', { style: { ...lab, fontSize: 11.5, marginTop: 4 }, children: '会在选中的工作区里新建一个会话，只有这个会话归她' }, 'house-hint2') : null,
@@ -1276,7 +1278,7 @@ function makeFactory() {
               e('div', { style: col, children: [
                 e('div', { style: { ...lab, marginBottom: 6 }, children: '屋子（工作区）' }, 'lw'),
                 ...workspaces.map((w, i) => node(
-                  (pick && pick.kind === 'workspace' && pick.id === w ? '● ' : pickWs === w ? '▾ ' : '▸ ') + base(w) + wsWhy(w),
+                  (pick && pick.kind === 'workspace' && pick.id === w ? '● ' : pickWs === w ? '▾ ' : '▸ ') + wsName(data.scopes && data.scopes.workspaceNames, w) + wsWhy(w),
                   false,
                   pick && pick.kind === 'workspace' && pick.id === w,
                   () => {
@@ -1302,7 +1304,7 @@ function makeFactory() {
                         const disabled = blockedByRoom || blockedByWs || isCurrent
                         const active = !!(pick && pick.kind === 'session' && pick.id === s2.id)
                         const why = blockedByRoom ? '（' + roomOwner + ' 已住）' : blockedByWs ? '（屋子被 ' + wsOwner + ' 住了）' : isCurrent ? '（当前住这）' : active ? '（已选）' : ''
-                        return node(shortId(s2.id) + why, disabled, active, () => { setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }); setMoveErr('') }, 'r' + i)
+                        return node(sessName(s2) + why, disabled, active, () => { setPick({ kind: 'session', id: s2.id, workspace: s2.workspace }); setMoveErr('') }, 'r' + i)
                       }),
                       !roomsOf(pickWs).length ? e('div', { style: lab, children: '这个屋子还没有记录到的房间' }, 'norooms') : null,
                     ] }, 'rooms')

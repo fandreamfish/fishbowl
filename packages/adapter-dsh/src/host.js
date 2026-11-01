@@ -321,7 +321,26 @@ export function createDshHost(ctx, cfg) {
     },
 
     listScopes() {
-      return enumerateScopes()
+      const scopes = enumerateScopes()
+      // 名字：工作区用注册表的 title，会话用 sessionTitle（仅活着的会话能取到）
+      const workspaceNames = {}
+      try {
+        for (const w of (workspaceRegistry()?.list?.() ?? [])) {
+          if (w?.path) workspaceNames[normPath(w.path)] = String(w.title ?? '')
+        }
+      } catch { /* 没有注册表就只用路径 */ }
+      const titles = get('sessionTitle')
+      const sessionsSvc = sessionsService()
+      const sessions = scopes.sessions.map((s) => {
+        let title = ''
+        try {
+          const live = sessionsSvc?.get?.(s.id)
+          const t = live && titles?.get ? titles.get(live) : null
+          if (t) title = String(t)
+        } catch { /* 不是活会话就没有名字 */ }
+        return { ...s, title }
+      })
+      return { ...scopes, sessions, workspaceNames }
     },
 
     /**
