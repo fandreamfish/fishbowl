@@ -206,12 +206,17 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
 
   /**
    * 组装状态块文本：注册成 agent 的动态系统提示段，每次组装提示词时现算。
-   * 不再往 inbox 里塞消息（那会把状态当成"用户说的话"，还会卡住退出）。
+   * 同一轮内结果缓存：一轮多步时提示词不变，别让 DeepSeek 的缓存白白失效。
    */
+  const stateCache = new Map()
+  const turnKeys = new Map()
   function buildStateText(session) {
     try {
       if (cfg.control || !cfg.injectBias) return ''
       if (!session?.id) return ''
+      const key = turnKeys.get(session.id) ?? 0
+      const hit = stateCache.get(session.id)
+      if (hit && hit.key === key) return hit.text
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
       if (!creature) return ''
       const mem = memoryFor(creature)
@@ -230,7 +235,9 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const perm = permitLine(creature)
       const breach = breachLine(creature)
       const extra = (perm ? `\n你现在被允许: ${perm}` : '') + (breach ? `\n${breach}` : '')
-      return snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
+      const out = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
+      stateCache.set(session?.id, { key, text: out })
+      return out
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session?.id, warn: `state build failed: ${String(err?.message || err)}` })
       return ''
@@ -261,6 +268,9 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         const err = event?.data?.message?.isError || event?.data?.isError || event?.data?.error
         const text = messageText(event?.data?.message ?? event?.data)
         pushItem(session.id, 'tool', [name, err ? '（出错）' : '', text ? text.slice(0, 200) : ''].filter(Boolean).join(' '))
+      } else if (t === 'turn/start') {
+        turnKeys.set(session.id, Date.now())
+        stateCache.delete(session.id)
       } else if (t === 'turn/end') {
         finishTurn(session)
       }
