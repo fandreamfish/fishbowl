@@ -625,7 +625,13 @@ console.log('== M25：每条鱼的配置互相独立 ==')
   // 只改一个子键不应丢掉同 section 的其它键
   writeFishConfig(sdF, fa.meta.creatureId, { comment: { requirePermit: true } })
   const cm = readFishConfig(sdF, fa.meta.creatureId).comment || {}
-  check('子键合并不丢兄弟键', cm.requirePermit === true && cm.perDay !== undefined)
+    // 已经被旧版本写残的文件：下次写入时要按模板补齐
+  fs.writeFileSync(fishConfigPath(sdF, fa.meta.creatureId), JSON.stringify({ comment: { requirePermit: true } }))
+  writeFishConfig(sdF, fa.meta.creatureId, { growth: 1.2 }, base)
+  const cf = readFishConfig(sdF, fa.meta.creatureId)
+  check('残缺文件写入时按模板补全', cf.comment?.perDay !== undefined && cf.growth === 1.2)
+  writeFishConfig(sdF, fa.meta.creatureId, { growth: 3, wake: { absenceHours: 3 }, memory: { consolidateCap: 7 } }, base)
+check('子键合并不丢兄弟键', cm.requirePermit === true && cm.perDay !== undefined)
 check('来历可以按鱼保存', pickFishPatch({ seed: { name: '鲸', background: '来自海' } }).seed?.background === '来自海')
 check('模板里有 seed 键', Object.prototype.hasOwnProperty.call(fullFishConfig(base), 'seed'))
   const fc = bF.birth('丙鱼')

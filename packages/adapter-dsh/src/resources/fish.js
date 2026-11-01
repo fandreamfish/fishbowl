@@ -63,7 +63,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
     if (req.method === 'GET') { send(res, { ok: true, config: fishConfigView(cfg, c), inherited: !hasFishConfig(stateDir, c.meta.creatureId) }); return true }
     if (req.method === 'POST') {
       const body = JSON.parse(await readBody(req) || '{}')
-      writeFishConfig(stateDir, c.meta.creatureId, pickFishPatch(body))
+      writeFishConfig(stateDir, c.meta.creatureId, pickFishPatch(body), cfg)
       try { c.halfLives = halfLivesFor(cfg, c.meta.creatureId) } catch { /* 忽略 */ }
       try { opts.refreshTools?.() } catch { /* 忽略 */ }
       send(res, { ok: true, config: fishConfigView(cfg, c), inherited: false })

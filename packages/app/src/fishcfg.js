@@ -103,13 +103,15 @@ function mergeOneLevel(base, patch) {
   }
   return out
 }
-export function writeFishConfig(stateDir, creatureId, patch) {
+export function writeFishConfig(stateDir, creatureId, patch, cfg = null) {
   const file = fishConfigPath(stateDir, creatureId)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   let cur = {}
   try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) || {} } catch { /* 首次 */ }
   const clean = pickFishPatch(patch)
-  const next = mergeOneLevel(cur, clean)
+  // 有 cfg 时以完整模板打底：即使旧文件缺子键，也会在写入时补齐
+  const base = cfg ? fullFishConfig(cfg) : {}
+  const next = mergeOneLevel(mergeOneLevel(base, cur), clean)
   fs.writeFileSync(file, JSON.stringify(next, null, 2))
   cached.delete(file)
   return next
@@ -182,7 +184,7 @@ export function migrateFishConfigs(cfg, creatures, legacy = null) {
       relation: legacy.relation,
     })
     if (Object.keys(patch).length === 0) continue
-    writeFishConfig(cfg.stateDir, cid, patch)
+    writeFishConfig(cfg.stateDir, cid, patch, cfg)
     n++
   }
   return n
