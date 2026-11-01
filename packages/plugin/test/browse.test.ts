@@ -251,6 +251,8 @@ const pb = await callRoute('POST', '/fishbowl-ui/browse', { browse: { enabled: t
 check('POST /browse 保存', pb.code === 200 && JSON.parse(pb.body).config.enabled === true)
 const pc = await callRoute('POST', '/fishbowl-ui/config', { selfTime: { enabled: true, dailyMax: 2 } })
 check('POST /config 保存自处', pc.code === 200 && JSON.parse(pc.body).selfTime.enabled === true && JSON.parse(pc.body).selfTime.dailyMax === 2)
+const clash = await callRoute('POST', '/fishbowl-ui/fish', { name: '占位鱼', housing: { kind: 'existing', type: 'workspace', id: 'D:\\ws-route' } })
+check('已住的工作区不能再给新鱼（409）', clash.code === 409)
 const fsd = await callRoute('GET', '/fishbowl-ui/fs/dirs?path=' + encodeURIComponent(routeDir))
 check('GET /fs/dirs 列出目录', fsd.code === 200 && JSON.parse(fsd.body).path === routeDir)
 const fsm = await callRoute('POST', '/fishbowl-ui/fs/mkdir', { parent: routeDir, name: '新家' })
