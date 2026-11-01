@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { buildView } from '../../memory/src/index.ts'
+import { buildView, readWriterLock } from '../../memory/src/index.ts'
 
 const RELATION_RE = /我们|关系|信任|约定|答应|承诺|感情|亲密/
 
@@ -62,19 +62,9 @@ function legacyTurnView(e) {
 
 /** 有没有另一个活着的进程也在写这只鱼（双写会让一个人变成两个）。 */
 export function otherWriter(dir) {
-  try {
-    const o = JSON.parse(fs.readFileSync(path.join(dir, '.writer.lock'), 'utf8'))
-    const pid = Number(o?.pid)
-    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return null
-    try {
-      process.kill(pid, 0)
-      return { pid, at: Number(o?.at) || 0 }
-    } catch (e) {
-      return e?.code === 'EPERM' ? { pid, at: Number(o?.at) || 0 } : null
-    }
-  } catch {
-    return null
-  }
+  // 认 pid 存活 + 心跳新鲜度：pid 被系统复用（conhost 等）时不会误报
+  const s = readWriterLock(dir)
+  return s.ok ? null : s.holder ?? null
 }
 
 /** 新结构：账本投影 → 设置页视图（字段名与前端约定一致）。 */

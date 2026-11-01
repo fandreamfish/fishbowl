@@ -12,7 +12,8 @@ import path from 'node:path'
 export interface LockHolder { pid: number; at: number }
 export interface LockStatus { ok: boolean; holder?: LockHolder; stale?: boolean; reason?: string }
 
-const DAY = 86_400_000
+const DEFAULT_STALE_MS = 120_000
+const HEARTBEAT_MS = 30_000
 
 function alive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false
@@ -66,7 +67,7 @@ export function acquireWriterLock(dir: string, opts: { staleMs?: number; now?: n
 
   const holderPid = Number(cur?.pid)
   const age = now - Number(cur?.at ?? 0)
-  const stale = !cur || !alive(holderPid) || age > (opts.staleMs ?? DAY)
+  const stale = !cur || !alive(holderPid) || age > (opts.staleMs ?? DEFAULT_STALE_MS)
 
   if (stale) {
     try {
@@ -78,4 +79,30 @@ export function acquireWriterLock(dir: string, opts: { staleMs?: number; now?: n
   }
 
   return { status: { ok: false, holder: { pid: holderPid, at: Number(cur?.at ?? 0) } }, release: () => {} }
+}
+
+/** 持锁期间定期刷新 at：进程被系统换用同一 pid（如 conhost）时不会误判。 */
+function hold(file: string): () => void {
+  const timer = setInterval(() => {
+    try {
+      const cur = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (Number(cur?.pid) !== process.pid) return
+      fs.writeFileSync(file, JSON.stringify({ pid: process.pid, at: Date.now() }))
+    } catch { /* 锁没了就算了 */ }
+  }, HEARTBEAT_MS)
+  ;(timer as any).unref?.()
+  return () => { clearInterval(timer); release(file) }
+}
+
+/** 读锁状态（给"另一进程在写"的告警用）：认 pid 存活 + 心跳新鲜度。 */
+export function readWriterLock(dir: string, opts: { staleMs?: number; now?: number } = {}): LockStatus {
+  const file = lockPathFor(dir)
+  let cur: LockHolder | null = null
+  try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) } catch { return { ok: true } }
+  const pid = Number(cur?.pid)
+  if (pid === process.pid) return { ok: true }
+  const age = (opts.now ?? Date.now()) - Number(cur?.at ?? 0)
+  const stale = !alive(pid) || age > (opts.staleMs ?? DEFAULT_STALE_MS)
+  if (stale) return { ok: true, stale: true, holder: { pid, at: Number(cur?.at ?? 0) }, reason: 'stale' }
+  return { ok: false, holder: { pid, at: Number(cur?.at ?? 0) } }
 }

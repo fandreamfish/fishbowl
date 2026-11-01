@@ -3,6 +3,7 @@
  * 设计见 docs/MEMORY.md；抽取决策见 docs/MEMORY-MODULE.md。
  */
 export { Memory } from './memory.ts'
+export { readWriterLock } from './lock.ts'
 export { createInstanceStore } from './instance.ts'
 export type { Llm, LlmRequest, TickReport } from './memory.ts'
 
