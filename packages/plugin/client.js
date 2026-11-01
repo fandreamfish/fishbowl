@@ -14,6 +14,8 @@ function makeFactory() {
     const e = (type, props, key) => (key === undefined ? jsx(type, props) : jsx(type, props, key))
 
     const API = '/fishbowl-ui'
+    // 乐观覆盖：刚改的配置先记住，切页/重载时不要被还没写完的旧值盖回去
+    const OPTIMISTIC = new Map()
     const CSS_TAG = 'fishbowl/section.css'
     const CSS = [
       '.fb{color:var(--dsw-alias-label-primary);font-size:13px;line-height:1.7;display:flex;flex-direction:column;gap:12px}',
@@ -558,13 +560,25 @@ function makeFactory() {
           const b = await getJson(API + '/browse')
           // 这一页编辑的是「这条鱼」的配置：不能用全局默认值回填，否则保存后看起来又还原了
           const fv = await getJson(API + '/fish/' + f.id)
-          setCfg(fv.fish?.config?.browse || b.config)
+          const serverBrowse = fv.fish?.config?.browse || b.config
+          const bl = await getJson(API + '/bili')
+          const serverComment = fv.fish?.config?.comment || bl.comment
+          // 刚改过、可能还没写完：先用本地那份，别被旧值盖回去
+          const opt = OPTIMISTIC.get(f.id)
+          if (opt && Date.now() - opt.at < 30_000) {
+            setCfg(opt.browse)
+            setComment(opt.comment)
+            if (JSON.stringify(opt.browse) === JSON.stringify(serverBrowse) && JSON.stringify(opt.comment) === JSON.stringify(serverComment)) {
+              OPTIMISTIC.delete(f.id)
+            }
+          } else {
+            setCfg(serverBrowse)
+            setComment(serverComment)
+          }
           setStatus(await getJson(API + '/fish/' + f.id + '/browse'))
           const h = await getJson(API + '/fish/' + f.id + '/browse/history?days=14&page=0')
           setHist(h)
-          const bl = await getJson(API + '/bili')
           setAuth(bl.auth)
-          setComment(fv.fish?.config?.comment || bl.comment)
           setOwnerMid(bl.auth?.mid ?? '')
           setOwnerName(bl.auth?.nickname ?? '')
           setBiliStatus(await getJson(API + '/fish/' + f.id + '/bili'))
@@ -579,9 +593,15 @@ function makeFactory() {
       useEffect(() => { void loadAll() }, [loadAll])
 
       if (!cfg) return e('div', { style: box, children: err || '上网配置读取中…' }, 'b-loading')
-      const set = (k, v) => setCfg(Object.assign({}, cfg, { [k]: v }))
-      const setAvoid = (k, v) => setCfg(Object.assign({}, cfg, { avoid: Object.assign({}, cfg.avoid || {}, { [k]: v }) }))
-      const setPace = (k, v) => setCfg(Object.assign({}, cfg, { pacing: Object.assign({}, cfg.pacing || {}, { [k]: v }) }))
+      const commit = (nextCfg, nextComment) => {
+        const payload = { browse: nextCfg, comment: nextComment }
+        OPTIMISTIC.set(f.id, { ...payload, at: Date.now() })
+        pendingCfgRef.current = payload
+        saveCfgNow(payload)
+      }
+      const set = (k, v) => { const next = Object.assign({}, cfg, { [k]: v }); setCfg(next); commit(next, comment) }
+      const setAvoid = (k, v) => { const next = Object.assign({}, cfg, { avoid: Object.assign({}, cfg.avoid || {}, { [k]: v }) }); setCfg(next); commit(next, comment) }
+      const setPace = (k, v) => { const next = Object.assign({}, cfg, { pacing: Object.assign({}, cfg.pacing || {}, { [k]: v }) }); setCfg(next); commit(next, comment) }
       const numInp = { ...inp, width: 88, padding: '4px 8px', boxSizing: 'border-box' }
       const field = (label, control, hint, key) => e('div', { key, style: { marginBottom: 9 }, children: [
         e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, children: [
@@ -632,7 +652,7 @@ function makeFactory() {
       }, '')
 
       const cm = comment || { enabled: false, perDay: 1, replyPerDay: 2, replyToReplies: true, scanEveryMin: 30, window: ['20:00', '23:00'], atOwner: true }
-      const setCm = (k, v) => setComment(Object.assign({}, cm, { [k]: v }))
+      const setCm = (k, v) => { const next = Object.assign({}, cm, { [k]: v }); setComment(next); commit(cfg, next) }
       const saveBili = () => act(async () => {
         // 账号是这台机器一份；评论开关是这条鱼自己的
         await postJson(API + '/bili', { auth: { mid: ownerMid, nickname: ownerName } })
@@ -982,6 +1002,28 @@ function makeFactory() {
       // 切页时补存还没落盘的那一笔
       useEffect(() => () => personaSaveNow(personaPendingRef.current), [data?.fish?.id])
 
+      const setGrowthNow = (v) => {
+        setGrowth(v)
+        personaPendingRef.current = data?.born ? { growth: v } : { growth: v, seed: { name: seedName, background: seedBg } }
+      }
+      const setSeedBgNow = (v) => {
+        setSeedBg(v)
+        personaPendingRef.current = data?.born ? { growth } : { growth, seed: { name: seedName, background: v } }
+      }
+
+      // 作息：点一下就存（不依赖防抖，切页也不会丢）
+      const saveRoutine = (next) => {
+        setRoutine(next)
+        const id = data?.fish?.id || view?.id
+        if (!id) return
+        const key = JSON.stringify(next)
+        if (key === lastRoutineRef.current) return
+        lastRoutineRef.current = key
+        void postJson(API + '/fish/' + id + '/config', next)
+          .then(() => setMsg('已自动保存'))
+          .catch((x) => setErr(String((x && x.message) || x)))
+      }
+
       const load = useCallback(async (attempt = 0) => {
         try {
           const d = await getJson(API + '/fish')
@@ -1214,12 +1256,12 @@ function makeFactory() {
         const wake = r.wake || {}
         const contact = r.contact || {}
         const selfTime = r.selfTime || {}
-        const setWake = (k, v) => setRoutine({ ...r, wake: { ...wake, [k]: v } })
-        const setContact = (k, v) => setRoutine({ ...r, contact: { ...contact, [k]: v } })
+        const setWake = (k, v) => saveRoutine({ ...r, wake: { ...wake, [k]: v } })
+        const setContact = (k, v) => saveRoutine({ ...r, contact: { ...contact, [k]: v } })
         const diary = r.diary || {}
-        const setDiary = (k, v) => setRoutine({ ...r, diary: { ...diary, [k]: v } })
+        const setDiary = (k, v) => saveRoutine({ ...r, diary: { ...diary, [k]: v } })
         const affectCfg = r.affect || {}
-        const setAffect = (k, v) => setRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
+        const setAffect = (k, v) => saveRoutine({ ...r, affect: { ...affectCfg, [k]: v } })
         const setSelf = (k, v) => setRoutine({ ...r, selfTime: { ...selfTime, [k]: v } })
         const timeInput = (val, onChange, key) => e('input', { key, type: 'time', style: { ...inp, width: 112 }, value: val ?? '00:00', onInput: (ev) => onChange(ev.target.value) }, key)
         const numInput = (val, onChange, key, min, max) => e('input', { key, type: 'number', min: String(min), max: String(max), style: { ...inp, width: 84 }, value: val ?? 0, onInput: (ev) => onChange(Number(ev.target.value)) }, key)
@@ -1372,14 +1414,14 @@ function makeFactory() {
           e('div', { style: box, children: [
 
             e('div', { style: { ...lab, marginBottom: 6 }, children: '来历（一两句话；越具体，涌现越少）' }, 'l2'),
-            e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, disabled: born, onInput: (ev) => setSeedBg(ev.target.value) }, 't'),
+            e('textarea', { style: { ...inp, minHeight: 64, resize: 'vertical', opacity: born ? 0.5 : 1 }, value: seedBg, disabled: born, onInput: (ev) => setSeedBgNow(ev.target.value) }, 't'),
           ] }, 'seed'),
           e('div', { style: box, children: [
             e('div', { style: { ...rowS, marginBottom: 4 }, children: [
               e('span', { style: lab, children: '成长率' }, 'l'),
               e('span', { style: { fontSize: 12, color: 'var(--dsw-alias-text-2, #666)' }, children: growth.toFixed(2) + ' · 学得快也忘得快' }, 'v'),
             ] }, 'r'),
-            e('input', { type: 'range', min: '0.25', max: '4', step: '0.05', value: growth, style: { width: '100%' }, onInput: (ev) => setGrowth(Number(ev.target.value)) }, 's'),
+            e('input', { type: 'range', min: '0.25', max: '4', step: '0.05', value: growth, style: { width: '100%' }, onInput: (ev) => setGrowthNow(Number(ev.target.value)) }, 's'),
           ] }, 'growth'),
           e('div', { style: rowS, children: [
             e('span', { style: { ...lab, fontSize: 12 }, children: msg || err || '改动会自动保存' }, 'm'),
