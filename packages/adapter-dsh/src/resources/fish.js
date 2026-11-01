@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { housingToOccupancy, injectMessage, moveInText, renameScopeAsync, restoreOriginalAsync } from '../../../app/src/index.js'
-import { recordPermit } from '../../../being/src/index.ts'
+import { homeDir, recordPermit } from '../../../being/src/index.ts'
 import { fishConfigView, halfLivesFor, hasFishConfig, pickFishPatch, writeFishConfig } from '../../../app/src/index.js'
 import { memoryDetail } from '../views-memory.js'
 import { browseStatus, lookForCreature } from '../../../bilibili/src/index.js'
@@ -39,7 +39,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
           if (i) await new Promise((r) => setTimeout(r, 500))
           agent = host.agentFor?.(occ.id) ?? null
         }
-        if (agent) await host.wake(agent, injectMessage(moveInText({ name, occupancy: occ, dataDir: c.store.dir }), { mode: 'self', reason: null }))
+        if (agent) await host.wake(agent, injectMessage(moveInText({ name, occupancy: occ, dataDir: homeDir(c) }), { mode: 'self', reason: null }))
         else console.error('[fishbowl] move-in wake skipped: no live agent for', occ.id)
       } catch (e) { console.error('[fishbowl] move-in wake failed:', String(e?.message ?? e)) }
     }
@@ -94,7 +94,7 @@ export async function handleFish({ cfg, binding, host, stateDir, opts, views, se
         if (i) await new Promise((r) => setTimeout(r, 500))
         agent = host.agentFor?.(occ.id) ?? null
       }
-      if (agent) await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ, dataDir: c.store.dir }), { mode: 'self', reason: null }))
+      if (agent) await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ, dataDir: homeDir(c) }), { mode: 'self', reason: null }))
     } catch (e) { console.error('[fishbowl] move wake failed:', String(e?.message ?? e)) }
 
     send(res, { ok: true, archived, fish: fishView(binding.get(parts[1])) })

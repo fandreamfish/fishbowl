@@ -16,6 +16,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { homeDir } from '../../being/src/index.ts'
 
 /** @param {import('../../src/core/types.ts').Bias} bias */
 export function verifyDecision(bias, toolName, cfg) {
@@ -92,6 +93,35 @@ export function createConstraints(ctx, binding, cfg, host) {
         const name = toolNameOf(exec)
         const ws = workspaceOfExec(exec)
         // 硬地板（很窄）：系统级破坏性命令一律不代她执行。不是安全边界，是保险丝。
+        // 她的家：只有 home/ 可以改，别的地方可以看
+        let home = ''
+        try {
+          const occ = typeof binding.occupantOf === 'function' ? binding.occupantOf({ sessionId: sid, workspace: ws }) : null
+          if (occ?.store?.dir) home = homeDir(occ).replace(/[\\/]+$/, '').toLowerCase()
+        } catch { home = '' }
+        if (home) {
+          let args = {}
+          try {
+            const raw = exec?.data?.arguments ?? exec?.data?.args ?? '{}'
+            args = typeof raw === 'string' ? JSON.parse(raw) : (raw || {})
+          } catch { args = {} }
+          const inside = (p) => {
+            const v = String(p ?? '').replace(/[\\/]+$/, '').toLowerCase()
+            return !!v && (v === home || v.startsWith(home + '\\') || v.startsWith(home + '/'))
+          }
+          if (['write', 'edit', 'apply_patch', 'multi_edit', 'notebook_edit'].includes(name)) {
+            const target = args.file_path ?? args.path
+            if (target && !inside(target)) return 'fishbowl: 只能改你自己的文件夹（' + home + '）；别的地方可以看，但不要改。'
+          }
+          if (name === 'pwsh' || name === 'bash') {
+            const cmd = String(args.command ?? '')
+            const writey = /(set-content|add-content|out-file|new-item|remove-item|copy-item|move-item|rename-item|mkdir|del\s|rm\s|>\s)/i.test(cmd)
+            if (writey) {
+              const paths = cmd.match(/[a-z]:[\\/][^\s'\"|;]+/gi) || []
+              if (paths.some((p) => !inside(p))) return 'fishbowl: 只能改你自己的文件夹（' + home + '）；别的地方可以看，但不要改。'
+            }
+          }
+        }
         if (name === 'pwsh' || name === 'bash') {
           let cmd = ''
           try {
@@ -184,5 +214,5 @@ function workspaceOfExec(exec) {
 }
 
 function toolNameOf(exec) {
-  return exec?.toolName || exec?.name || exec?.tool?.name || ''
+  return exec?.toolName || exec?.name || exec?.tool?.name || exec?.data?.toolName || exec?.data?.name || ''
 }

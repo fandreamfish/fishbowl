@@ -327,10 +327,11 @@ const memFish = Creature.create(memDir, {
 memFish.recordEpisode('turn', { goalCongruence: -0.5, agency: 0.5, certainty: 0.5, normViolation: 0, relationalImpact: -0.3, stake: 0.6, attribution: 'other' }, 'user: 这个方案不行\nassistant: 我改。')
 memFish.recordSemantic('用户讨厌被当成工具人', ['1', '2'], 0.8)
 memFish.recordDiary('2026-11-01', '日记正文', new Date(2026, 10, 1, 10, 30).getTime())
-check('日记落成单独文件', fs.existsSync(path.join(memDir, 'diary', '2026-11-01.md')) && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01.md'), 'utf8').includes('日记正文'))
+check('日记落成单独文件', fs.existsSync(path.join(memDir, 'home', 'diary', '2026-11-01.md')) && fs.readFileSync(path.join(memDir, 'home', 'diary', '2026-11-01.md'), 'utf8').includes('日记正文'))
 memFish.recordDiary('2026-11-01', '第二篇', new Date(2026, 10, 1, 11, 0).getTime())
-const diaryFiles = fs.readdirSync(path.join(memDir, 'diary'))
-check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
+const diaryFiles = fs.readdirSync(path.join(memDir, 'home', 'diary'))
+check('同一天再写一篇不覆盖旧的', diaryFiles.length === 2 && fs.readFileSync(path.join(memDir, 'home', 'diary', '2026-11-01-2.md'), 'utf8').includes('第二篇'))
+check('家目录与日记目录已创建', fs.existsSync(path.join(memDir, 'home', 'diary')))
 // 许可与审计
 const { recordPermit, findPermit, consumePermit, activePermits, recordBreach, recentBreaches } = await import('../../being/src/index.ts')
 const permitDir = path.join(stateDir, 'permit-fixture')
@@ -350,8 +351,8 @@ permitFish.recordRequest('申请：今天可以刷 B 站', undefined, { action: 
 check('请求带结构化字段', permitFish.requests().slice(-1)[0]?.action === 'browse')
 check('待答请求能被界面看到', permitFish.pendingRequests().some((r) => r.action === 'browse'))
 memFish.recordNote('纸条正文', new Date(2026, 10, 1, 11, 0).getTime())
-const noteFiles = fs.existsSync(path.join(memDir, 'notes')) ? fs.readdirSync(path.join(memDir, 'notes')) : []
-check('小纸条单独成文件', noteFiles.length === 1 && fs.readFileSync(path.join(memDir, 'notes', noteFiles[0]), 'utf8').includes('纸条正文'))
+const noteFiles = fs.existsSync(path.join(memDir, 'home', 'notes')) ? fs.readdirSync(path.join(memDir, 'home', 'notes')) : []
+check('小纸条单独成文件', noteFiles.length === 1 && fs.readFileSync(path.join(memDir, 'home', 'notes', noteFiles[0]), 'utf8').includes('纸条正文'))
 memFish.recordProcedure('他抱怨方案时', '先问哪里不对再改', ['2'], 0.7)
 const semEv = memFish.store.readEvents().find((e) => e.t === 'semantic')
 if (semEv) memFish.recordReinforce(semEv.id)
@@ -424,6 +425,18 @@ e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u1', c
 e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '带伞了吗' }] } } })
 e2eHandler(e2eSession, { type: 'turn/end', data: {} })
 await new Promise((r) => setTimeout(r, 250))
+// 写保护：只有 home/ 可以改
+let e2eGuard: any = null
+createConstraints(null, e2eBinding, e2eCfg, {
+  guard: (fn: any) => { e2eGuard = fn; return () => {} },
+  onSessionEvent: () => () => {},
+  preExecute: () => () => {},
+  agentFor: () => e2eAgent,
+} as any)
+const execWrite = (filePath: string) => ({ agent: { session: e2eSession }, data: { toolName: 'write', arguments: JSON.stringify({ file_path: filePath }) } })
+const homePath = path.join(e2eFish.store.dir, 'home', 'x.txt')
+check('能改自己家目录里的文件', e2eGuard(execWrite(homePath)) === undefined)
+check('不能改家目录以外的东西', String(e2eGuard(execWrite('C:/Windows/System32/drivers/etc/hosts')) || '').includes('只能改你自己的文件夹'))
 const e2eEvents = e2eFish.store.readEvents()
 check('一轮结束落了一条 turn（不再写 episode）', e2eEvents.some((e: any) => e.t === 'turn') && !e2eEvents.some((e: any) => e.t === 'episode'))
 check('turn 里存的是完整转录', String(e2eEvents.find((e: any) => e.t === 'turn')?.note ?? '').includes('带伞了吗'))

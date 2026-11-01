@@ -7,6 +7,7 @@ import path from 'node:path'
 import type { Creature } from './creature.ts'
 import type { CreatureEvent } from '../../affect/src/index.ts'
 import { uid } from '../../affect/src/index.ts'
+import { homeDiaryDir, homeNotesDir } from './home.ts'
 
 export function hasDiary(creature: Creature, date: string): boolean {
   return creature.store.readEvents().some((e) => e.t === 'diary' && e.date === date)
@@ -93,7 +94,7 @@ const pad = (n: number) => String(n).padStart(2, '0')
 
 /** 日记：一个人一个文件夹，一天一个文件。 */
 export function writeDiaryFile(creature: Creature, date: string, text: string, ts?: number): string {
-  const dir = path.join(creature.store.dir, 'diary')
+  const dir = homeDiaryDir(creature)
   fs.mkdirSync(dir, { recursive: true })
   const at = ts ?? Date.now()
   const when = new Date(at)
@@ -113,7 +114,7 @@ export function writeDiaryFile(creature: Creature, date: string, text: string, t
 
 /** 小纸条：一个人一个文件夹，一条一个文件。 */
 export function writeNoteFile(creature: Creature, text: string, ts?: number): string {
-  const dir = path.join(creature.store.dir, 'notes')
+  const dir = homeNotesDir(creature)
   fs.mkdirSync(dir, { recursive: true })
   const at = ts ?? Date.now()
   const d = new Date(at)

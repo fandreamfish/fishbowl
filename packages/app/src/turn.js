@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ACTIVITY_RE, breachLine, mergePendingText, permitLine } from '../../being/src/index.ts'
+import { ACTIVITY_RE, breachLine, homeDir, mergePendingText, permitLine } from '../../being/src/index.ts'
 import { COMMITMENT_RE, REQUEST_RE } from '../../being/src/index.ts'
 import { applyAppraisal, salienceOf, toBias } from '../../affect/src/index.ts'
 import { createMemoryStore } from './memory-store.js'
@@ -273,7 +273,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
     // 声音：只给"有鱼住"的会话注册（scoped，只作用于这个 agent）
     try {
       const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
-      const dataLine = `\n\n你的东西都在 ${creature.store.dir}：日记（diary/）、小纸条（notes/）、记忆账本都在那里。你想写下、创建、保存的任何东西都放到这个文件夹里，不要写到别处；房间只是你住的地方。你的账本一开始是空的：不要从 .fishbowl\\\\trash、旧系统目录、或别人的房间文件里认领过去或日记。`
+      const dataLine = `\n\n你的家当都在 ${homeDir(creature)}：日记（diary/）、小纸条（notes/）。这个文件夹是你的，想写什么、存什么都放这里；别的地方可以看，但不要改。你的账本一开始是空的：不要从 .fishbowl\\\\trash、旧系统目录、或别人的房间文件里认领过去或日记。`
       host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine + dataLine)
       host.stateSection?.(agent, (context) => buildStateText(context?.agent?.session ?? agent?.session ?? { id: sid }))
       // 打开房间时补一轮总结：积压不必等到下次对话或十分钟清扫

@@ -15,6 +15,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { injectMessage, moveInText } from '../../../app/src/index.js'
+import { homeDir } from '../../../being/src/index.ts'
 
 const SKIP = new Set(['.writer.lock', 'projection.json', 'snapshot.json', 'cache.json'])
 
@@ -141,7 +142,7 @@ export async function handleTransfer({ cfg, binding, host, send, readBody }, req
           const agent = host.agentFor?.(s.id)
           if (agent) {
             try {
-              await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ, dataDir: c.store.dir }), { mode: 'self', reason: null }))
+              await host.wake(agent, injectMessage(moveInText({ name: c.meta.name, occupancy: occ, dataDir: homeDir(c) }), { mode: 'self', reason: null }))
             } catch { /* 唤醒失败不影响入住 */ }
           }
           housed.push({ id: c.meta.creatureId, name: c.meta.name, sessionId: s.id })

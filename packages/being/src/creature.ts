@@ -12,6 +12,7 @@ import {
 } from '../../affect/src/index.ts'
 import { memoryWindowDays } from '../../affect/src/index.ts'
 import { Store } from './store.ts'
+import { ensureHome } from './home.ts'
 import {
   activeGrants as activeGrantsOf,
   dialogOnly,
@@ -52,7 +53,9 @@ export class Creature {
 
   static open(dir: string, opts: { halfLives?: HalfLives; waking?: { window: [string, string]; timezone: string } | null } = {}): Creature {
     const store = new Store(dir)
-    return new Creature(store, store.readMeta(), opts.halfLives, opts.waking ?? null)
+    const c = new Creature(store, store.readMeta(), opts.halfLives, opts.waking ?? null)
+    try { ensureHome(c) } catch { /* 家目录建不出来不影响读账本 */ }
+    return c
   }
 
   /**
