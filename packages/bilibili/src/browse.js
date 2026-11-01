@@ -139,46 +139,6 @@ export function describeErr(r) {
   return `打不开（${code}）。`
 }
 
-/**
- * 完整一轮：拿候选 → 深读 → 拼素材。
- * 不抛出；返回 { ok, text, picks, note }。
- */
-export async function gather(client, cfg, o = {}) {
-  const note = []
-  try {
-    const b = cfg?.browse ?? cfg ?? {}
-    const seen = o.seen ?? new Set()
-    const list = await candidates(client, { browse: b }, { seen, rand: o.rand })
-    if (!list.length) return { ok: false, text: '', picks: [], note: '没有可看的（都是看过的或被过滤了）' }
-
-    const packs = []
-    for (const v of list) {
-      try {
-        const p = await absorb(client, v, { browse: b })
-        if (p.blocked) {
-          note.push(`${v.bvid} 标签命中黑名单(${p.blocked})`)
-          continue
-        }
-        packs.push(p)
-      } catch (err) {
-        note.push(`${v.bvid} 深读失败：${String(err?.message ?? err).slice(0, 60)}`)
-      }
-    }
-    if (!packs.length) return { ok: false, text: '', picks: [], note: note.join('；') || '没有可看的' }
-
-    const text = debrief(renderMaterial(packs, { cap: BROWSE_TOOL_MATERIAL }), 'B站')
-    return {
-      ok: true,
-      text,
-      picks: packs.map((p) => slimItem(p.video)),
-      note: note.join('；'),
-      packs,
-    }
-  } catch (err) {
-    return { ok: false, text: '', picks: [], note: String(err?.message ?? err) }
-  }
-}
-
 /** 指定看一条 / 搜 / 相关 / 首页。 */
 export async function lookOnce(o) {
   const { client, cfg, creature } = o

@@ -98,10 +98,6 @@ export function browseDayKey(nowMs: number, timezone = 'Asia/Shanghai'): string 
   }
 }
 
-export function isBvid(v: any): boolean {
-  return /^BV[0-9A-Za-z]{8,12}$/.test(String(v ?? '').trim())
-}
-
 /** 从一段文字里抠 BV 号（她可能收到 BV 号或链接）。 */
 export function bvidFrom(text: any): string {
   const m = /BV[0-9A-Za-z]{8,12}/.exec(String(text ?? ''))

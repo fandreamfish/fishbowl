@@ -56,11 +56,6 @@ export function countToday(creature, day) {
   return readSeen(creature).filter((r) => r?.day === day && r?.status === 'ok').length
 }
 
-export function lastSeenAt(creature) {
-  const list = readSeen(creature)
-  return Number(list[list.length - 1]?.ts ?? 0)
-}
-
 export function todayItems(creature, day) {
   return seenItemsForDay(readSeen(creature), day)
 }

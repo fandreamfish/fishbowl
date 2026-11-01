@@ -1,4 +1,4 @@
-﻿import fs from 'node:fs'
+import fs from 'node:fs'
 import path from 'node:path'
 const root = process.cwd()
 const files = []
@@ -12,7 +12,7 @@ function walk(d) {
 }
 for (const d of ['src', 'packages']) walk(d, [])
 const grp = (rel) => {
-  if (rel.startsWith('src/')) return 'src(兼容层)'
+  if (rel.startsWith('src/')) return 'src(tools)'
   const m = rel.match(/^packages\/([^/]+)\//)
   return m ? m[1] : 'other'
 }

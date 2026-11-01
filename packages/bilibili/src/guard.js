@@ -114,12 +114,3 @@ export function screenOutgoing(text) {
   if (looksLikeLeak(s).hit) return { ok: false, text: '', why: 'leak' }
   return { ok: true, text: s, why: '' }
 }
-
-/** 素材里取一段干净的标题/简介。 */
-export function safeMaterialText(pack) {
-  const clean = (x, n) => sanitizeForeign(String(x ?? '').replace(/\s+/g, ' ').trim()).text.slice(0, n)
-  return [
-    clean(pack?.video?.title, 120),
-    clean(pack?.desc, 400),
-  ].filter(Boolean).join(' / ')
-}
