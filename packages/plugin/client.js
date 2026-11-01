@@ -846,7 +846,6 @@ function makeFactory() {
         try {
           const d = await getJson(API + '/fish')
           setData(d)
-          setGrowth(d.config.growth)
           setSeedName(d.config.seed?.name ?? '')
           setSeedBg(d.config.seed?.background ?? '')
           setRoutine({ wake: d.config.wake ?? {}, contact: d.config.contact ?? {}, selfTime: d.config.selfTime ?? {}, affect: d.config.affect ?? {}, diary: d.config.diary ?? {} })
@@ -858,6 +857,12 @@ function makeFactory() {
         }
       }, [])
       useEffect(() => { void load() }, [load])
+      // 成长率是每条鱼自己的：看哪条鱼就显示哪条鱼的值，保存后刷新也是它
+      useEffect(() => {
+        if (!data || view.level !== 'fish') return
+        const f0 = (data.fish || []).find((x) => x.id === view.id)
+        if (f0 && typeof f0.config?.growth === 'number') setGrowth(f0.config.growth)
+      }, [data, view.level, view.id])
 
       const fish = (data && data.fish) || []
       const selected = view.level === 'fish' ? fish.find((f) => f.id === view.id) : null
