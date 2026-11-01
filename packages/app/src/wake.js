@@ -22,7 +22,7 @@ import { recordWake } from '../../being/src/signals.ts'
 import { countToday } from '../../bilibili/src/store.js'
 import { markReplySeen, scanDueReplies } from '../../bilibili/src/comment.js'
 import { markSelfTime } from '../../bilibili/src/runtime.js'
-import { wakeReason, wakeSituation, wakeTrigger, selfSituation, selfTimeEnabled, selfGateFor, waitIdle } from './wake/plan.js'
+import { wakeReason, wakeSituation, wakeTrigger, selfSituation, selfTimeEnabled, selfGateFor, waitIdle, wakeStatePath } from './wake/plan.js'
 export * from './wake/plan.js'
 
 

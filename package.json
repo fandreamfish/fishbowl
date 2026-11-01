@@ -14,7 +14,7 @@
     "test:bili": "node packages/plugin/test/bili.test.ts",
     "test:bridge": "node packages/bridge-qq/test/unit.test.ts",
     "check:layers": "node scripts/dev/check-layers.mjs",
-    "test:all": "node scripts/dev/check-layers.mjs && node src/test.ts && node packages/memory/test/unit.test.ts && node packages/plugin/test/unit.test.ts && node packages/plugin/test/browse.test.ts && node packages/plugin/test/bili.test.ts && node packages/bridge-qq/test/unit.test.ts",
+    "test:all": "node scripts/dev/check-layers.mjs && node scripts/dev/test-all.mjs",
     "smoke": "node scripts/smoke/m7-apply-smoke.ts"
   }
 }

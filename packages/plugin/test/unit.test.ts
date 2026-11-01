@@ -627,7 +627,11 @@ console.log('== M38：设置页分支完整（回归） ==')
   for (const p of ['status', 'home', 'routine', 'browse', 'persona', 'memory']) {
     check(`页签 ${p} 有分支`, src.includes(`page === '${p}'`))
   }
-  check('状态分支以住所分支收尾（防止掉进 home 覆盖 body）', /\}, 'status'\)\s*\} else if \(page === 'home'\)/.test(src))
+  const cap = (p) => p[0].toUpperCase() + p.slice(1)
+  for (const p of ['status', 'home', 'routine', 'browse', 'persona', 'memory']) {
+    check(`页签 ${p} 有 render 函数`, src.includes(`function render${cap(p)}()`))
+    check(`页签 ${p} 在分发表里`, src.includes(`body = render${cap(p)}()`))
+  }
 }
 console.log('== M39：能力是唯一开关（不再有重复配置） ==')
 {

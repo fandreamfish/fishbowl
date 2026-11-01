@@ -19,6 +19,7 @@ import { callLLM } from './llm.js'
 import { voiceRulesFor } from '../../voice/src/voice.js'
 import { grantLine } from './grant.js'
 import { createAfterTurn, forgivenessOf } from './turn/after.js'
+export { forgivenessOf } from './turn/after.js'
 
 /**
  * 把这一轮缓存拼成转录。

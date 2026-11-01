@@ -4,11 +4,11 @@
  * 这些都不是对话主链路：慢、可失败、不影响回复本身。
  * 从 turn.js 拆出来，主链路只剩「缓冲 → 评价 → 情绪 → 记忆 → 注入」。
  */
-import { ACTIVITY_RE, ACTIVITY_SYSTEM_PROMPT, parseActivity } from '../../being/src/activity.ts'
-import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../being/src/commitment.ts'
-import { activeGrants, recordGrant } from '../../being/src/signals.ts'
-import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, inDiaryWindow, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from '../../journal/src/journal.js'
-import { todayItems } from '../../bilibili/src/store.js'
+import { ACTIVITY_RE, ACTIVITY_SYSTEM_PROMPT, parseActivity } from '../../../being/src/activity.ts'
+import { BROKEN_SYSTEM_PROMPT, COMMITMENT_RE, COMMITMENT_SYSTEM_PROMPT, parseBroken, parseCommitment, REQUEST_RE } from '../../../being/src/commitment.ts'
+import { activeGrants, recordGrant } from '../../../being/src/signals.ts'
+import { buildDiaryPrompt, canAsk, DIARY_SYSTEM_PROMPT, inDiaryWindow, localDate, NOTE_SYSTEM_PROMPT, parseDiary, parseNote, parseRequest, REQUEST_SYSTEM_PROMPT } from '../../../journal/src/journal.js'
+import { todayItems } from '../../../bilibili/src/store.js'
 import { IDENTITY_SYSTEM_PROMPT, parseIdentity } from '../identity.js'
 import { detectGrant } from '../grant.js'
 import { workspaceOf } from '../extract.js'
