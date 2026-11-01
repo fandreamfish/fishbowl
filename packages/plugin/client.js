@@ -894,7 +894,7 @@ function makeFactory() {
             : e('div', { style: box, children: '还没有鱼。点下面「带一条新的回家」。' }, 'none'),
           e('div', { style: { ...rowS, marginTop: 8 }, children: [
             e('span', { style: lab, children: fish.length + ' 条' }, 'c'),
-            e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
+            e('button', { style: { ...btnP, padding: '7px 16px' }, onClick: () => { setNewOpen(true); setNewName(''); setNewErr(''); setNewHouse({ mode: 'new-session', id: '', path: '' }) }, children: '带一条新的回家' }, 'newbtn'),
             e('button', {
               style: { ...btnS, padding: '7px 14px', marginLeft: 8 },
               onClick: () => { setCleanOpen(true); setCleanWs(''); setCleanMsg('') },
@@ -983,7 +983,7 @@ function makeFactory() {
                       ? { kind: 'new-both', path: newHouse.path }
                       : { kind: 'new-session', workspace: newHouse.id }
                     await postJson(API + '/fish', { name, housing })
-                    setNewOpen(false); setNewName(''); setNewErr(''); setNewHouse({ mode: 'none', id: '', path: '' })
+                    setNewOpen(false); setNewName(''); setNewErr(''); setNewHouse({ mode: 'new-session', id: '', path: '' })
                     await load()
                   } catch (x) { setNewErr(String((x && x.message) || x)) }
                 }, children: '创建' }, 'ok'),
