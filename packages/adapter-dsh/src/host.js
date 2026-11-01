@@ -121,6 +121,7 @@ export function createDshHost(ctx, cfg) {
   }
 
   let lastSessionError = null
+  let lastCreate = null
 
   /** 安全取服务：ctx.agents 是注入属性，未激活时会抛，一律走 get + 兜底。 */
   function svc(name) {
@@ -331,13 +332,24 @@ export function createDshHost(ctx, cfg) {
       const presets = svc('agentPresets')
       let agentPreset = null
       let setup = null
-      if (presets?.resolve && presets?.mount) {
+      let presetError = null
+      lastCreate = { hasPresets: !!presets, presetId: null, presetError: null, setupCalled: false }
+      if (presets?.mount) {
         try {
-          const resolved = await presets.resolve(undefined)
-          agentPreset = resolved?.id ?? null
-          if (agentPreset) setup = async (agentCtx) => { await presets.mount(agentCtx, agentPreset) }
-        } catch (e) { console.error('[fishbowl] preset resolve failed:', String(e?.message ?? e)) }
-      }
+          let id = null
+          try { id = (await presets.resolve(undefined))?.id ?? null } catch (e) { presetError = 'resolve: ' + String(e?.message ?? e) }
+          if (!id && typeof presets.list === 'function') {
+            const list = await presets.list()
+            id = list?.[0]?.id ?? null
+            if (!id && !presetError) presetError = 'preset 列表为空'
+          }
+          agentPreset = id
+          if (agentPreset) setup = async (agentCtx) => { lastCreate.setupCalled = true; await presets.mount(agentCtx, agentPreset) }
+        } catch (e) { presetError = String(e?.message ?? e) }
+      } else presetError = '宿主没有 agentPresets 服务'
+      lastCreate.presetId = agentPreset
+      lastCreate.presetError = presetError
+      if (!agentPreset) throw new Error('无法挂载 agent preset（' + (presetError || '未知原因') + '）：这样建出来的房间没有工具')
       let handle = null
       let lastErr = null
       for (const agentOptions of [
@@ -511,6 +523,7 @@ export function createDshHost(ctx, cfg) {
       return {
         hasSessions: !!sessions,
       lastSessionError,
+      lastCreate,
       wsProbe: (() => {
         try {
           const list = workspaceRegistry()?.list?.() ?? []
