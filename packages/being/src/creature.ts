@@ -20,6 +20,13 @@ import {
   selfWakeTimes as selfWakeTimesOf,
 } from './signals.ts'
 import { uid, wakingSecondsBetween } from '../../affect/src/index.ts'
+import {
+  hasDiary as hasDiaryOf, recordDiary as recordDiaryOf, diaries as diariesOf,
+  recordNote as recordNoteOf, notes as notesOf,
+  recordRequest as recordRequestOf, answerRequest as answerRequestOf,
+  requests as requestsOf, requestCountSince as requestCountSinceOf,
+  pendingRequests as pendingRequestsOf, requestDigest as requestDigestOf,
+} from './journal-facets.ts'
 
 export class Creature {
   readonly store: Store
@@ -237,77 +244,53 @@ export class Creature {
 
   /** 今天的日记写过了吗（date 形如 YYYY-MM-DD）。 */
   hasDiary(date: string): boolean {
-    return this.store.readEvents().some(e => e.t === 'diary' && e.date === date)
+    return hasDiaryOf(this, date)
   }
 
   recordDiary(date: string, text: string, ts?: number): void {
-    this.store.appendEvent({ t: 'diary', id: uid(), ts: ts ?? Date.now(), date, text })
+    recordDiaryOf(this, date, text, ts)
   }
 
   diaries(limit = 14): { date: string; text: string; ts: number }[] {
-    return this.store
-      .readEvents()
-      .filter((e): e is Extract<CreatureEvent, { t: 'diary' }> => e.t === 'diary')
-      .slice(-limit)
-      .map(e => ({ date: e.date, text: e.text, ts: e.ts }))
-      .reverse()
+    return diariesOf(this, limit)
   }
 
   recordNote(text: string, ts?: number): void {
-    this.store.appendEvent({ t: 'note', id: uid(), ts: ts ?? Date.now(), text })
+    recordNoteOf(this, text, ts)
   }
 
   notes(limit = 10): { text: string; ts: number }[] {
-    return this.store
-      .readEvents()
-      .filter((e): e is Extract<CreatureEvent, { t: 'note' }> => e.t === 'note')
-      .slice(-limit)
-      .map(e => ({ text: e.text, ts: e.ts }))
-      .reverse()
+    return notesOf(this, limit)
   }
 
   /** 请求：她有事想征求你的同意。 */
   recordRequest(text: string, ts?: number): void {
-    this.store.appendEvent({ t: 'request', id: uid(), ts: ts ?? Date.now(), text })
+    recordRequestOf(this, text, ts)
   }
 
   /** 回答一个请求：yes / no。 */
   answerRequest(ref: string, answer: 'yes' | 'no', ts?: number): void {
-    this.store.appendEvent({ t: 'request-answered', id: uid(), ts: ts ?? Date.now(), ref, answer })
+    answerRequestOf(this, ref, answer, ts)
   }
 
   /** 所有请求（含已答/未答）。 */
   requests(): { id: string; text: string; ts: number; answer: 'yes' | 'no' | null }[] {
-    const events = this.store.readEvents()
-    const answers = new Map<string, 'yes' | 'no'>()
-    for (const e of events) if (e.t === 'request-answered') answers.set(e.ref, e.answer)
-    return events
-      .filter((e): e is Extract<CreatureEvent, { t: 'request' }> => e.t === 'request')
-      .map(e => ({ id: e.id, text: e.text, ts: e.ts, answer: answers.get(e.id) ?? null }))
+    return requestsOf(this)
   }
 
   /** 配额：某个时间点之后提过几次请求。 */
   requestCountSince(since: number): number {
-    return this.store.readEvents().filter(e => e.t === 'request' && e.ts >= since).length
+    return requestCountSinceOf(this, since)
   }
 
   /** 还有没有没答的请求（答过的进历史）。 */
   pendingRequests(): { id: string; text: string; ts: number }[] {
-    return this.requests().filter(r => r.answer === null).map(({ id, text, ts }) => ({ id, text, ts }))
+    return pendingRequestsOf(this)
   }
 
   /** 请求摘要：还在等回音的 + 最近 24 小时他答过的（注入用）。 */
   requestDigest(now = Date.now()): { pending: string[]; answered: { text: string; answer: 'yes' | 'no' }[] } {
-    const events = this.store.readEvents()
-    const answeredAt = new Map<string, number>()
-    for (const e of events) if (e.t === 'request-answered') answeredAt.set(e.ref, e.ts)
-    const list = this.requests()
-    const pending = list.filter(r => r.answer === null).slice(-3).map(r => r.text)
-    const answered = list
-      .filter(r => r.answer !== null && now - (answeredAt.get(r.id) ?? 0) < 86_400_000)
-      .slice(-2)
-      .map(r => ({ text: r.text, answer: r.answer }))
-    return { pending, answered }
+    return requestDigestOf(this, now)
   }
 
   /** 当前正在一起做的事（记忆窗口内最后一次 started 且未 ended）。 */

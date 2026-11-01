@@ -87,4 +87,4 @@
 | P3 | `memory-store` 归位；`creature` 拆 facet | 中 |
 | P4 | 测试按域拆分 | 低 |
 
-进度：接口化在 0.3.3 完成；两套状态块在 0.3.4 合并（enderStateBlock 唯一实现）。P1 内部收口、P2/P3 待做。
+进度：接口化 0.3.3；状态块合并 0.3.4；配置 schema 下沉 0.3.5；记忆实例归位 0.3.6；Creature facet 拆分 0.3.7。AUDIT 里的 P0–P3 全部完成。
