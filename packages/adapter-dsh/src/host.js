@@ -18,6 +18,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 /** 会话所在工作区（绝对路径）；取不到返回 undefined。 */
 export function workspaceOf(session) {
@@ -300,9 +301,6 @@ export function createDshHost(ctx, cfg) {
 
     /** 新建会话（可选挂到某个工作区）。返回 { id, workspace }。 */
     async createSession({ workspaceId, cwd, path: dirPath } = {}) {
-      const reg = ctx.agents
-      const agents = typeof reg?.createSession === 'function' ? reg : get('agents')
-      if (!agents || typeof agents.createSession !== 'function') throw new Error('宿主没有会话服务')
       const registry = workspaceRegistry()
       let target = null
       if (workspaceId) {
@@ -311,11 +309,36 @@ export function createDshHost(ctx, cfg) {
       }
       const dir = normPath(cwd || target?.path || dirPath || '')
       if (!dir) throw new Error('新建会话需要工作区或目录')
-      const created = await agents.createSession({ cwd: dir, reusable: () => false })
-      const id = created?.agent?.id ?? created?.sessionId ?? created?.id
+
+      // DSH 的会话就是 agent：走 agents.create（与 GUI 新建会话同一条路）
+      const agents = ctx.agents ?? get('agents')
+      if (!agents?.create) throw new Error('宿主没有会话服务（agents.create 不可用）')
+      const dm = get('agentDefaultModel')
+      let sel = {}
+      try { sel = dm?.currentSelection?.() ?? {} } catch { sel = {} }
+      const sessionId = 'session-' + randomUUID()
+      let handle = null
+      let lastErr = null
+      for (const agentOptions of [
+        Object.keys(sel).length ? { provider: sel.provider, model: sel.model } : null,
+        undefined,
+      ]) {
+        try {
+          handle = await agents.create({
+            sessionId,
+            ...(agentOptions ? { agentOptions } : {}),
+            meta: { cwd: dir },
+          })
+          lastErr = null
+          break
+        } catch (e) { lastErr = e }
+      }
+      if (lastErr) throw lastErr
+      const id = handle?.agent?.id ?? sessionId
       if (!id) throw new Error('会话创建失败')
-      if (target && typeof target.attachSession === 'function') {
-        try { target.attachSession(String(id)) } catch { /* 挂不上也不影响会话本身 */ }
+      const ws = target ?? (registry?.list?.() ?? []).find((w) => w?.path && normPath(w.path) === normPath(dir))
+      if (ws && typeof ws.attachSession === 'function') {
+        try { await ws.attachSession(String(id)) } catch { /* 挂不上也不影响会话本身 */ }
       }
       return { id: String(id), workspace: dir }
     },

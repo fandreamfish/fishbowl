@@ -51,6 +51,6 @@ export async function housingToOccupancy(host, raw) {
   }
   // new-both：先建工作区，再在里面建一个会话，鱼住在会话里（工作区里的其它会话不归她）
   const w = await host.createWorkspace(h.path)
-  const s = await host.createSession({ path: w.path })
+  const s = await host.createSession({ workspaceId: w.registryId, path: w.path })
   return { kind: 'session', id: s.id, workspace: s.workspace || w.path }
 }

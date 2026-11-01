@@ -656,7 +656,7 @@ process.exit(failures === 0 ? 0 : 1)
   const { normalizeHousing, housingToOccupancy } = await import('../../app/src/index.js')
   const fakeHost = {
     created: [],
-    async createWorkspace(p) { this.created.push(['ws', p]); return { id: 'w1', path: p, title: 't' } },
+    async createWorkspace(p) { this.created.push(['ws', p]); return { id: p, path: p, registryId: 'w1', title: 't' } },
     async createSession(o) { this.created.push(['ss', o]); return { id: 's1', workspace: o.path || '/x' } },
   }
   check('housing：不安排', normalizeHousing(undefined).kind === 'none')
@@ -665,7 +665,7 @@ process.exit(failures === 0 ? 0 : 1)
   check('housing：新工作区缺目录会报错', (() => { try { normalizeHousing({ kind: 'new-workspace', path: '  ' }); return false } catch { return true } })())
 
   const occ1 = await housingToOccupancy(fakeHost, { kind: 'new-workspace', path: 'D:/home' })
-  check('housing：新工作区 → workspace 住处', occ1.kind === 'workspace' && occ1.id === 'w1' && fakeHost.created[0][0] === 'ws')
+  check('housing：新工作区 → workspace 住处（id 用路径）', occ1.kind === 'workspace' && occ1.id === 'D:/home' && fakeHost.created[0][0] === 'ws')
   fakeHost.created = []
   const occ2 = await housingToOccupancy(fakeHost, { kind: 'new-session', workspace: 'D:/home' })
   check('housing：新会话 → 在选中的工作区里建会话', occ2.kind === 'session' && occ2.id === 's1' && fakeHost.created[0][1].path === 'D:/home')
