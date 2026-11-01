@@ -14,6 +14,7 @@
 | [docs/RELEASE-0.1.0.md](docs/RELEASE-0.1.0.md) | 0.1.0 发布说明：包清单、能力、不变量与留白 |
 | [docs/VERSIONING.md](docs/VERSIONING.md) | 版本规范：patch/minor 怎么涨、提交/打标/推送流程 |
 | [docs/AUDIT-0.1.5.md](docs/AUDIT-0.1.5.md) | 0.1.5 结构体检：耦合、上帝模块、优化顺序 |
+| [docs/AUDIT-0.3.2.md](docs/AUDIT-0.3.2.md) | 0.3.2 结构体检：剩余耦合、测试盲区、P0–P4 |
 | [PLUGIN.md](PLUGIN.md) | DSH 集成接口清单 |
 | [ROADMAP.md](ROADMAP.md) | 阶段与验收标准 |
 | [docs/STATE.md](docs/STATE.md) | 当前状态、开发要点、常用命令 |
