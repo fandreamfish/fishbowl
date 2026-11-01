@@ -174,6 +174,7 @@ export function createWakeLoop(ctx, binding, cfg, host) {
         const cid = creature.meta.creatureId
         if (seen.has(cid)) continue
         seen.add(cid)
+        try {
 
         // 长时间没说话 → 记一条缺席（longing 就是这么来的）
         const events = creature.store.readEvents()
@@ -229,17 +230,17 @@ export function createWakeLoop(ctx, binding, cfg, host) {
 
         // 醒来前看一眼：她最近发过的评论下面有没有人回她。
         // 有就作为素材放进这次处境（不是用户的话）；等真的叫醒成功后再记成「看过了」。
-        let wakeSituation = situation
+        let situationText = situation
         let pendingReplies = []
         try {
           const r = await scanDueReplies(creature, cfg, { now })
           if (r?.text) {
-            wakeSituation += '\n\n' + r.text
+            situationText += '\n\n' + r.text
             pendingReplies = r.items ?? []
           }
         } catch { /* 扫不到就算了，不影响醒 */ }
 
-        const text = wakeTrigger(now, wakeSituation, mode)
+        const text = wakeTrigger(now, situationText, mode)
         if (!text) continue
 
         if (!agent) {
@@ -271,6 +272,10 @@ export function createWakeLoop(ctx, binding, cfg, host) {
           traceWake(sid, cid, mode, mode === 'contact' ? reason : null)
           for (const it of pendingReplies) markReplySeen(creature, it.rpid, browseDayKey(now, cfg.timezone))
         } catch { /* 会话状态变化时可能失败，忽略 */ }
+        } catch (err) {
+          // 一只鱼出错不能拖垮整轮
+          report.push({ creature: creature.meta.name, error: String((err && err.message) || err), at: now })
+        }
       }
       try { fs.writeFileSync(wakeStatePath(cfg.stateDir), JSON.stringify({ ts: now, entries: report }, null, 2)) } catch { /* 忽略 */ }
     } catch {

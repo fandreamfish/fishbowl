@@ -356,7 +356,6 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         }
       }
       buffers.delete(session.id)
-      buffers.delete(session.id)
     } catch (err) {
       trace({ ts: Date.now(), sessionId: session.id, warn: `collect failed: ${String(err && err.message || err)}` })
     }

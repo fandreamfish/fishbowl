@@ -214,6 +214,7 @@ check('无事不开口', wakeReason({ openBroken: 0, longing: 0.2 }).reason === 
 check('proactivePrompt 含由头与声音规则', proactivePrompt('很久没好好说话了', '名字：大肥鱼').includes('很久没好好说话了'))
 check('舞台提示只给处境、不写祈使句', wakeTrigger(1793433715546, wakeSituation('很久没好好说话了')).includes('很久没跟他说过话'))
 check('舞台提示带时间', wakeTrigger(1793433715546, 'x').includes('醒一醒'))
+check('自处提示带由头', wakeTrigger(1793433715546, '你在整理今天的事', 'self').includes('整理今天的事'))
 const m3cfg = normalizeConfig({ stateDir })
 check('wake 默认关闭（先观察后打开）', m3cfg.wake.enabled === false)
 check('contact 默认配额', m3cfg.contact.dailyMax === 2 && m3cfg.contact.unansweredStop === 3)
