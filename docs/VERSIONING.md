@@ -47,5 +47,5 @@ git -c http.proxy=http://127.0.0.1:7892 -c https.proxy=http://127.0.0.1:7892 pus
 
 ## 当前版本
 
-- 最近发布：`0.1.5`
-- 下一个计划：`0.2.0` —— 删除旧路径兼容层（`src/core/*`、`packages/plugin/lib/*` 的 re-export）、`client.js` 按页面拆组件
+- 最近发布：`0.2.0`
+- 下一个计划：`0.2.1` —— 拆 `turn.js` / `wake.js`；`0.3.0` —— 删兼容层、拆 `client.js`

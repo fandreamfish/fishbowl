@@ -1,4 +1,4 @@
-﻿/** 分层检查：依赖方向必须从外往内（adapter/app → 能力 → 核心）。 */
+/** 分层检查：依赖方向必须从外往内（adapter/app → 能力 → 核心）。 */
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -54,8 +54,12 @@ for (const f of files) {
     const r = path.relative(root, abs).replace(/\\/g, '/')
     const to = layerOf(r)
     if (to.level === 9) continue
-    // 规则：只能依赖严格更内层，或者同层同包
+    // 规则 1：只能依赖严格更内层，或者同层同包
     if (to.level > from.level) problems.push(`${rel} → ${r}  (${from.name} → ${to.name})`)
+    // 规则 2：除了入口 plugin，谁都不许依赖入口或兼容层
+    if ((to.name === 'packages/plugin' || to.name === 'src/core') && from.name !== 'packages/plugin') {
+      problems.push(`${rel} → ${r}  (非入口依赖了 ${to.name})`)
+    }
   }
 }
 
