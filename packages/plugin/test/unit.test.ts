@@ -397,10 +397,13 @@ const e2eBinding = createBinding(e2eCfg)
 const e2eFish = e2eBinding.birth('端到端鱼', { kind: 'session', id: 'se1', workspace: 'D:\\ws-e2e' })
 let e2eHandler: any = null
 const e2eInjected: string[] = []
+const e2eSections: any[] = []
+let e2eCreated: any = null
 const e2eAgent = { id: 'se1', session: { id: 'se1', header: { cwd: 'D:\\ws-e2e' } } }
 createCollector(null, e2eBinding, e2eCfg, {
   onSessionEvent: (fn: any) => { e2eHandler = fn; return () => {} },
-  onAgentCreated: () => () => {},
+  onAgentCreated: (fn: any) => { e2eCreated = fn; return () => {} },
+  stateSection: (_a: any, fn: any) => { e2eSections.push(fn) },
   agentFor: () => e2eAgent,
   inject: async (_a: any, msg: any) => { e2eInjected.push(msg.content[0].text) },
   wake: async () => {},
@@ -415,6 +418,7 @@ createCollector(null, e2eBinding, e2eCfg, {
   services: () => ({}),
 } as any)
 const e2eSession = { id: 'se1', header: { cwd: 'D:\\ws-e2e' } }
+e2eCreated?.({ agent: e2eAgent })
 e2eHandler(e2eSession, { type: 'turn/start', data: {} })
 e2eHandler(e2eSession, { type: 'user/message', data: { role: 'user', id: 'u1', content: [{ type: 'text', text: '今天下雨了' }] } })
 e2eHandler(e2eSession, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '带伞了吗' }] } } })
@@ -423,7 +427,8 @@ await new Promise((r) => setTimeout(r, 250))
 const e2eEvents = e2eFish.store.readEvents()
 check('一轮结束落了一条 turn（不再写 episode）', e2eEvents.some((e: any) => e.t === 'turn') && !e2eEvents.some((e: any) => e.t === 'episode'))
 check('turn 里存的是完整转录', String(e2eEvents.find((e: any) => e.t === 'turn')?.note ?? '').includes('带伞了吗'))
-check('注入用的是新渲染', e2eInjected.some((t) => t.startsWith('[fishbowl 状态]')))
+const e2eBuild = () => String(e2eSections.at(-1)?.({ agent: { session: e2eSession } }) ?? '')
+check('状态块由动态系统提示段提供', e2eBuild().startsWith('[fishbowl 状态]'))
 check('情绪跟着 turn 重放（valence 有变化）', Math.abs(e2eFish.fold().affect.valence) > 0)
 
 // P0 回归：唤醒回合也必须带出处；否则总结会替她编一个"对方"。
@@ -449,7 +454,7 @@ await new Promise((r) => setTimeout(r, 250))
 e2eHandler(e2eSession, { type: 'turn/start', data: {} })
 await new Promise((r) => setTimeout(r, 150))
 check('许可落成 grant 事件', e2eFish.activeGrants('browse').length === 1)
-check('许可进入注入（事实，不是命令）', e2eInjected.some((t) => t.includes('他允许你的事')))
+check('许可进入状态块（事实，不是命令）', e2eBuild().includes('他允许你的事'))
 
 console.log('== M17.1：审批策略 never 时不问 ==')
 const askDec = verifyDecision({ thresholdVerify: 0.9 } as any, 'pwsh', cfg)

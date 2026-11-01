@@ -236,6 +236,19 @@ export function createDshHost(ctx, cfg) {
     },
 
     /** 声音段：只作用于这个 agent（DSH 的 scoped systemPrompt 贡献）。 */
+    /** 动态状态段：每次组装提示词时现算，不再往 inbox 里塞消息。 */
+    stateSection(agent, build) {
+      try {
+        agent.ctx?.systemPrompt?.section?.({
+          name: 'fishbowl-state',
+          order: 450,
+          text: (context) => {
+            try { return String(build(context) ?? '') } catch { return '' }
+          },
+        })
+      } catch { /* 注册失败不影响对话 */ }
+    },
+
     voice(agent, text) {
       agent.ctx?.systemPrompt?.section?.({ name: 'fishbowl-voice', order: 400, text })
     },

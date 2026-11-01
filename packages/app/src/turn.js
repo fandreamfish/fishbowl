@@ -205,16 +205,15 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
   }
 
   /**
-   * 回合开始时把「现在的状态」作为 developer 消息塞进去。
-   * 放在回合内消费，不再留一条排队消息到下一轮（也就不会让 DSH 以为有任务在跑）。
+   * 组装状态块文本：注册成 agent 的动态系统提示段，每次组装提示词时现算。
+   * 不再往 inbox 里塞消息（那会把状态当成"用户说的话"，还会卡住退出）。
    */
-  async function injectState(session) {
+  function buildStateText(session) {
     try {
-      if (cfg.control || !cfg.injectBias) return
+      if (cfg.control || !cfg.injectBias) return ''
+      if (!session?.id) return ''
       const creature = binding.resolve({ sessionId: session.id, workspace: workspaceOf(session) })
-      if (!creature) return
-      const agent = host.agentFor(session.id)
-      if (!agent) return
+      if (!creature) return ''
       const mem = memoryFor(creature)
       const affect = creature.affectNow ? creature.affectNow() : creature.fold().affect
       const bias = toBias(affect, creature.temperament)
@@ -223,7 +222,6 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       injectedBy.set(session.id, snap.picked)
       const grant = grantLine(creature)
       const recent = recentBlock(recentDialog(creature, 6))
-      // 请求：还在等回音的 + 最近 24 小时他答过的（否则她根本看不到自己请求过什么）
       const req = creature.requestDigest()
       const reqLines = []
       if (req.pending.length) reqLines.push(`还在等回音: ${req.pending.join('；')}`)
@@ -232,21 +230,10 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const perm = permitLine(creature)
       const breach = breachLine(creature)
       const extra = (perm ? `\n你现在被允许: ${perm}` : '') + (breach ? `\n${breach}` : '')
-      const text = snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
-      // turn/start 的 append 还没发布完，直接 inject 会撞上「session append cannot reenter」。
-      // 先让出一次事件循环，再注入；仍然撞上就短暂重试。
-      for (let attempt = 0; attempt < 6; attempt++) {
-        if (attempt) await new Promise((r) => setTimeout(r, 20 * attempt))
-        try {
-          await host.inject(agent, injectMessage(text))
-          return
-        } catch (err) {
-          const msg = String(err?.message || err)
-          if (!/reenter|cannot append/i.test(msg) || attempt === 5) throw err
-        }
-      }
+      return snap.text + (grant ? `\n他允许你的事: ${grant}` : '') + reqText + extra + (recent ? '\n' + recent : '')
     } catch (err) {
-      trace({ ts: Date.now(), sessionId: session?.id, warn: `state inject failed: ${String(err?.message || err)}` })
+      trace({ ts: Date.now(), sessionId: session?.id, warn: `state build failed: ${String(err?.message || err)}` })
+      return ''
     }
   }
 
@@ -274,9 +261,6 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
         const err = event?.data?.message?.isError || event?.data?.isError || event?.data?.error
         const text = messageText(event?.data?.message ?? event?.data)
         pushItem(session.id, 'tool', [name, err ? '（出错）' : '', text ? text.slice(0, 200) : ''].filter(Boolean).join(' '))
-      } else if (t === 'turn/start') {
-        // 让本次 append 先发布完，再注入（否则会撞上 reenter）
-        setTimeout(() => { void injectState(session) }, 0)
       } else if (t === 'turn/end') {
         finishTurn(session)
       }
@@ -291,6 +275,7 @@ export function createCollector(ctx, binding, cfg, host, memorySource) {
       const seedLine = cfg.seed?.background ? `\n\n你的来历：${cfg.seed.background}` : ''
       const dataLine = `\n\n你的东西都在 ${creature.store.dir}：日记（diary/）、小纸条（notes/）、记忆账本都在那里。你想写下、创建、保存的任何东西都放到这个文件夹里，不要写到别处；房间只是你住的地方。你的账本一开始是空的：不要从 .fishbowl\\\\trash、旧系统目录、或别人的房间文件里认领过去或日记。`
       host.voice(agent, voiceRulesFor(configFor(cfg, creature).relation?.kind) + seedLine + dataLine)
+      host.stateSection?.(agent, (context) => buildStateText(context?.agent?.session ?? agent?.session ?? { id: sid }))
     } catch { /* 声音注册失败不影响功能 */ }
 
     // 第二天打开会话：先把昨天的日记补上
