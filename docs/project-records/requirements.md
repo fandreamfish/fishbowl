@@ -7,6 +7,12 @@
 > 2026-11-03 已确认任务规则见 [task-execution-rules.md](task-execution-rules.md)：独立 Agent、授权项目、异步任务、最终结果、恢复、审批、分端审计和来源记忆。
 >
 > 接口细化草案见 [task-protocol-design.md](task-protocol-design.md) 与 [dsh-control-state-machine.md](dsh-control-state-machine.md)。其中 Schema、认证方式、默认上限和插件状态转换尚待评审，不代表已有实现。
+>
+> 软件需求正式评审请使用 [srs-detailed.md](srs-detailed.md)；[srs.md](srs.md) 是较短的概览版。详细 SRS 保留已确认、草案和未验证状态，不能把未验证能力视为已实现。
+>
+> 总体设计正式评审请使用 [overall-design-detailed.md](overall-design-detailed.md)；[overall-design.md](overall-design.md) 是较短的概览版。
+>
+> 实现级模块、数据结构和算法设计见 [detailed-design.md](detailed-design.md)，该文档建立在详细 SRS 和详细总体设计之上，仍需评审且不代表代码已实现。
 
 ## 1. 项目目标
 

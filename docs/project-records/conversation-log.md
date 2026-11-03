@@ -432,3 +432,17 @@ DSH 只读调查见 `dsh-feasibility.md`：检查了 PLUGIN.md、HOST.md、当�
 - [overall-design.md](overall-design.md)：总体设计文档，包含系统上下文、Fish/DSH 模块划分、时序图、状态机、队列、记忆账本、恢复、部署、TypeScript/Rust 演进、测试和交付阶段。
 
 两份文档均标记为待评审草案，未实现代码，也未把当前 DSH 探针证据扩大为完整生产闭环。
+
+## 32. 用户：要求扩写 SRS
+
+用户反馈原 SRS 过于简略，要求另生成更详细的文件。保留原 `srs.md`，新增 `srs-detailed.md` 作为详细评审基线，内容包括状态标记、目标与边界、角色、术语、假设、业务规则、完整用例、编号功能需求、协议消息和 Schema、状态机、数据所有权、安全、审计、性能建议、测试矩阵、追踪矩阵和未决事项。路线图及需求入口已指向详细版；原文件明确为概览版。本轮仅生成和检查文档，没有修改代码。
+
+## 33. 用户：总体设计文档也需要详细版
+
+用户要求总体设计按详细 SRS 的方式扩写。保留 `overall-design.md` 作为概览，新增 `overall-design-detailed.md` 作为详细架构评审基线，展开质量属性、信任边界、进程和分层、Fish/DSH 模块职责与接口、启动顺序、任务/结果事务、调度和会话排他、协议、取消、needs_input、存储和 outbox、安全、部署、配置、运维、测试及阶段门槛。需求入口和路线图已更新指向详细版。本轮只生成文档，未修改代码；详细设计仍待评审，DSH 集成风险仍按验证资料标注。
+
+## 34. 用户：继续编写详细设计
+
+用户要求继续生成与详细 SRS、详细总体设计相配套的详细设计。新增 `detailed-design.md`，细化实现目录、依赖方向、TypeScript 值对象和聚合、Use Case、队列 lease/fencing、协议解析管线、Task Manager、DSH Store/Dispatcher、Result Extractor、取消、needs_input continuation、事务边界、错误层级、审计、Provider 接口、配置、QQ adapter、备份升级、模块调用矩阵和测试属性。设计参考当前 Node.js/TypeScript 项目结构，采取渐进整理，不假定全量重写。
+
+本轮仅新增/更新文档；协议和存储技术仍标记为待评审，DSH 运行取消、桌面会话排他、人工插入检测和真实模型结构化结果仍是未验证门槛。
