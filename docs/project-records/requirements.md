@@ -3,22 +3,33 @@
 > 状态：需求澄清中
 >
 > 本文只记录已经提出或确认的需求，不代表所有协议字段和实现方案已经冻结。
+>
+> 2026-11-03 已确认任务规则见 [task-execution-rules.md](task-execution-rules.md)：独立 Agent、授权项目、异步任务、最终结果、恢复、审批、分端审计和来源记忆。
+>
+> 接口细化草案见 [task-protocol-design.md](task-protocol-design.md) 与 [dsh-control-state-machine.md](dsh-control-state-machine.md)。其中 Schema、认证方式、默认上限和插件状态转换尚待评审，不代表已有实现。
 
 ## 1. 项目目标
 
 将当前以 DSH 插件为主要入口的 fishbowl，演进为一个可以独立运行的程序，同时通过一个独立的 DSH 插件访问和操作 DSH。
 
-目标结构：
+能力关系（不表示物理连接建立方向）：
 
 ```text
 Fishbowl Standalone Runtime
-        │ 通用 HTTP / MCP 风格控制协议
-        ▼
-DSH Control Plugin
-        │ DSH 官方 API
-        ▼
-DSH Runtime
+  ├── QQ 适配器：接收消息、发送回复
+  ├── DSH 操作能力 → DSH Control Plugin → DSH Runtime
+  └── 其他入口和能力
 ```
+
+QQ 对接与 DSH 操作是 Fish 拥有的两项独立能力，不构成固定转发管道。用户可以通过 QQ 请 Fish 完成任务；Fish 根据任务需要选择调用 DSH，也可以直接回复或使用其他能力。DSH 调用不限定由 QQ 消息触发。
+
+### 已确认的实现语言与迁移约束
+
+当前 Fish 主体使用 TypeScript 与 Node.js，新增核心代码统一 TypeScript，现有 JavaScript 按需迁移。通信协议及持久数据格式保持语言无关并带版本管理，核心逻辑通过接口隔离模型、存储、网络和时钟；保留可用于未来 Rust 实现的行为测试样例。
+
+后续允许逐步迁移到 Rust，但当前不维护双实现，不要求全量重写，不提前增加跨进程服务。DSH 插件可继续使用 JS/TS。此决定仅确认技术路线，不代表任务协议草案已获批准或开始编写代码。详见 architecture-decisions.md 的 AD-020。
+
+Fish 后续可增加 Jev `DecisionProvider` 作为快速决策模型，用于固定选项分类、路由、优先级和风险预筛选。Jev 不承担主模型对话、文本生成、代码生成或程序权限判定；启用前须验证中文效果、成本、隐私、稳定性和失败降级。详见 architecture-decisions.md 的 AD-021。
 
 ## 2. 核心需求
 
@@ -37,24 +48,23 @@ fishbowl 在 DSH 未安装、未启动或不可连接时，仍可作为独立程
 - 自己的会话/消息入口
 - 自己的日志、诊断和健康检查
 
-### R-001A Fishbowl 独立 Agent Runtime
+### R-001A Fishbowl 任务编排与 DSH 执行
 
-由于 Fishbowl 是独立思考主体，Fishbowl Runtime 必须拥有自己的 Agent 执行能力，不能把核心思考流程依赖于 DSH Agent loop。
+Fish 保留自己的模型、上下文、记忆、工具选择和 Agent 编排循环，DSH 的独立执行循环负责受委托任务。Fish 的 Agent 能力不因 DSH 自主执行而取消或整体后置。
+
+Fishbowl Runtime 负责接收消息、理解用户意图并选择所需能力。需要 DSH 执行的任务才通过 DSH 操作能力下发；QQ 消息不自动转发给 DSH。首期不要求 Fishbowl 替代 DSH 的模型请求，也不要求 Fishbowl 参与 DSH 接到命令后的内部思考、工具调用或执行循环。
+
+DSH 收到任务后，由 DSH 自己的 Agent、模型和工具完成从命令接收至命令完成的全过程。该过程由 DSH 独立掌控，Fishbowl 不感知中间步骤，不接收中间工具调用、思考过程或进度事件；业务输出只包含最终结果或错误，协议允许接收确认、拒绝、心跳、任务查询和取消确认。
 
 首期至少需要：
 
-- Model Provider 抽象和至少一个模型实现
-- 消息/上下文组装
-- ReAct 或等价的“模型请求 → 判断工具调用 → 执行工具 → 回传结果 → 继续思考”的循环
-- Fishbowl 自有工具注册、Schema、调用和结果处理
-- 记忆、账本和状态摘要注入
-- 最大循环次数、超时、取消和错误处理
-- 中间步骤和最终结果的事件记录
-- 统一的 Agent 会话状态
+- Fishbowl 到 DSH 的任务请求和最终结果回传
+- DSH Control Plugin 对 DSH Agent/Session/Tool 的适配
+- 任务 ID、幂等、超时、取消和断线语义
+- Fishbowl 侧对最终结果的记忆和审计记录
+- DSH 侧对内部执行过程的本地记录和审计
 
-DSH Control Plugin 只负责 DSH 宿主接入、消息转发和可选的 DSH 能力调用，不负责 Fishbowl 的核心思考循环。
-
-首期不要求实现完整通用 Agent 平台，不要求立即支持多模型路由、复杂规划、并行工具调用、长期任务恢复或全部 DSH 工具；这些能力后续按需求增加。
+Fishbowl 不负责执行 DSH 的工具，也不依赖 DSH 内部 Agent loop 的具体实现。
 
 ### R-002 DSH 主动连接与可选接入
 
@@ -66,7 +76,7 @@ fishbowl 应能：
 - 获取插件提供的能力清单
 - 根据能力清单决定可用功能
 - 调用或请求 DSH 能力
-- 接收 DSH 事件
+- 接收连接状态、任务完成和错误等协议事件；首期不接收 DSH 内部思考、工具调用或进度事件
 - 处理连接中断、恢复和能力变化
 
 本地和远程可以采用不同的传输与认证方式，但连接方向的主模型是“DSH 插件主动连接 Fishbowl”。
@@ -91,12 +101,10 @@ fishbowl 核心和业务层不得直接依赖：
 
 当前首期不实现全部功能，只实现已经确认、能够通过 DSH 现有能力验证的最小集合。首期候选范围包括：
 
-- DSH 对话消息接收
-- DSH 对话内容转发到 Fishbowl
-- Fishbowl 生成回复并回传 DSH
-- 已确认的上下文注入或消息发送
-- 已确认的 Agent/Session 事件接收
-- 已确认的工具调用或工具结果转发
+- DSH Control Plugin 主动连接 Fishbowl
+- Fishbowl 向 DSH 下发任务/命令
+- DSH 使用自身 Agent 和工具完成任务
+- DSH 返回最终结果或错误
 - 连接、能力发现、认证和审计基础能力
 
 其他 DSH 管理能力进入后续阶段，不作为首期上线前提。所有能力仍需通过 DSH 能力审计逐项确认，不得假设所有能力已经有公开稳定 API。
@@ -193,11 +201,11 @@ Fishbowl 必须具备独立、持续和可查询的审计能力。所有重要�
 - 敏感信息、密钥、Cookie、完整私密对话和模型凭据必须按策略脱敏或不落盘
 - 审计记录应追加写入，并具备防意外覆盖能力
 - 需要支持按时间、trace、对象、操作、结果和错误检索
-- 需要支持从 DSH 输入追踪到 Fishbowl 思考、工具调用、状态变化和 DSH 回复
+- 需要支持从用户入口追踪 Fish 自身编排、DSH 任务请求、最终结果和回复；DSH 内部执行由 DSH 本地审计，按任务 ID 关联，不回传给 Fish
 - 审计写入失败必须产生明确告警；高风险操作可配置为“审计失败即拒绝执行”
 - 多进程或多入口的审计事件必须使用统一格式和关联 ID
 
-首期至少实现消息链路、模型调用、工具调用、DSH 连接、权限判断、状态写入和错误处理的审计；更复杂的管理审计可后续扩展。
+首期至少实现 Fish 自身消息、模型、工具编排、DSH 连接、任务边界、权限、状态写入和错误审计；DSH 内部模型和工具执行记录由 DSH 持有。详见 task-execution-rules.md。
 ### R-009 Fishbowl 状态和账本归属
 
 fishbowl 的个体、记忆、账本、会话业务状态和相关运行状态全部归属 Fishbowl Runtime，由 Fishbowl 负责持久化、恢复、迁移和备份。
@@ -205,6 +213,8 @@ fishbowl 的个体、记忆、账本、会话业务状态和相关运行状态�
 DSH Control Plugin 不直接写 Fishbowl 内部状态；DSH 只提供宿主事件和控制能力。Fishbowl 也不依赖 DSH 内部文件实现控制。
 
 DSH 插件、QQ、HTTP、CLI 等入口不得绕过 Fishbowl Runtime 直接并发写同一本账。
+
+DSH 拥有自己的执行会话、代码工作区、任务去重与恢复记录；这些不属于 Fish 的人格账本。Fish 持有委托任务和回复状态，两端用任务 ID 关联。
 
 ### R-010 资料持续记录
 
@@ -218,38 +228,48 @@ DSH 插件、QQ、HTTP、CLI 等入口不得绕过 Fishbowl Runtime 直接并发
 - 规划和阶段：`roadmap.md`
 - 后续可增加 DSH 能力矩阵和协议规范
 
-### R-011 DSH 对话代理链路
+### R-011 独立的 QQ 对接能力与 DSH 操作能力
 
-首期目标链路：
+示例用例：用户通过 QQ 请 Fish 修改代码，Fish 选择调用 DSH。以下是该用例的逻辑流程，不是所有消息的必经路径，也不规定部署拓扑：
 
 ```text
-用户在 DSH 输入消息
+用户在 QQ 等入口输入任务
         ↓
-DSH Control Plugin 拦截/接收消息
-        ↓ HTTP/Control Protocol
-Fishbowl Runtime 接收消息并进行思考
+Fishbowl Runtime 理解任务并按需选择 DSH 操作能力
+        ↓ Fishbowl Control Protocol
+DSH Control Plugin（主动建立的连接）接收任务
         ↓
-Fishbowl 按需调用自己的模型、记忆和工具
+DSH 使用自身 Agent、模型和工具执行任务
         ↓
-Fishbowl 将最终回复或中间控制结果返回给 DSH Plugin
+DSH 仅回传最终结果或错误
         ↓
-DSH Plugin 将回复交给 DSH 会话展示
+Fishbowl Runtime 将结果返回入口并写入审计/记忆
 ```
 
-在该模式下，DSH 本轮不应重复调用自己的大模型；Fishbowl 是本轮回复的思考主体。
+DSH 接到任务后是否调用自己的模型、如何规划、如何调用工具以及何时结束，完全属于 DSH 内部行为。Fishbowl 不要求拦截 DSH 用户输入、不阻止 DSH 原模型请求，也不要求向 DSH 会话回灌 Fishbowl 生成的 assistant 消息。
 
 首期必须验证：
 
-- DSH 插件能否在 DSH 大模型请求前拦截用户消息
-- 拦截后能否阻止或替代原本的 DSH 模型请求
-- Fishbowl 回复能否作为合法的 assistant 输出回到 DSH 会话
-- DSH UI 是否能正常展示 Fishbowl 返回的回复
-- Fishbowl 思考期间的工具调用如何执行、审批、回传和记录
-- 超时、断线、取消和重复请求如何处理
+- DSH 插件能否主动建立并保持到 Fishbowl 的双向连接
+- Fishbowl 能否发送任务请求并获得最终结果
+- DSH 能否在内部选择 Agent/Session/Tool 完成任务
+- 任务 ID、幂等、超时、取消、断线和重连如何处理
+- 最终结果能否回到 QQ 等入口并关联同一审计链
 
-如果 DSH 当前 API 不能完成“拦截并替代模型请求”或“回灌合法回复”，则需要调整为 DSH 插件与 Fishbowl 的事件/消息桥接模式，不能直接宣称等同于 DSH 原生模型调用。
+DSH 需要补充信息时以 needs_input 结束本次任务，返回问题与已完成影响；Fish 向原请求者询问，得到答复后使用新任务 ID 创建关联后续任务。原任务不无限等待或自动续跑。详见 task-execution-rules.md。
 
 ## 3. 角色与边界
+
+### 已确认的任务交互约束
+
+- 使用已授权项目标识，由插件映射本地工作区；首期复用该鱼绑定的 DSH 执行会话。
+- DSH 任务异步持久化；Fish 等待期间可继续处理消息，最终结果串行进入同鱼事件队列。
+- DSH 返回成功、失败或取消等终态；无法核实时明确结果未知。代码任务结果包含修改文件、测试情况及必要产物。
+- 同任务 ID 去重，断线/超时不自动重跑，重连查询或补投最终结果，取消须由 DSH 确认。
+- 授权基于真实渠道身份、鱼、能力和项目；DSH 内部审批由 DSH 负责，无法审批时返回明确错误。
+- Fish 保存任务边界审计和带 DSH 来源的结果记忆，DSH 保存内部执行审计。
+
+完整规则与首期验收见 [task-execution-rules.md](task-execution-rules.md)。
 
 
 ### 3.1 Fishbowl Standalone Runtime
